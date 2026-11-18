@@ -345,10 +345,19 @@ private fun StoriesSection() {
                 Spacer(Modifier.height(5.dp))
                 Text(if (statusText == null && statusImageUri == null) "أضف حالة" else "حالتي", color = ImiMuted, fontSize = 10.sp, maxLines = 1)
             }
-            StoryBubble("أحمد", false, ImiPurple)
-            StoryBubble("سارة", false, Color(0xFFE27B9B))
-            StoryBubble("يوسف", false, Color(0xFF3AAE9B))
-            StoryBubble("مريم", false, Color(0xFFE1A34B))
+            Surface(
+                color = ImiSurface,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Column(
+                    Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text("حالات الأصدقاء", color = ImiText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("ستظهر هنا الحالات الحقيقية بعد ربط حسابات الأصدقاء والمزامنة السحابية.", color = ImiMuted, fontSize = 10.sp, lineHeight = 15.sp)
+                }
+            }
         }
         if (statusText != null || statusImageUri != null) {
             if (statusText != null) Text(statusText!!, color = ImiMuted, fontSize = 12.sp, maxLines = 2)
@@ -420,19 +429,6 @@ private fun StoriesSection() {
                 TextButton(onClick = { showComposer = false }) { Text("إلغاء") }
             }
         )
-    }
-}
-
-@Composable
-private fun StoryBubble(name: String, add: Boolean, tint: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(58.dp)) {
-        Box(Modifier.size(54.dp).clip(CircleShape).background(if (add) ImiSurface2 else tint.copy(alpha = .22f)), contentAlignment = Alignment.Center) {
-            if (add) Icon(Icons.Filled.Add, null, tint = ImiBlue, modifier = Modifier.size(25.dp))
-            else Text(name.take(1), color = ImiText, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-            if (!add) Box(Modifier.align(Alignment.BottomEnd).padding(2.dp).size(11.dp).clip(CircleShape).background(ImiGreen))
-        }
-        Spacer(Modifier.height(5.dp))
-        Text(name, color = ImiMuted, fontSize = 10.sp, maxLines = 1)
     }
 }
 

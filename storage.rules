@@ -11,6 +11,12 @@ service firebase.storage {
         && request.auth.uid in firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.participants;
     }
 
+    function acceptedFriend(ownerUid) {
+      return signedIn()
+        && firestore.exists(/databases/(default)/documents/users/$(ownerUid)/friends/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/users/$(ownerUid)/friends/$(request.auth.uid)).data.status == 'accepted';
+    }
+
     match /users/{uid}/avatars/{fileName} {
       allow read: if signedIn();
       allow write: if signedIn()
@@ -19,13 +25,16 @@ service firebase.storage {
         && request.resource.contentType.matches('image/(jpeg|png|webp)');
     }
 
-    match /users/{uid}/statuses/{fileName} {
+    // The status document ID is part of the object path so expiry can be checked.
+    match /users/{uid}/statuses/{statusId}/{fileName} {
+      function statusIsActive() {
+        return firestore.exists(/databases/(default)/documents/users/$(uid)/statuses/$(statusId))
+          && firestore.get(/databases/(default)/documents/users/$(uid)/statuses/$(statusId)).data.expiresAt > request.time;
+      }
+
       allow read: if signedIn()
-        && (
-          request.auth.uid == uid
-          || firestore.exists(/databases/(default)/documents/users/$(uid)/friends/$(request.auth.uid))
-            && firestore.get(/databases/(default)/documents/users/$(uid)/friends/$(request.auth.uid)).data.status == 'accepted'
-        );
+        && statusIsActive()
+        && (request.auth.uid == uid || acceptedFriend(uid));
       allow write: if signedIn()
         && request.auth.uid == uid
         && request.resource.size < 20 * 1024 * 1024

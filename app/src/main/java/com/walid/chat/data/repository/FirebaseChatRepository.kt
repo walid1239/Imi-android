@@ -5,8 +5,13 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.walid.chat.data.model.Chat
+import com.walid.chat.data.model.ChatMessage
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
 /**
@@ -36,6 +41,49 @@ class FirebaseChatRepository(
                 unreadCount = 0
             )
         }
+    }
+
+    /**
+     * Streams messages in chronological order. The listener is removed when the
+     * collector is cancelled, so leaving a chat does not leave a Firestore listener.
+     */
+    override fun observeMessages(chatId: String): Flow<Result<List<ChatMessage>>> = callbackFlow {
+        if (chatId.isBlank()) {
+            trySend(Result.failure(IllegalArgumentException("معرّف المحادثة غير صالح")))
+            close()
+            return@callbackFlow
+        }
+
+        var registration: ListenerRegistration? = null
+        try {
+            requireUid()
+            registration = firestore.collection("conversations")
+                .document(chatId)
+                .collection("messages")
+                .orderBy("createdAt", Query.Direction.ASCENDING)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        trySend(Result.failure(error))
+                    } else if (snapshot != null) {
+                        val messages = snapshot.documents.map { document ->
+                            ChatMessage(
+                                id = document.id,
+                                senderUid = document.getString("senderUid") ?: "",
+                                type = document.getString("type") ?: "text",
+                                text = document.getString("text") ?: "",
+                                timestamp = document.getTimestamp("createdAt")?.toDate()?.toString() ?: "",
+                                mediaPath = document.getString("mediaPath")
+                            )
+                        }
+                        trySend(Result.success(messages))
+                    }
+                }
+        } catch (error: Exception) {
+            trySend(Result.failure(error))
+            close()
+        }
+
+        awaitClose { registration?.remove() }
     }
 
     override suspend fun sendMessage(chatId: String, text: String): Result<Unit> = runCatching {

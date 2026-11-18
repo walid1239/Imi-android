@@ -118,6 +118,7 @@ private fun IconAction(icon: androidx.compose.ui.graphics.vector.ImageVector, de
 
 @Composable
 private fun HomeScreen(onChats: () -> Unit, onReels: () -> Unit, onAcademy: () -> Unit) {
+    var showNotifications by remember { mutableStateOf(false) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 22.dp, bottom = 24.dp),
@@ -126,8 +127,8 @@ private fun HomeScreen(onChats: () -> Unit, onReels: () -> Unit, onAcademy: () -
         item {
             PageHeader("IMI", "مساحتك للتواصل والتعلّم") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    IconAction(Icons.Filled.Search, "بحث")
-                    IconAction(Icons.Filled.NotificationsNone, "الإشعارات")
+                    IconAction(Icons.Filled.Search, "بحث في المحادثات", onChats)
+                    IconAction(Icons.Filled.NotificationsNone, "الإشعارات") { showNotifications = true }
                 }
             }
         }
@@ -157,6 +158,21 @@ private fun HomeScreen(onChats: () -> Unit, onReels: () -> Unit, onAcademy: () -
             }
         }
         item { Text("هذه واجهة أولية محلية؛ الحسابات والرسائل والوسائط والمكالمات لم تُربط بخدمات خلفية بعد.", color = ImiMuted, fontSize = 11.sp) }
+    }
+    if (showNotifications) {
+        AlertDialog(
+            onDismissRequest = { showNotifications = false },
+            title = { Text("الإشعارات") },
+            text = {
+                Text(
+                    "لا توجد إشعارات جديدة حالياً. ستظهر هنا تنبيهات الرسائل والتفاعلات بعد ربط خدمات IMI.",
+                    color = ImiMuted
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showNotifications = false }) { Text("حسناً") }
+            }
+        )
     }
 }
 

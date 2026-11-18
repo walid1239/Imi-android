@@ -149,9 +149,9 @@ test('Reels storage accepts owner video uploads and rejects foreign or non-video
   await assertFails(getBytes(ref(env.unauthenticatedContext().storage(), 'reels/alice/test.mp4')));
 });
 
-test('a user can publish a status with text and an optional owned media path', async () => {
+test('clients cannot create statuses because trusted server time is required', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
-  await assertSucceeds(setDoc(doc(aliceDb, 'users/alice/statuses/status-1'), {
+  await assertFails(setDoc(doc(aliceDb, 'users/alice/statuses/status-1'), {
     ownerUid: 'alice',
     text: 'حالة تجريبية للاختبار',
     mediaPath: 'users/alice/statuses/status-1/status.jpg',

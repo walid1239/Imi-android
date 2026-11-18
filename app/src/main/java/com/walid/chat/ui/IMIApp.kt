@@ -1460,13 +1460,13 @@ private fun ProfileScreen() {
         "الخصوصية والأمان" -> AlertDialog(
             onDismissRequest = { profileSection = null },
             title = { Text("الخصوصية والأمان") },
-            text = { Text("إعدادات الخصوصية الفعلية ستُتاح بعد تفعيل الحساب والمزامنة. حالياً تُحفظ بيانات الملف محلياً على هذا الجهاز فقط.", color = ImiMuted) },
+            text = { Text("رقم الهاتف لا يُنشر في الملف العام. الاسم والمدينة والنبذة واللغات تُحفظ في مستندك الخاص على Firebase عند الضغط على «حفظ معلومات الحساب». إعدادات التحكم التفصيلية بالخصوصية لم تُفعّل بعد.", color = ImiMuted) },
             confirmButton = { TextButton(onClick = { profileSection = null }) { Text("حسناً") } }
         )
         "الإعدادات" -> AlertDialog(
             onDismissRequest = { profileSection = null },
             title = { Text("إعدادات IMI") },
-            text = { Text("إصدار الواجهة الأولية. لا يوجد تسجيل دخول أو مزامنة سحابية مفعّلة في هذه النسخة.", color = ImiMuted) },
+            text = { Text("تستخدم النسخة الحالية جلسة Firebase مجهولة مؤقتة عند تهيئة المشروع. هذه الجلسة ليست حساباً موثقاً برقم هاتف، ولم يُفعّل WhatsApp OTP بعد. بعض البيانات والوظائف السحابية تعمل عند إعداد Firebase بشكل صحيح.", color = ImiMuted) },
             confirmButton = { TextButton(onClick = { profileSection = null }) { Text("إغلاق") } }
         )
     }

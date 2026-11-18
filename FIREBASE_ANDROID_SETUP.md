@@ -1,45 +1,59 @@
 # إعداد Firebase لتطبيق IMI
 
-المشروع يستخدم الحزمة Android التالية: `com.walid.chat`.
+هذه الوثيقة تشرح ربط مشروع Firebase حقيقي. **لا يوجد حاليًا مشروع Firebase مؤكد الملكية ومربوط بالتطبيق، ولم تُنشر Functions أو Firestore أو Storage.** لا تستخدم معرّف مشروع قديمًا لمجرد أنه موجود في ملفات سابقة.
 
-## إعداد التطبيق في Firebase Console
+## 1. إنشاء المشروع وربط تطبيق Android
 
-1. افتح مشروع Firebase المقصود: `cosmic-altar-m6shk`.
-2. من Project settings > Your apps، أضف تطبيق Android بالحزمة الدقيقة `com.walid.chat` (أو اختره إذا كان موجوداً).
-3. نزّل ملف `google-services.json` الخاص بهذا التطبيق.
-4. إعداد Firebase الحالي يستخدم Anonymous مؤقتاً للبناء والاختبار فقط؛ لا تعتبره تسجيل IMI النهائي برقم الهاتف.
-5. أنشئ Firestore Database وStorage في المنطقة التي تختارها للمشروع.
-6. لا تضع مفاتيح Service Account أو مفاتيح Admin داخل التطبيق أو المستودع.
+1. أنشئ أو اختر مشروع Firebase تملكه أنت من https://console.firebase.google.com/ .
+2. سجّل معرّف المشروع الحقيقي من Project settings. لا تفترض أن `cosmic-altar-m6shk` هو المشروع الصحيح؛ يجب أن تؤكد ذلك من حسابك.
+3. أضف تطبيق Android بمعرّف الحزمة الدقيق `com.walid.chat`.
+4. نزّل `google-services.json` الخاص بهذا التطبيق.
+5. فعّل Firebase Authentication > Anonymous مؤقتًا للاختبار فقط.
+6. أنشئ Firestore Database وStorage في المنطقة التي تختارها. راجع قواعد الأمان قبل أي بيانات إنتاجية.
+7. لا تضع مفاتيح Admin أو Meta في التطبيق أو المستودع.
 
-## مكان الملف
+## 2. إعداد بناء Android في GitHub
 
-ضع الملف محلياً في:
+لإنتاج APK مهيأ لمشروعك، أضف GitHub Actions secret باسم `GOOGLE_SERVICES_JSON_BASE64` وقيمته محتوى ملف `google-services.json` بعد ترميزه Base64. مثال Linux/macOS:
 
+```sh
+base64 -w 0 google-services.json
 ```
-app/google-services.json
-```
 
-لا ترفع الملف إلى GitHub العام. لا يحتوي ملف إعداد Android عادةً على مفتاح Admin، لكنه يعرّف التطبيق ومشروع Firebase. أصبح Gradle يفعّل Google Services تلقائياً عند وجود الملف. ولتفعيل Firebase في بناء GitHub Actions، أضف GitHub Actions secret باسم `GOOGLE_SERVICES_JSON_BASE64` وقيمته محتوى الملف بعد ترميزه Base64 (على جهازك نفّذ `base64 -w 0 google-services.json`). يقرأ workflow السر وينشئ `app/google-services.json` مؤقتاً أثناء البناء. إذا لم تضف السر، يستمر البناء لكن التطبيق لن يتصل بمشروع Firebase.
+أدخل الناتج في GitHub > Settings > Secrets and variables > Actions. لا ترسل الملف أو محتواه أو مفاتيح خاصة في المحادثة. يفحص CI معرّف المشروع واسم الحزمة قبل بناء APK. إذا لم يوجد السر، ينجح بناء الاختبارات لكنه ينتج APK بلا ربط Firebase.
 
-## حالة تسجيل الدخول وقرار WhatsApp OTP
+## 3. إعداد النشر السحابي عبر GitHub OIDC
 
-**الحالة الحالية:** التطبيق ما زال يستخدم Firebase Anonymous Authentication لإنشاء UID مؤقت أثناء التطوير. هذا لا يثبت رقم الهاتف، ولا يحقق قرار المنتج النهائي الذي اختاره صاحب المشروع: التسجيل والتحقق عبر WhatsApp OTP.
+أُضيف workflow يدوي في `.github/workflows/firebase-deploy.yml`. لا ينشر تلقائيًا. يحتاج إعداد Workload Identity Federation في Google Cloud، وحساب خدمة مخصص للنشر، وصلاحيات Firebase/Google Cloud اللازمة. لا تستخدم مفتاح JSON دائمًا.
 
-**المطلوب قبل إطلاق الحسابات الحقيقية:** إنشاء خادم موثوق (Cloud Functions أو Cloud Run) يتصل بـ WhatsApp Business Cloud API باستخدام قالب Authentication معتمد، ويحفظ الأسرار على الخادم فقط، ويطبق انتهاء صلاحية الرمز ومحاولات محدودة ومعدل إرسال مضبوطاً، ثم ينشئ Firebase Custom Token بعد التحقق. لا يجوز وضع Meta access token أو Firebase Admin credentials داخل APK أو مستودع GitHub.
+في GitHub أنشئ Environment باسم `firebase-production`، وأضف Environment secrets التالية:
 
-**لا تدّعِ أن OTP يعمل حالياً:** واجهة الهاتف تعرض حالة توضيحية فقط؛ لا يتم إرسال رمز WhatsApp أو توثيق الرقم بعد. يجب أيضاً تصميم ربط حسابات Anonymous الموجودة بحسابات الهاتف دون فقد بياناتها قبل استبدال آلية الجلسة.
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`: المورد الكامل لمزوّد Workload Identity Provider.
+- `FIREBASE_DEPLOY_SERVICE_ACCOUNT`: البريد الإلكتروني لحساب الخدمة المخصص للنشر.
 
-## خادم الحالات الموثوق
+في Google Cloud، أنشئ Workload Identity Pool/Provider مع GitHub OIDC، واجعل شرط السماح مقيدًا بالمستودع `walid1239/Imi-android` وبالفرع `feature/server-authoritative-status` (أو الفرع الإنتاجي الذي تقرره لاحقًا). اربط الهوية بحساب خدمة محدود الصلاحيات، ولا تمنح صلاحيات Owner أو Editor العامة. يجب تفعيل واجهات Google Cloud المطلوبة وإعداد فوترة مناسبة لخدمات Cloud Functions إن طلبتها Google.
 
-يوجد الآن أساس Firebase Functions في مجلد `functions/`. الدالة `createStatus` تتطلب مستخدماً موثقاً في Firebase، وتتحقق من النص ونوع الصورة، وتحدد الانتهاء بعد 28 ساعة من وقت الخادم، وتطبق مهلة نشر قدرها 30 ثانية لكل مستخدم. تطبيق Android يستدعي الدالة قبل رفع صورة الحالة. يلزم بناء الدالة ونشرها على مشروع Firebase الصحيح قبل أن تعمل هذه الميزة في بيئة حقيقية.
+بعد إعداد الهوية والمشروع، شغّل GitHub Actions > IMI Firebase Cloud Deployment يدويًا، واختر فرع التغيير، وأدخل معرّف مشروعك المؤكد، واكتب `DEPLOY` للتأكيد. سيبني workflow Functions ثم ينشر Functions وFirestore rules وStorage rules إلى المشروع المحدد. نجاح workflow وحده لا يغني عن اختبار التطبيق من جهاز فعلي.
 
-لا تنشر الوظائف أو القواعد قبل التأكد من المشروع المستهدف وإعداد الفوترة المطلوبة ومراجعة الأمان. لم يتم نشر هذه الدالة إلى مشروع Firebase في هذا التغيير.
+**تنبيه:** لا تشغّل workflow قبل مراجعة المشروع المستهدف والقواعد وصلاحيات حساب الخدمة. هذا الإعداد ليس دليلًا على أن أي خدمة نُشرت بالفعل.
 
-## ما يجب التحقق منه قبل النشر
+## 4. تسجيل الدخول وWhatsApp OTP
 
-- تأكد أن `project_id` في الملف هو `cosmic-altar-m6shk`.
-- تأكد أن `package_name` هو `com.walid.chat`.
-- لا تعتبر نجاح بناء APK دليلاً على اتصال Firebase؛ يجب أن يحتوي البناء على إعداد التطبيق الصحيح وأن ينجح اختبار تسجيل الدخول من جهاز فعلي.
-- قبل الإنتاج، أكمل خادم WhatsApp OTP وFirebase Custom Token واختبر تدفق التسجيل والاستعادة على جهازين.
-- لا تنشر قواعد Firebase إلى الإنتاج قبل اختبارها على المشروع الصحيح ومراجعة مخطط الصداقة.
-- بعد توفير إعداد التطبيق، أضف Google Services Gradle plugin وشغّل التطبيق على جهازين لاختبار UID والمحادثات بينهما.
+التطبيق يستخدم Firebase Anonymous Authentication مؤقتًا؛ هذا لا يثبت رقم الهاتف ولا يحقق تسجيل الدخول النهائي. WhatsApp OTP غير منفذ حاليًا. يتطلب Meta WhatsApp Business Cloud API، حساب WhatsApp Business مهيأ، قالب Authentication معتمدًا، أسرار Meta على الخادم، حدود إرسال ومحاولات، انتهاء الرمز واستخدامه مرة واحدة، ثم إصدار Firebase Custom Token بعد التحقق. لا تضع Meta access token أو Firebase Admin credentials داخل APK أو المستودع.
+
+لا تعلن أن OTP يعمل قبل اكتمال الخادم واختبار الإرسال والتحقق والاستعادة على أجهزة حقيقية، ووضع خطة آمنة لترحيل حسابات Anonymous الموجودة.
+
+## 5. وظيفة الحالات
+
+يوجد أساس Cloud Function باسم `createStatus` لإنشاء الحالة بوقت خادم وانتهاء بعد 28 ساعة، مع تحقق من المدخلات ومهلة نشر. التطبيق يستدعي الوظيفة قبل رفع صورة الحالة. هذا الكود موجود في المستودع، لكنه لا يعمل على Firebase الإنتاجي قبل نشره بنجاح.
+
+## 6. ما لم يكتمل بعد
+
+- ربط مشروع Firebase فعلي تملكه ونشر خدماته.
+- تسجيل الهاتف عبر WhatsApp OTP.
+- تدفقات طلب/قبول الصداقة الموثوقة على الخادم.
+- حضور المستخدم والإشعارات وإيصالات التسليم والقراءة.
+- اكتمال المكالمات واختبارات الصوت/الفيديو بين أجهزة وشبكات مختلفة.
+- مراجعة شاملة للقواعد ومخطط البيانات واختبار اختراق قبل الإنتاج.
+
+نجاح Gradle أو اختبارات Firebase Emulator لا يثبت اتصال Firebase الإنتاجي أو اكتمال ميزات التطبيق.

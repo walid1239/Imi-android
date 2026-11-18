@@ -474,6 +474,14 @@ private fun ChatsScreen() {
     var recorder by remember { mutableStateOf<android.media.MediaRecorder?>(null) }
     var recordingPath by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    DisposableEffect(Unit) {
+        onDispose {
+            runCatching { recorder?.stop() }
+            runCatching { recorder?.release() }
+            recorder = null
+            isRecording = false
+        }
+    }
     val audioPermission = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -606,6 +614,20 @@ private fun ChatsScreen() {
                         if (isRecording) "إيقاف التسجيل وإرسال" else "تسجيل رسالة صوتية",
                         tint = if (isRecording) Color(0xFFFF6685) else ImiMuted
                     )
+                }
+                if (isRecording) {
+                    IconButton(onClick = {
+                        val activeRecorder = recorder
+                        val discardPath = recordingPath
+                        runCatching { activeRecorder?.stop() }
+                        runCatching { activeRecorder?.release() }
+                        recorder = null
+                        recordingPath = null
+                        isRecording = false
+                        if (discardPath != null) runCatching { java.io.File(discardPath).delete() }
+                    }) {
+                        Icon(Icons.Filled.Close, "إلغاء التسجيل", tint = Color(0xFFFF6685))
+                    }
                 }
                 IconButton(onClick = { imageMessagePicker.launch(arrayOf("image/*")) }) {
                     Icon(Icons.Filled.Image, "إرفاق صورة", tint = ImiMuted)

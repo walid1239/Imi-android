@@ -7,7 +7,7 @@
 1. افتح مشروع Firebase المقصود: `cosmic-altar-m6shk`.
 2. من Project settings > Your apps، أضف تطبيق Android بالحزمة الدقيقة `com.walid.chat` (أو اختره إذا كان موجوداً).
 3. نزّل ملف `google-services.json` الخاص بهذا التطبيق.
-4. فعّل Authentication > Sign-in method > Anonymous.
+4. إعداد Firebase الحالي يستخدم Anonymous مؤقتاً للبناء والاختبار فقط؛ لا تعتبره تسجيل IMI النهائي برقم الهاتف.
 5. أنشئ Firestore Database وStorage في المنطقة التي تختارها للمشروع.
 6. لا تضع مفاتيح Service Account أو مفاتيح Admin داخل التطبيق أو المستودع.
 
@@ -21,13 +21,19 @@ app/google-services.json
 
 لا ترفع الملف إلى GitHub العام. لا يحتوي ملف إعداد Android عادةً على مفتاح Admin، لكنه يعرّف التطبيق ومشروع Firebase. أصبح Gradle يفعّل Google Services تلقائياً عند وجود الملف. ولتفعيل Firebase في بناء GitHub Actions، أضف GitHub Actions secret باسم `GOOGLE_SERVICES_JSON_BASE64` وقيمته محتوى الملف بعد ترميزه Base64 (على جهازك نفّذ `base64 -w 0 google-services.json`). يقرأ workflow السر وينشئ `app/google-services.json` مؤقتاً أثناء البناء. إذا لم تضف السر، يستمر البناء لكن التطبيق لن يتصل بمشروع Firebase.
 
-## سلوك الجلسة
+## حالة تسجيل الدخول وقرار WhatsApp OTP
 
-يستخدم IMI Firebase Anonymous Authentication لإنشاء UID تلقائي دون OTP. تبقى الجلسة محفوظة على الجهاز عادةً، لكن حذف بيانات التطبيق أو إعادة تثبيته قد يفقد الوصول إلى الحساب المجهول. هذه الطريقة لا تثبت رقم الهاتف ولا توفر استعادة حساب تلقائية. ربط الحساب بوسيلة استرداد آمنة مرحلة لاحقة.
+**الحالة الحالية:** التطبيق ما زال يستخدم Firebase Anonymous Authentication لإنشاء UID مؤقت أثناء التطوير. هذا لا يثبت رقم الهاتف، ولا يحقق قرار المنتج النهائي الذي اختاره صاحب المشروع: التسجيل والتحقق عبر WhatsApp OTP.
+
+**المطلوب قبل إطلاق الحسابات الحقيقية:** إنشاء خادم موثوق (Cloud Functions أو Cloud Run) يتصل بـ WhatsApp Business Cloud API باستخدام قالب Authentication معتمد، ويحفظ الأسرار على الخادم فقط، ويطبق انتهاء صلاحية الرمز ومحاولات محدودة ومعدل إرسال مضبوطاً، ثم ينشئ Firebase Custom Token بعد التحقق. لا يجوز وضع Meta access token أو Firebase Admin credentials داخل APK أو مستودع GitHub.
+
+**لا تدّعِ أن OTP يعمل حالياً:** واجهة الهاتف تعرض حالة توضيحية فقط؛ لا يتم إرسال رمز WhatsApp أو توثيق الرقم بعد. يجب أيضاً تصميم ربط حسابات Anonymous الموجودة بحسابات الهاتف دون فقد بياناتها قبل استبدال آلية الجلسة.
 
 ## ما يجب التحقق منه قبل النشر
 
 - تأكد أن `project_id` في الملف هو `cosmic-altar-m6shk`.
 - تأكد أن `package_name` هو `com.walid.chat`.
+- لا تعتبر نجاح بناء APK دليلاً على اتصال Firebase؛ يجب أن يحتوي البناء على إعداد التطبيق الصحيح وأن ينجح اختبار تسجيل الدخول من جهاز فعلي.
+- قبل الإنتاج، أكمل خادم WhatsApp OTP وFirebase Custom Token واختبر تدفق التسجيل والاستعادة على جهازين.
 - لا تنشر قواعد Firebase إلى الإنتاج قبل اختبارها على المشروع الصحيح ومراجعة مخطط الصداقة.
 - بعد توفير إعداد التطبيق، أضف Google Services Gradle plugin وشغّل التطبيق على جهازين لاختبار UID والمحادثات بينهما.

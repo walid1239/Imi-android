@@ -1343,7 +1343,7 @@ private fun ProfileScreen() {
                 Box(Modifier.size(86.dp).clip(CircleShape).background(ImiBlue.copy(alpha = .2f)), contentAlignment = Alignment.Center) {
                     if (avatarBitmap != null) {
                         Image(
-                            bitmap = avatarBitmap.asImageBitmap(),
+                            bitmap = avatarBitmap!!.asImageBitmap(),
                             contentDescription = "الصورة الشخصية",
                             modifier = Modifier.fillMaxSize()
                         )

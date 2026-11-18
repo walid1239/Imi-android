@@ -18,7 +18,8 @@ let env;
 before(async () => {
   env = await initializeTestEnvironment({
     projectId: 'demo-imi-security',
-    firestore: { rules: readFileSync('firestore.rules', 'utf8') }
+    firestore: { rules: readFileSync('firestore.rules', 'utf8') },
+    storage: { rules: readFileSync('storage.rules', 'utf8') }
   });
 
   await env.withSecurityRulesDisabled(async (context) => {
@@ -80,4 +81,27 @@ test('non-members cannot write messages into another conversation', async () => 
     text: 'غير مصرح',
     createdAt: serverTimestamp()
   }));
+});
+
+
+test('users can upload only their own avatar files', async () => {
+  const aliceStorage = env.authenticatedContext('alice').storage();
+  const bobStorage = env.authenticatedContext('bob').storage();
+  const aliceAvatar = ref(aliceStorage, 'users/alice/avatars/avatar.png');
+  const foreignAvatar = ref(bobStorage, 'users/alice/avatars/attacker.png');
+  await assertSucceeds(uploadBytes(aliceAvatar, new Blob(['png-data'], { type: 'image/png' })));
+  await assertFails(uploadBytes(чужойAvatar, new Blob(['png-data'], { type: 'image/png' })));
+});
+
+test('only conversation members can upload conversation media', async () => {
+  const aliceStorage = env.authenticatedContext('alice').storage();
+  const malloryStorage = env.authenticatedContext('mallory').storage();
+  await assertSucceeds(uploadBytes(
+    ref(aliceStorage, 'conversations/chat-1/photo.png'),
+    new Blob(['png-data'], { type: 'image/png' })
+  ));
+  await assertFails(uploadBytes(
+    ref(malloryStorage, 'conversations/chat-1/photo.png'),
+    new Blob(['png-data'], { type: 'image/png' })
+  ));
 });

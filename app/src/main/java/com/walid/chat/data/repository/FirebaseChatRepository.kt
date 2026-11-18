@@ -41,8 +41,8 @@ class FirebaseChatRepository(
     override suspend fun sendMessage(chatId: String, text: String): Result<Unit> = runCatching {
         require(chatId.isNotBlank()) { "معرّف المحادثة غير صالح" }
         val cleanText = text.trim()
-        require(cleanText.isNotEmpty() && cleanText.length <= 10_000) {
-            "نص الرسالة فارغ أو طويل جداً"
+        require(cleanText.isNotEmpty() && cleanText.length <= 1_000) {
+            "نص الرسالة فارغ أو يتجاوز 1000 حرف"
         }
         val uid = requireUid()
         val conversation = firestore.collection("conversations").document(chatId)
@@ -70,7 +70,9 @@ class FirebaseChatRepository(
         conversation.set(mapOf(
             "participants" to listOf(uid, otherUid).sorted(),
             "createdBy" to uid,
-            "createdAt" to FieldValue.serverTimestamp()
+            "createdAt" to FieldValue.serverTimestamp(),
+            "lastMessage" to "",
+            "lastMessageAt" to FieldValue.serverTimestamp()
         )).await()
         conversation.id
     }

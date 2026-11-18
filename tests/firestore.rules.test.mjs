@@ -11,7 +11,8 @@ import {
   doc,
   getDoc,
   setDoc,
-  serverTimestamp
+  serverTimestamp,
+  Timestamp
 } from 'firebase/firestore';
 
 let env;
@@ -105,4 +106,33 @@ test('only conversation members can upload conversation media', async () => {
     ref(malloryStorage, 'conversations/chat-1/photo.png'),
     new Blob(['png-data'], { type: 'image/png' })
   ));
+});
+
+test('a user can publish a status with text and an optional owned media path', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  await assertSucceeds(setDoc(doc(aliceDb, 'users/alice/statuses/status-1'), {
+    ownerUid: 'alice',
+    text: 'حالة تجريبية للاختبار',
+    mediaPath: 'users/alice/statuses/status-1/status.jpg',
+    createdAt: serverTimestamp(),
+    expiresAt: Timestamp.fromDate(new Date(Date.now() + 27 * 60 * 60 * 1000))
+  }));
+  await assertFails(setDoc(doc(aliceDb, 'users/alice/statuses/status-2'), {
+    ownerUid: 'bob',
+    text: 'محاولة نشر باسم مستخدم آخر',
+    createdAt: serverTimestamp(),
+    expiresAt: Timestamp.fromDate(new Date(Date.now() + 27 * 60 * 60 * 1000))
+  }));
+  await assertFails(setDoc(doc(aliceDb, 'users/alice/statuses/status-3'), {
+    ownerUid: 'alice',
+    mediaPath: 'users/bob/statuses/status-3/status.jpg',
+    createdAt: serverTimestamp(),
+    expiresAt: Timestamp.fromDate(new Date(Date.now() + 27 * 60 * 60 * 1000))
+  }));
+  await assertFails(setDoc(doc(aliceDb, 'users/alice/statuses/status-4'), {
+    ownerUid: 'alice',
+    text: 'انتهاء بعد أكثر من 28 ساعة',
+    createdAt: serverTimestamp(),
+    expiresAt: Timestamp.fromDate(new Date(Date.now() + 30 * 60 * 60 * 1000))
+  }));
 });

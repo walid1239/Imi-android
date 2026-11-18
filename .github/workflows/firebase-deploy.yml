@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       project_id:
-        description: "Exact Firebase project ID (must be verified as owned/authorized)"
+        description: "Exact Firebase project ID (must match the protected environment allowlist)"
         required: true
         type: string
       confirm_deploy:
@@ -30,30 +30,47 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate project ID input
+      - name: Validate project ID against protected allowlist
         env:
           PROJECT_ID: ${{ inputs.project_id }}
+          ALLOWED_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: |
           if ! [[ "$PROJECT_ID" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]]; then
             echo "::error::Invalid Firebase project ID format."
             exit 1
           fi
-
-      - name: Authenticate to Google Cloud using GitHub OIDC
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
+          if [ -z "$ALLOWED_PROJECT_ID" ] || [ "$PROJECT_ID" != "$ALLOWED_PROJECT_ID" ]; then
+            echo "::error::Target project does not match the protected environment allowlist."
+            exit 1
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      - name: Install and build trusted Functions
+      - name: Set up Java for Firebase Emulator Suite
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install security test dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build trusted Functions
         run: |
           npm install --prefix functions --no-audit --no-fund
           npm run build --prefix functions
+
+      - name: Run Firestore and Storage rules tests before deployment
+        run: npx --yes firebase-tools@13.29.2 emulators:exec --only firestore,storage --project demo-imi-security "npm run test:rules"
+
+      - name: Authenticate to Google Cloud using GitHub OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Install Firebase CLI
         run: npm install --global firebase-tools@13.29.2

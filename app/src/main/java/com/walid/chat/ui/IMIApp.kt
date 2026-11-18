@@ -467,6 +467,7 @@ private fun ChatsScreen() {
     var query by remember { mutableStateOf("") }
     var opened by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
+    var messageQuery by remember { mutableStateOf("") }
     var showNewChat by remember { mutableStateOf(false) }
     var showDeleteChat by remember { mutableStateOf(false) }
     var newChatName by remember { mutableStateOf("") }
@@ -562,6 +563,10 @@ private fun ChatsScreen() {
         DemoChat(name, sentMessages[name]?.lastOrNull()?.let { if (it.startsWith("@image:")) "صورة" else if (it.startsWith("@audio:")) "رسالة صوتية" else it } ?: "ابدأ محادثة جديدة", "الآن", 0, ImiBlue)
     }
     val filtered = (demoChats + localChats).distinctBy { it.name }.filter { it.name.contains(query, true) }
+    val activeMessages = sentMessages[opened].orEmpty()
+    val filteredMessages = activeMessages.filter { message ->
+        messageQuery.isBlank() || message.contains(messageQuery.trim(), ignoreCase = true)
+    }
     if (opened != null) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -572,13 +577,41 @@ private fun ChatsScreen() {
             }
             Spacer(Modifier.height(20.dp))
             Text("رسائلك محفوظة على هذا الجهاز فقط، وليست مرسلة عبر الإنترنت.", color = ImiMuted, fontSize = 12.sp)
+            OutlinedTextField(
+                value = messageQuery,
+                onValueChange = { messageQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                placeholder = { Text("ابحث داخل هذه المحادثة…") },
+                leadingIcon = { Icon(Icons.Filled.Search, null, tint = ImiMuted) },
+                trailingIcon = {
+                    if (messageQuery.isNotEmpty()) {
+                        IconButton(onClick = { messageQuery = "" }) {
+                            Icon(Icons.Filled.Close, "مسح البحث", tint = ImiMuted)
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(14.dp)
+            )
+            if (messageQuery.isNotBlank()) {
+                Text("${filteredMessages.size} من ${activeMessages.size} رسالة", color = ImiMuted, fontSize = 10.sp)
+            }
             LazyColumn(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentPadding = PaddingValues(vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(sentMessages[opened].orEmpty()) { message ->
+                items(filteredMessages) { message ->
                     ChatMessageBubble(message)
+                }
+                if (filteredMessages.isEmpty()) {
+                    item {
+                        Text(
+                            if (activeMessages.isEmpty()) "لا توجد رسائل بعد." else "لا توجد رسائل تطابق البحث.",
+                            color = ImiMuted,
+                            modifier = Modifier.fillMaxWidth().padding(20.dp)
+                        )
+                    }
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {

@@ -150,6 +150,7 @@ private fun HomeScreen(onChats: () -> Unit, onReels: () -> Unit, onAcademy: () -
         }
         item { WelcomeCard() }
         item { StoriesSection() }
+        item { RecentChatsSection(onChats) }
         item {
             SectionHeader("مساحة التواصل", "عرض المحادثات", onChats)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -173,7 +174,7 @@ private fun HomeScreen(onChats: () -> Unit, onReels: () -> Unit, onAcademy: () -
                 }
             }
         }
-        item { Text("هذه واجهة أولية محلية؛ الحسابات والرسائل والوسائط والمكالمات لم تُربط بخدمات خلفية بعد.", color = ImiMuted, fontSize = 11.sp) }
+        item { Text("المحادثات والملفات العامة تعتمد على إعداد Firebase؛ ميزات الوسائط والمكالمات والتحقق عبر WhatsApp لم تُفعّل بعد.", color = ImiMuted, fontSize = 11.sp) }
     }
     if (showNotifications) {
         AlertDialog(
@@ -189,6 +190,53 @@ private fun HomeScreen(onChats: () -> Unit, onReels: () -> Unit, onAcademy: () -
                 TextButton(onClick = { showNotifications = false }) { Text("حسناً") }
             }
         )
+    }
+}
+
+@Composable
+private fun RecentChatsSection(onChats: () -> Unit) {
+    val context = LocalContext.current
+    var recent by remember { mutableStateOf<List<com.walid.chat.data.model.Chat>>(emptyList()) }
+    var loaded by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        loaded = true
+        runCatching {
+            if (com.google.firebase.FirebaseApp.getApps(context.applicationContext).isNotEmpty()) {
+                com.walid.chat.data.repository.FirebaseChatRepositoryFactory.create(context).getChats().getOrThrow().take(3)
+            } else emptyList()
+        }.onSuccess { recent = it }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SectionHeader("أحدث المحادثات", "كل المحادثات", onChats)
+        if (recent.isEmpty()) {
+            Surface(color = ImiSurface, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().clickable { onChats() }) {
+                Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.ChatBubbleOutline, null, tint = ImiBlue)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(if (loaded) "لا توجد محادثات بعد" else "جارٍ تحميل المحادثات…", color = ImiText, fontSize = 13.sp)
+                        Text("ابدأ محادثة جديدة وستظهر هنا", color = ImiMuted, fontSize = 11.sp)
+                    }
+                    Icon(Icons.Filled.ChevronLeft, null, tint = ImiMuted)
+                }
+            }
+        } else {
+            recent.forEach { chat ->
+                Surface(color = ImiSurface, shape = RoundedCornerShape(15.dp), modifier = Modifier.fillMaxWidth().clickable { onChats() }) {
+                    Row(Modifier.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(40.dp).clip(CircleShape).background(ImiBlue.copy(alpha = .18f)), contentAlignment = Alignment.Center) {
+                            Text(chat.title.take(1), color = ImiText, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(chat.title, color = ImiText, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text(chat.lastMessage.ifBlank { "ابدأ المحادثة" }, color = ImiMuted, fontSize = 11.sp, maxLines = 1)
+                        }
+                        Icon(Icons.Filled.ChevronLeft, null, tint = ImiMuted)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1039,6 +1087,10 @@ private fun ProfileScreen() {
     var city by remember(profilePrefs) {
         mutableStateOf(profilePrefs.getString("city", "المغرب") ?: "المغرب")
     }
+    var bio by remember(profilePrefs) { mutableStateOf(profilePrefs.getString("bio", "") ?: "") }
+    var phoneNumber by remember(profilePrefs) { mutableStateOf(profilePrefs.getString("phone_number", "") ?: "") }
+    var languages by remember(profilePrefs) { mutableStateOf(profilePrefs.getString("languages", "العربية") ?: "العربية") }
+    var savingAccount by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
     var profileSection by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -1183,6 +1235,53 @@ private fun ProfileScreen() {
                         city = it
                         profilePrefs.edit().putString("city", it).apply()
                     }, label = { Text("المدينة") }, singleLine = true)
+                    OutlinedTextField(value = bio, onValueChange = {
+                        bio = it
+                        profilePrefs.edit().putString("bio", it).apply()
+                    }, label = { Text("نبذة عنك") }, minLines = 2, maxLines = 4)
+                    OutlinedTextField(value = languages, onValueChange = {
+                        languages = it
+                        profilePrefs.edit().putString("languages", it).apply()
+                    }, label = { Text("اللغات التي تتحدثها") }, supportingText = { Text("افصل بين اللغات بفاصلة: العربية، الفرنسية، الإنجليزية") })
+                    OutlinedTextField(value = phoneNumber, onValueChange = {
+                        phoneNumber = it
+                        profilePrefs.edit().putString("phone_number", it).apply()
+                    }, label = { Text("رقم الهاتف مع رمز الدولة") }, singleLine = true, supportingText = { Text("مثال: +212… — لا يظهر للآخرين قبل توثيقه") })
+                    Text("توثيق رقم الهاتف عبر WhatsApp OTP", color = ImiBlue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text("سيُفعّل إرسال الرمز بعد ربط خادم IMI بمنصة WhatsApp Business. لم يتم إرسال رمز أو توثيق الرقم بعد.", color = ImiMuted, fontSize = 11.sp)
+                    Button(enabled = !savingAccount && displayName.trim().length >= 2, onClick = {
+                        savingAccount = true
+                        scope.launch {
+                            runCatching {
+                                check(com.google.firebase.FirebaseApp.getApps(context.applicationContext).isNotEmpty()) {
+                                    "إعداد Firebase غير موجود؛ لا يمكن حفظ الملف سحابياً."
+                                }
+                                val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+                                val uid = auth.currentUser?.uid
+                                    ?: auth.signInAnonymously().await().user?.uid
+                                    ?: error("تعذر إنشاء الجلسة السحابية")
+                                com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                                    .collection("users").document(uid)
+                                    .set(mapOf(
+                                        "displayName" to displayName.trim().take(60),
+                                        "city" to city.trim().take(80),
+                                        "bio" to bio.trim().take(300),
+                                        "languages" to languages.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(10),
+                                        "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                                    ), com.google.firebase.firestore.SetOptions.merge()).await()
+                            }.onSuccess {
+                                cloudProfileMessage = "تم حفظ معلومات حسابك الخاصة في السحابة."
+                            }.onFailure {
+                                cloudProfileMessage = it.localizedMessage ?: "تعذر حفظ معلومات الحساب"
+                            }
+                            savingAccount = false
+                        }
+                    }) {
+                        if (savingAccount) CircularProgressIndicator(Modifier.size(17.dp), strokeWidth = 2.dp)
+                        else Icon(Icons.Filled.CloudDone, null, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(7.dp))
+                        Text(if (savingAccount) "جارٍ الحفظ…" else "حفظ معلومات الحساب")
+                    }
                 }
             }
         }

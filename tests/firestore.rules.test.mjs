@@ -6,7 +6,7 @@ import {
   assertFails,
   assertSucceeds
 } from '@firebase/rules-unit-testing';
-import { ref, uploadBytes } from 'firebase/storage';
+import { ref, uploadBytes, getBytes, deleteObject } from 'firebase/storage';
 import {
   doc,
   getDoc,
@@ -28,6 +28,7 @@ before(async () => {
     const db = context.firestore();
     await setDoc(doc(db, 'users/alice'), { privateEmail: 'alice@example.invalid' });
     await setDoc(doc(db, 'users/bob'), { privateEmail: 'bob@example.invalid' });
+    await setDoc(doc(db, 'users/alice/friends/bob'), { status: 'accepted' });
     await setDoc(doc(db, 'conversations/chat-1'), {
       participants: ['alice', 'bob'],
       createdBy: 'alice',
@@ -135,4 +136,24 @@ test('a user can publish a status with text and an optional owned media path', a
     createdAt: serverTimestamp(),
     expiresAt: Timestamp.fromDate(new Date(Date.now() + 30 * 60 * 60 * 1000))
   }));
+});
+
+test('status media uploads require owner, are visible to accepted friends, and can be deleted by owner', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  await setDoc(doc(aliceDb, 'users/alice/statuses/status-storage'), {
+    ownerUid: 'alice',
+    text: 'صورة الحالة',
+    createdAt: serverTimestamp(),
+    expiresAt: Timestamp.fromDate(new Date(Date.now() + 27 * 60 * 60 * 1000))
+  });
+  const aliceStorage = env.authenticatedContext('alice').storage();
+  const bobStorage = env.authenticatedContext('bob').storage();
+  const path = 'users/alice/statuses/status-storage/status.jpg';
+  const aliceFile = ref(aliceStorage, path);
+  const bobFile = ref(bobStorage, path);
+  await assertSucceeds(uploadBytes(aliceFile, new Blob(['image-data'], { type: 'image/jpeg' })));
+  await assertSucceeds(getBytes(bobFile));
+  await assertFails(uploadBytes(ref(bobStorage, 'users/alice/statuses/status-storage/attacker.jpg'), new Blob(['bad'], { type: 'image/jpeg' })));
+  await assertSucceeds(deleteObject(aliceFile));
+  await assertFails(getBytes(bobFile));
 });

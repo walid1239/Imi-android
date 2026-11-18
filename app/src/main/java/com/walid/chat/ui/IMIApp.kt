@@ -288,9 +288,19 @@ private fun StoriesSection() {
     var draftImageUri by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
-    val configured = remember(context) {
-        com.google.firebase.FirebaseApp.getApps(context.applicationContext).isNotEmpty()
-            && com.google.firebase.auth.FirebaseAuth.getInstance().currentUser != null
+    var configured by remember { mutableStateOf(false) }
+    DisposableEffect(context) {
+        val firebaseAuth = if (com.google.firebase.FirebaseApp.getApps(context.applicationContext).isNotEmpty()) {
+            com.google.firebase.auth.FirebaseAuth.getInstance()
+        } else null
+        val listener = com.google.firebase.auth.FirebaseAuth.AuthStateListener { currentAuth ->
+            configured = currentAuth.currentUser != null
+        }
+        firebaseAuth?.addAuthStateListener(listener)
+        configured = firebaseAuth?.currentUser != null
+        onDispose {
+            if (firebaseAuth != null) firebaseAuth.removeAuthStateListener(listener)
+        }
     }
     val auth = remember(configured) {
         if (configured) com.google.firebase.auth.FirebaseAuth.getInstance() else null

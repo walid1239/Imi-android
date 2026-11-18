@@ -29,12 +29,12 @@ Never trust a UID supplied by the client as proof of identity. Every protected w
 
 ## Important deployment blockers
 
-1. Add the Android Firebase app with package name `com.walid.chat` to Firebase project `cosmic-altar-m6shk`.
-2. Download that app's `google-services.json`. Keep it out of public commits; supply it to local builds or a protected CI secret/file mechanism.
-3. Enable Anonymous sign-in in Firebase Authentication.
-4. Create the Firestore database and Storage bucket in the intended region.
+1. Create or select a Firebase project that the app owner controls; do not assume any previously hard-coded project ID is correct.
+2. Add the Android app with package name `com.walid.chat` and download its `google-services.json`. Keep it out of public commits.
+3. For CI, store the Base64 config as `GOOGLE_SERVICES_JSON_BASE64` and the exact owned project ID as `FIREBASE_PROJECT_ID`; the workflow rejects a mismatch.
+4. Enable Anonymous sign-in only for temporary development and create Firestore and Storage in the intended region.
 5. Review the rules against the final client data model and run Firebase Emulator Suite rules tests, including unauthenticated access, cross-user reads, non-member conversation reads/writes, oversized uploads, and expired statuses.
-6. Deploy only the reviewed rules to the intended Firebase project after emulator tests pass.
+6. Deploy only the reviewed rules to the allowlisted Firebase project after emulator tests pass.
 
 ## Safety notes
 

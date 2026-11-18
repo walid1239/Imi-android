@@ -14,7 +14,16 @@ This repository is a native Android app. These files define a **security baselin
 
 ## Authentication decision
 
-IMI's no-OTP, automatic-session requirement can be implemented with Firebase Anonymous Authentication. Firebase issues a real UID and persists the authenticated session on the device. This is not phone-number verification and does not prove a person's identity. Account linking or recovery must be designed separately before production launch.
+**Product decision: WhatsApp OTP.** Firebase Anonymous Authentication is only a temporary development fallback in the current client; it is not the production registration flow and must not be presented as phone verification.
+
+Before production, implement a trusted Cloud Run or Cloud Functions service that:
+- sends OTP through the WhatsApp Business Cloud API using an approved Authentication template;
+- stores Meta credentials and Firebase Admin credentials only in managed server secrets;
+- enforces OTP expiry, one-time use, attempt limits, resend cooldowns, and per-phone/IP rate limits;
+- verifies the code server-side and issues a Firebase Custom Token;
+- links or migrates existing anonymous UID data safely before changing the session flow.
+
+Do not ship a production release claiming WhatsApp OTP works until the server flow, account recovery, and multi-device tests pass.
 
 Never trust a UID supplied by the client as proof of identity. Every protected write must use `request.auth.uid` and server-side security rules.
 

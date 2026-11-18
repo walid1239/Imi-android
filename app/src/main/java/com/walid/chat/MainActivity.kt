@@ -31,7 +31,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             cloudSessionMessage = result.fold(
-                onSuccess = { "متصل بالسحابة • UID: ${it.take(8)}…" },
+                onSuccess = { "جلسة Firebase مؤقتة • غير موثقة • UID: ${it.take(8)}…" },
                 onFailure = { "السحابة غير مهيأة: ${it.message ?: "تحقق من إعداد Firebase"}" }
             )
         }

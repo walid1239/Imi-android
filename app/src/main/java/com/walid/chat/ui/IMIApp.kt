@@ -309,7 +309,24 @@ private fun ChatsScreen() {
     var query by remember { mutableStateOf("") }
     var opened by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
+    var showNewChat by remember { mutableStateOf(false) }
+    var newChatName by remember { mutableStateOf("") }
     val context = LocalContext.current
+    val chatPrefs = remember(context) {
+        context.getSharedPreferences("imi_local_chat", android.content.Context.MODE_PRIVATE)
+    }
+    var localChatNames by remember(chatPrefs) {
+        mutableStateOf(
+            runCatching {
+                val stored = chatPrefs.getString("chat_names", null)
+                if (stored.isNullOrBlank()) emptyList()
+                else {
+                    val array = JSONArray(stored)
+                    List(array.length()) { index -> array.getString(index) }
+                }
+            }.getOrDefault(emptyList())
+        )
+    }
     val sentMessages = remember(context) {
         val restored = mutableStateMapOf<String, List<String>>()
         val raw = context.getSharedPreferences("imi_local_chat", android.content.Context.MODE_PRIVATE)
@@ -325,7 +342,10 @@ private fun ChatsScreen() {
         }
         restored
     }
-    val filtered = demoChats.filter { it.name.contains(query, true) }
+    val localChats = localChatNames.map { name ->
+        DemoChat(name, sentMessages[name]?.lastOrNull() ?: "ابدأ محادثة جديدة", "الآن", 0, ImiBlue)
+    }
+    val filtered = (demoChats + localChats).distinctBy { it.name }.filter { it.name.contains(query, true) }
     if (opened != null) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -373,7 +393,9 @@ private fun ChatsScreen() {
         return
     }
     Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 22.dp)) {
-        PageHeader("المحادثات", "ابقَ على تواصل") { IconAction(Icons.Filled.Edit, "محادثة جديدة") }
+        PageHeader("المحادثات", "ابقَ على تواصل") {
+            IconAction(Icons.Filled.Edit, "محادثة جديدة") { showNewChat = true }
+        }
         Spacer(Modifier.height(16.dp))
         OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("ابحث عن محادثة…") }, leadingIcon = { Icon(Icons.Filled.Search, null, tint = ImiMuted) }, shape = RoundedCornerShape(16.dp))
         Spacer(Modifier.height(12.dp))
@@ -395,7 +417,43 @@ private fun ChatsScreen() {
                 }
             }
         }
-        Text("المحادثات المعروضة تجريبية؛ رسائلك الصادرة تُحفظ محلياً على الجهاز فقط.", color = ImiMuted, fontSize = 11.sp)
+        Text("المحادثات المعروضة تجريبية؛ المحادثات التي تنشئها ورسائلك تُحفظ محلياً على الجهاز فقط.", color = ImiMuted, fontSize = 11.sp)
+    }
+    if (showNewChat) {
+        AlertDialog(
+            onDismissRequest = { showNewChat = false; newChatName = "" },
+            title = { Text("محادثة جديدة") },
+            text = {
+                OutlinedTextField(
+                    value = newChatName,
+                    onValueChange = { newChatName = it },
+                    label = { Text("اسم الشخص أو المجموعة") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val name = newChatName.trim()
+                        if (name.isNotEmpty()) {
+                            if (name !in demoChats.map { it.name } && name !in localChatNames) {
+                                localChatNames = localChatNames + name
+                                val names = JSONArray()
+                                localChatNames.forEach { names.put(it) }
+                                chatPrefs.edit().putString("chat_names", names.toString()).apply()
+                            }
+                            opened = name
+                            showNewChat = false
+                            newChatName = ""
+                        }
+                    },
+                    enabled = newChatName.isNotBlank()
+                ) { Text("إنشاء") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewChat = false; newChatName = "" }) { Text("إلغاء") }
+            }
+        )
     }
 }
 

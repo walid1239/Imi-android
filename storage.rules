@@ -24,6 +24,7 @@ service firebase.storage {
         && (
           request.auth.uid == uid
           || firestore.exists(/databases/(default)/documents/users/$(uid)/friends/$(request.auth.uid))
+            && firestore.get(/databases/(default)/documents/users/$(uid)/friends/$(request.auth.uid)).data.status == 'accepted'
         );
       allow write: if signedIn()
         && request.auth.uid == uid

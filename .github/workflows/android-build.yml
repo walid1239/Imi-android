@@ -48,12 +48,17 @@ jobs:
       - name: Configure Firebase Android app when secret is available
         id: firebase_config
         env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
           GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: |
-          if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
+          if [ -n "$GOOGLE_SERVICES_JSON" ] || [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
             mkdir -p app
-            printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > app/google-services.json
+            if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+              printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+            else
+              printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > app/google-services.json
+            fi
             test -s app/google-services.json
             if [ -z "$FIREBASE_PROJECT_ID" ]; then
               echo "::error::Set the FIREBASE_PROJECT_ID secret to the project you own before using Firebase config."
@@ -67,7 +72,7 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::GOOGLE_SERVICES_JSON_BASE64 is not configured. The APK will be test-only and will not connect to the configured Firebase project."
+            echo "::warning::Neither GOOGLE_SERVICES_JSON nor GOOGLE_SERVICES_JSON_BASE64 is configured. The APK will be test-only and will not connect to Firebase."
           fi
 
       - name: Run unit tests and assemble debug APK

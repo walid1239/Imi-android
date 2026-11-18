@@ -29,6 +29,8 @@ import androidx.compose.ui.platform.LocalContext
 import org.json.JSONArray
 import org.json.JSONObject
 import com.walid.chat.ui.theme.IMITheme
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 private val ImiBackground = Color(0xFF07090F)
 private val ImiSurface = Color(0xFF111522)
@@ -1039,6 +1041,9 @@ private fun ProfileScreen() {
     }
     var editing by remember { mutableStateOf(false) }
     var profileSection by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    var publishingProfile by remember { mutableStateOf(false) }
+    var cloudProfileMessage by remember { mutableStateOf<String?>(null) }
     val localUserId = remember(profilePrefs) {
         val existing = profilePrefs.getString("local_user_id", null)
         if (existing != null) existing
@@ -1124,6 +1129,46 @@ private fun ProfileScreen() {
                         }
                     }
                 }
+                Button(
+                    enabled = !publishingProfile && displayName.trim().length >= 2,
+                    onClick = {
+                        publishingProfile = true
+                        cloudProfileMessage = null
+                        scope.launch {
+                            runCatching {
+                                check(com.google.firebase.FirebaseApp.getApps(context.applicationContext).isNotEmpty()) {
+                                    "إعداد Firebase غير موجود؛ لا يمكن نشر الملف."
+                                }
+                                val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+                                val uid = auth.currentUser?.uid
+                                    ?: auth.signInAnonymously().await().user?.uid
+                                    ?: error("تعذر إنشاء الجلسة السحابية")
+                                com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                                    .collection("publicProfiles").document(uid)
+                                    .set(mapOf(
+                                        "uid" to uid,
+                                        "displayName" to displayName.trim().take(60),
+                                        "city" to city.trim().take(80),
+                                        "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                                    )).await()
+                                uid
+                            }.onSuccess {
+                                cloudProfileMessage = "تم نشر اسمك ومدينتك في دليل IMI. معرّف الحساب السحابي: " + it.take(10)
+                            }.onFailure {
+                                cloudProfileMessage = it.localizedMessage ?: "تعذر نشر الملف السحابي"
+                            }
+                            publishingProfile = false
+                        }
+                    }
+                ) {
+                    if (publishingProfile) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Icon(Icons.Filled.CloudUpload, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(7.dp))
+                    Text(if (publishingProfile) "جارٍ النشر..." else "نشر الملف للبحث")
+                }
+                cloudProfileMessage?.let {
+                    Text(it, color = if (it.startsWith("تم نشر")) ImiGreen else Color(0xFFFFA0A0), fontSize = 11.sp)
+                }
                 OutlinedButton(onClick = { editing = !editing }) {
                     Icon(Icons.Filled.Edit, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
@@ -1149,7 +1194,7 @@ private fun ProfileScreen() {
                 }
             }
         }
-        Text("المعرّف والاسم والمدينة محفوظة محلياً على هذا الجهاز فقط. هذا ليس حساباً سحابياً، ولا يتيح العثور على مستخدمين أو المزامنة بين الأجهزة.", color = ImiMuted, fontSize = 11.sp)
+        Text("معرّف IMI الظاهر أعلاه محلي للجهاز. زر نشر الملف ينشئ ملفاً عاماً محدوداً بالاسم والمدينة ومعرّف Firebase؛ الصورة الشخصية لا تُرفع إلى السحابة بعد.", color = ImiMuted, fontSize = 11.sp)
     }
     when (profileSection) {
         "الأصدقاء" -> AlertDialog(

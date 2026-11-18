@@ -64,11 +64,22 @@ jobs:
               echo "::error::Set the FIREBASE_PROJECT_ID secret to the project you own before using Firebase config."
               exit 1
             fi
-            jq -e --arg project_id "$FIREBASE_PROJECT_ID" '
-              .project_info.project_id == $project_id
-              and any(.client[]; .client_info.android_client_info.package_name == "com.walid.chat")
-            ' app/google-services.json >/dev/null
-            echo "Firebase Android config validated for the protected project ID and package com.walid.chat."
+            project_id="$(printf '%s' "$FIREBASE_PROJECT_ID" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+            if ! jq -e 'type == "object" and (.project_info | type == "object") and (.client | type == "array")' app/google-services.json >/dev/null; then
+              echo "::error::GOOGLE_SERVICES_JSON is not valid Firebase Android configuration JSON (or is missing project_info/client)."
+              exit 1
+            fi
+            actual_project_id="$(jq -r '.project_info.project_id // empty' app/google-services.json)"
+            if [ "$actual_project_id" != "$project_id" ]; then
+              echo "::error::Firebase project ID mismatch. JSON project_id='$actual_project_id'; FIREBASE_PROJECT_ID secret does not match after trimming whitespace."
+              exit 1
+            fi
+            if ! jq -e 'any(.client[]?; .client_info.android_client_info.package_name == "com.walid.chat")' app/google-services.json >/dev/null; then
+              echo "::error::Firebase JSON does not contain Android package com.walid.chat."
+              echo "::error::Configured package names: $(jq -r '[.client[]?.client_info.android_client_info.package_name // empty] | join(", ")' app/google-services.json)"
+              exit 1
+            fi
+            echo "Firebase Android config validated: project_id='$actual_project_id', package='com.walid.chat'."
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"

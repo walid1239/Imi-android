@@ -67,11 +67,10 @@ jobs:
       - name: Run unit tests and assemble debug APK
         run: gradle --no-daemon testDebugUnitTest assembleDebug
 
-      - name: Upload Firebase-configured APK
-        if: steps.firebase_config.outputs.configured == 'true'
+      - name: Upload debug APK for device verification
         uses: actions/upload-artifact@v4
         with:
-          name: IMI-firebase-configured-apk
+          name: ${{ steps.firebase_config.outputs.configured == 'true' && 'IMI-debug-apk-firebase-configured' || 'IMI-debug-apk-no-firebase-config' }}
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14

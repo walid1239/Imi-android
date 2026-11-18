@@ -19,6 +19,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import org.json.JSONArray
+import org.json.JSONObject
 import com.walid.chat.ui.theme.IMITheme
 
 private val ImiBackground = Color(0xFF07090F)
@@ -243,7 +246,22 @@ private fun ChatsScreen() {
     var query by remember { mutableStateOf("") }
     var opened by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
-    val sentMessages = remember { mutableStateMapOf<String, List<String>>() }
+    val context = LocalContext.current
+    val sentMessages = remember(context) {
+        val restored = mutableStateMapOf<String, List<String>>()
+        val raw = context.getSharedPreferences("imi_local_chat", android.content.Context.MODE_PRIVATE)
+            .getString("messages", null)
+        if (!raw.isNullOrBlank()) {
+            runCatching {
+                val root = JSONObject(raw)
+                root.keys().forEach { chatName ->
+                    val values = root.getJSONArray(chatName)
+                    restored[chatName] = List(values.length()) { index -> values.getString(index) }
+                }
+            }
+        }
+        restored
+    }
     val filtered = demoChats.filter { it.name.contains(query, true) }
     if (opened != null) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -253,7 +271,7 @@ private fun ChatsScreen() {
                 Text(opened!!, color = ImiText, fontWeight = FontWeight.Bold, fontSize = 19.sp)
             }
             Spacer(Modifier.height(20.dp))
-            Text("هذه محادثة تجريبية على الجهاز فقط.", color = ImiMuted, fontSize = 12.sp)
+            Text("رسائلك محفوظة على هذا الجهاز فقط، وليست مرسلة عبر الإنترنت.", color = ImiMuted, fontSize = 12.sp)
             LazyColumn(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentPadding = PaddingValues(vertical = 16.dp),
@@ -274,7 +292,14 @@ private fun ChatsScreen() {
                         val text = draft.trim()
                         val chatName = opened
                         if (text.isNotEmpty() && chatName != null) {
-                            sentMessages[chatName] = sentMessages[chatName].orEmpty() + text
+                            val updated = sentMessages[chatName].orEmpty() + text
+                            sentMessages[chatName] = updated
+                            val root = JSONObject()
+                            sentMessages.forEach { (name, messages) ->
+                                root.put(name, JSONArray(messages))
+                            }
+                            context.getSharedPreferences("imi_local_chat", android.content.Context.MODE_PRIVATE)
+                                .edit().putString("messages", root.toString()).apply()
                             draft = ""
                         }
                     },
@@ -307,7 +332,7 @@ private fun ChatsScreen() {
                 }
             }
         }
-        Text("بيانات تجريبية للعرض؛ لا تمثل محادثات حقيقية ولا تُرسل عبر الشبكة.", color = ImiMuted, fontSize = 11.sp)
+        Text("المحادثات المعروضة تجريبية؛ رسائلك الصادرة تُحفظ محلياً على الجهاز فقط.", color = ImiMuted, fontSize = 11.sp)
     }
 }
 

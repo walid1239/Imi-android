@@ -487,6 +487,9 @@ private fun StoriesSection() {
                                         ).await()
                                     }
                                 } catch (uploadError: Exception) {
+                                    if (!path.isNullOrBlank()) {
+                                        runCatching { storage.reference.child(path).delete().await() }
+                                    }
                                     runCatching { statusRef.delete().await() }
                                     throw uploadError
                                 }

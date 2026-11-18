@@ -2,7 +2,6 @@ name: IMI Android CI
 
 on:
   push:
-    branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:

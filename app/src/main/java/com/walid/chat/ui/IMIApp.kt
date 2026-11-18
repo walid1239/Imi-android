@@ -391,8 +391,16 @@ private fun AcademyScreen() {
 
 @Composable
 private fun ProfileScreen() {
-    var displayName by remember { mutableStateOf("مستخدم IMI") }
-    var city by remember { mutableStateOf("المغرب") }
+    val context = LocalContext.current
+    val profilePrefs = remember(context) {
+        context.getSharedPreferences("imi_local_profile", android.content.Context.MODE_PRIVATE)
+    }
+    var displayName by remember(profilePrefs) {
+        mutableStateOf(profilePrefs.getString("display_name", "مستخدم IMI") ?: "مستخدم IMI")
+    }
+    var city by remember(profilePrefs) {
+        mutableStateOf(profilePrefs.getString("city", "المغرب") ?: "المغرب")
+    }
     var editing by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         PageHeader("حسابي", "ملفك الشخصي") { IconAction(Icons.Filled.Settings, "الإعدادات") }
@@ -409,8 +417,14 @@ private fun ProfileScreen() {
                     Text(if (editing) "إغلاق التعديل" else "تعديل الملف")
                 }
                 if (editing) {
-                    OutlinedTextField(value = displayName, onValueChange = { displayName = it }, label = { Text("الاسم") }, singleLine = true)
-                    OutlinedTextField(value = city, onValueChange = { city = it }, label = { Text("المدينة") }, singleLine = true)
+                    OutlinedTextField(value = displayName, onValueChange = {
+                        displayName = it
+                        profilePrefs.edit().putString("display_name", it).apply()
+                    }, label = { Text("الاسم") }, singleLine = true)
+                    OutlinedTextField(value = city, onValueChange = {
+                        city = it
+                        profilePrefs.edit().putString("city", it).apply()
+                    }, label = { Text("المدينة") }, singleLine = true)
                 }
             }
         }
@@ -422,6 +436,6 @@ private fun ProfileScreen() {
                 }
             }
         }
-        Text("الاسم والمدينة محفوظان محلياً أثناء فتح الشاشة فقط؛ لم يُفعّل تسجيل الحساب أو التخزين الدائم.", color = ImiMuted, fontSize = 11.sp)
+        Text("الاسم والمدينة محفوظان محلياً على هذا الجهاز؛ لم يُفعّل تسجيل الحساب أو المزامنة عبر الإنترنت.", color = ImiMuted, fontSize = 11.sp)
     }
 }

@@ -277,15 +277,28 @@ private fun WelcomeCard() {
 @Composable
 private fun StoriesSection() {
     val context = LocalContext.current
-    val prefs = remember(context) {
-        context.getSharedPreferences("imi_local_status", android.content.Context.MODE_PRIVATE)
-    }
-    var statusText by remember(prefs) { mutableStateOf(prefs.getString("text", null)) }
-    var statusImageUri by remember(prefs) { mutableStateOf(prefs.getString("image_uri", null)) }
-    var expiresAt by remember(prefs) { mutableStateOf(prefs.getLong("expires_at", 0L)) }
+    val scope = rememberCoroutineScope()
+    var statusText by remember { mutableStateOf<String?>(null) }
+    var statusMediaPath by remember { mutableStateOf<String?>(null) }
+    var expiresAt by remember { mutableStateOf<Long?>(null) }
     var showComposer by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
     var draftImageUri by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    val configured = remember(context) {
+        com.google.firebase.FirebaseApp.getApps(context.applicationContext).isNotEmpty()
+            && com.google.firebase.auth.FirebaseAuth.getInstance().currentUser != null
+    }
+    val auth = remember(configured) {
+        if (configured) com.google.firebase.auth.FirebaseAuth.getInstance() else null
+    }
+    val db = remember(configured) {
+        if (configured) com.google.firebase.firestore.FirebaseFirestore.getInstance() else null
+    }
+    val storage = remember(configured) {
+        if (configured) com.google.firebase.storage.FirebaseStorage.getInstance() else null
+    }
     val statusImagePicker = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -299,139 +312,161 @@ private fun StoriesSection() {
             draftImageUri = uri.toString()
         }
     }
-    val statusImageBitmap = remember(statusImageUri) {
-        statusImageUri?.let { savedUri ->
-            runCatching {
-                context.contentResolver.openInputStream(android.net.Uri.parse(savedUri))?.use { stream ->
-                    android.graphics.BitmapFactory.decodeStream(stream)
-                }
-            }.getOrNull()
-        }
-    }
-    val draftImageBitmap = remember(draftImageUri) {
-        draftImageUri?.let { savedUri ->
-            runCatching {
-                context.contentResolver.openInputStream(android.net.Uri.parse(savedUri))?.use { stream ->
-                    android.graphics.BitmapFactory.decodeStream(stream)
-                }
-            }.getOrNull()
-        }
-    }
 
-    LaunchedEffect(expiresAt, statusText, statusImageUri) {
-        if ((statusText != null || statusImageUri != null) && expiresAt > 0L) {
-            val remainingMillis = expiresAt - System.currentTimeMillis()
-            if (remainingMillis > 0L) kotlinx.coroutines.delay(remainingMillis)
-            if (System.currentTimeMillis() >= expiresAt) {
-                prefs.edit().clear().apply()
-                statusText = null
-                statusImageUri = null
-                expiresAt = 0L
-            }
+    LaunchedEffect(configured, auth?.currentUser?.uid) {
+        val uid = auth?.currentUser?.uid ?: return@LaunchedEffect
+        runCatching {
+            db!!.collection("users").document(uid).collection("statuses")
+                .whereGreaterThan("expiresAt", com.google.firebase.Timestamp.now())
+                .orderBy("expiresAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                .limit(1).get().await().documents.firstOrNull()
+        }.onSuccess { doc ->
+            statusText = doc?.getString("text")
+            statusMediaPath = doc?.getString("mediaPath")
+            expiresAt = doc?.getTimestamp("expiresAt")?.toDate()?.time
+        }.onFailure {
+            message = it.localizedMessage ?: "تعذر تحميل حالتك السحابية"
         }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionHeader("الحالات", if (statusText == null && statusImageUri == null) "أضف حالتك" else "حالتي", { showComposer = true })
+        SectionHeader("الحالات", if (statusText == null && statusMediaPath == null) "أضف حالتك" else "حالتي", { showComposer = true })
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.width(58.dp).clickable { showComposer = true }
             ) {
                 Box(Modifier.size(54.dp).clip(CircleShape).background(ImiSurface2), contentAlignment = Alignment.Center) {
-                    if (statusText == null && statusImageUri == null) Icon(Icons.Filled.Add, null, tint = ImiBlue, modifier = Modifier.size(25.dp))
-                    else Text("أنا", color = ImiText, fontWeight = FontWeight.Bold)
+                    if (statusText == null && statusMediaPath == null) Icon(Icons.Filled.Add, null, tint = ImiBlue, modifier = Modifier.size(25.dp))
+                    else Icon(Icons.Filled.Person, null, tint = ImiBlue, modifier = Modifier.size(25.dp))
                 }
                 Spacer(Modifier.height(5.dp))
-                Text(if (statusText == null && statusImageUri == null) "أضف حالة" else "حالتي", color = ImiMuted, fontSize = 10.sp, maxLines = 1)
+                Text(if (statusText == null && statusMediaPath == null) "أضف حالة" else "حالتي", color = ImiMuted, fontSize = 10.sp, maxLines = 1)
             }
-            Surface(
-                color = ImiSurface,
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                Column(
-                    Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
+            Surface(color = ImiSurface, shape = RoundedCornerShape(16.dp), modifier = Modifier.weight(1f)) {
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("حالات الأصدقاء", color = ImiText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Text("ستظهر هنا الحالات الحقيقية بعد ربط حسابات الأصدقاء والمزامنة السحابية.", color = ImiMuted, fontSize = 10.sp, lineHeight = 15.sp)
+                    Text("ستظهر حالات الأصدقاء بعد إنشاء علاقات صداقة موثقة وربطها بالخادم.", color = ImiMuted, fontSize = 10.sp, lineHeight = 15.sp)
                 }
             }
         }
-        if (statusText != null || statusImageUri != null) {
-            if (statusText != null) Text(statusText!!, color = ImiMuted, fontSize = 12.sp, maxLines = 2)
-            if (statusImageBitmap != null) {
-                Image(
-                    bitmap = statusImageBitmap.asImageBitmap(),
-                    contentDescription = "صورة الحالة",
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).clip(RoundedCornerShape(16.dp))
-                )
+        if (statusText != null || statusMediaPath != null) {
+            statusText?.let { Text(it, color = ImiMuted, fontSize = 12.sp, maxLines = 3) }
+            if (statusMediaPath != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Image, null, tint = ImiBlue, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("صورة محفوظة في سحابة IMI", color = ImiMuted, fontSize = 11.sp)
+                }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("تنتهي حالتك بعد 28 ساعة من نشرها على هذا الجهاز.", color = ImiMuted, fontSize = 10.sp, modifier = Modifier.weight(1f))
-                TextButton(onClick = {
-                    prefs.edit().clear().apply()
-                    statusText = null
-                    statusImageUri = null
-                    expiresAt = 0L
+                Text("تنتهي الحالة تلقائياً بعد 28 ساعة من نشرها.", color = ImiMuted, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                TextButton(enabled = !loading, onClick = {
+                    val uid = auth?.currentUser?.uid
+                    val path = statusMediaPath
+                    if (uid == null || db == null) {
+                        message = "يلزم تفعيل Firebase قبل حذف الحالة السحابية."
+                    } else {
+                        loading = true
+                        scope.launch {
+                            runCatching {
+                                val query = db.collection("users").document(uid).collection("statuses")
+                                    .whereGreaterThan("expiresAt", com.google.firebase.Timestamp.now())
+                                    .get().await()
+                                query.documents.forEach { it.reference.delete().await() }
+                                if (path != null) runCatching { storage?.reference?.child(path)?.delete()?.await() }
+                            }.onSuccess {
+                                statusText = null
+                                statusMediaPath = null
+                                expiresAt = null
+                                message = "حُذفت حالتك من السحابة."
+                            }.onFailure {
+                                message = it.localizedMessage ?: "تعذر حذف الحالة"
+                            }
+                            loading = false
+                        }
+                    }
                 }, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) {
                     Text("حذف الحالة", color = Color(0xFFFF6685), fontSize = 11.sp)
                 }
             }
         }
+        message?.let { Text(it, color = ImiMuted, fontSize = 10.sp) }
     }
     if (showComposer) {
         AlertDialog(
-            onDismissRequest = { showComposer = false },
+            onDismissRequest = { if (!loading) showComposer = false },
             title = { Text("إضافة حالة") },
             text = {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    label = { Text("ماذا تريد أن تشارك؟") },
-                    maxLines = 4
-                )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = draft, onValueChange = { draft = it }, label = { Text("ماذا تريد أن تشارك؟") }, maxLines = 4)
                     OutlinedButton(onClick = { statusImagePicker.launch(arrayOf("image/*")) }) {
                         Icon(Icons.Filled.Image, null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(if (draftImageUri == null) "إرفاق صورة" else "تغيير الصورة")
                     }
-                    if (draftImageBitmap != null) {
-                        Image(
-                            bitmap = draftImageBitmap.asImageBitmap(),
-                            contentDescription = "معاينة صورة الحالة",
-                            modifier = Modifier.fillMaxWidth().heightIn(max = 150.dp).clip(RoundedCornerShape(12.dp))
-                        )
+                    if (draftImageUri != null) {
+                        Text("تم اختيار صورة للنشر السحابي.", color = ImiMuted, fontSize = 11.sp)
                         TextButton(onClick = { draftImageUri = null }) { Text("إزالة الصورة") }
                     }
+                    Text("تُحفظ الحالة في السحابة وتُحذف صلاحية عرضها بعد 28 ساعة.", color = ImiMuted, fontSize = 10.sp)
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    val value = draft.trim()
-                    if (value.isNotEmpty() || draftImageUri != null) {
-                        val expiry = System.currentTimeMillis() + 28L * 60L * 60L * 1000L
-                        prefs.edit().putString("text", value.takeIf { it.isNotEmpty() })
-                            .putString("image_uri", draftImageUri)
-                            .putLong("expires_at", expiry).apply()
-                        statusText = value.takeIf { it.isNotEmpty() }
-                        statusImageUri = draftImageUri
-                        expiresAt = expiry
-                        draft = ""
-                        draftImageUri = null
+                TextButton(enabled = !loading && (draft.isNotBlank() || draftImageUri != null), onClick = {
+                    val uid = auth?.currentUser?.uid
+                    if (uid == null || db == null || storage == null) {
+                        message = "Firebase غير مهيأ؛ لم تُنشر الحالة. لن نحفظها كحالة محلية."
                         showComposer = false
+                    } else {
+                        loading = true
+                        scope.launch {
+                            runCatching {
+                                val id = java.util.UUID.randomUUID().toString()
+                                val expiry = com.google.firebase.Timestamp(
+                                    java.util.Date(System.currentTimeMillis() + 28L * 60L * 60L * 1000L)
+                                )
+                                val data = mutableMapOf<String, Any>(
+                                    "ownerUid" to uid,
+                                    "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                                    "expiresAt" to expiry
+                                )
+                                val value = draft.trim().take(700)
+                                if (value.isNotEmpty()) data["text"] = value
+                                draftImageUri?.let { selectedUri ->
+                                    val uri = android.net.Uri.parse(selectedUri)
+                                    val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+                                    require(mime in setOf("image/jpeg", "image/png", "image/webp")) { "صيغة الصورة غير مدعومة." }
+                                    val ext = when (mime) { "image/png" -> "png"; "image/webp" -> "webp"; else -> "jpg" }
+                                    val path = "users/$uid/statuses/$id/status.$ext"
+                                    storage.reference.child(path).putFile(
+                                        uri,
+                                        com.google.firebase.storage.StorageMetadata.Builder().setContentType(mime).build()
+                                    ).await()
+                                    data["mediaPath"] = path
+                                }
+                                db.collection("users").document(uid).collection("statuses").document(id).set(data).await()
+                                data
+                            }.onSuccess { data ->
+                                statusText = data["text"] as? String
+                                statusMediaPath = data["mediaPath"] as? String
+                                expiresAt = (data["expiresAt"] as? com.google.firebase.Timestamp)?.toDate()?.time
+                                draft = ""
+                                draftImageUri = null
+                                showComposer = false
+                                message = "نُشرت حالتك في سحابة IMI."
+                            }.onFailure {
+                                message = it.localizedMessage ?: "تعذر نشر الحالة السحابية"
+                            }
+                            loading = false
+                        }
                     }
-                }, enabled = draft.isNotBlank() || draftImageUri != null) { Text("نشر") }
+                }) { Text(if (loading) "جارٍ النشر…" else "نشر") }
             },
-            dismissButton = {
-                TextButton(onClick = { showComposer = false }) { Text("إلغاء") }
-            }
+            dismissButton = { TextButton(enabled = !loading, onClick = { showComposer = false }) { Text("إلغاء") } }
         )
     }
 }
-
 @Composable
 private fun SectionHeader(title: String, action: String, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

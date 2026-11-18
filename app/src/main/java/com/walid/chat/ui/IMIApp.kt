@@ -1281,14 +1281,44 @@ private fun ProfileScreen() {
                                 val uid = auth.currentUser?.uid
                                     ?: auth.signInAnonymously().await().user?.uid
                                     ?: error("تعذر إنشاء الجلسة السحابية")
+                                var photoPath: String? = null
+                                avatarUri?.let { selectedAvatar ->
+                                    val uri = android.net.Uri.parse(selectedAvatar)
+                                    val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
+                                    require(mimeType in setOf("image/jpeg", "image/png", "image/webp")) {
+                                        "صيغة الصورة غير مدعومة؛ استخدم JPEG أو PNG أو WebP."
+                                    }
+                                    val extension = when (mimeType) {
+                                        "image/png" -> "png"
+                                        "image/webp" -> "webp"
+                                        else -> "jpg"
+                                    }
+                                    val avatarRef = com.google.firebase.storage.FirebaseStorage.getInstance()
+                                        .reference.child("users/$uid/avatars/avatar.$extension")
+                                    avatarRef.putFile(
+                                        uri,
+                                        com.google.firebase.storage.StorageMetadata.Builder()
+                                            .setContentType(mimeType)
+                                            .build()
+                                    ).await()
+                                    photoPath = avatarRef.path
+                                }
+                                val publicProfile = mutableMapOf<String, Any>(
+                                    "uid" to uid,
+                                    "displayName" to displayName.trim().take(60),
+                                    "city" to city.trim().take(80),
+                                    "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                                )
+                                photoPath?.let { publicProfile["photoPath"] = it }
                                 com.google.firebase.firestore.FirebaseFirestore.getInstance()
                                     .collection("publicProfiles").document(uid)
-                                    .set(mapOf(
-                                        "uid" to uid,
-                                        "displayName" to displayName.trim().take(60),
-                                        "city" to city.trim().take(80),
-                                        "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
-                                    )).await()
+                                    .set(publicProfile).await()
+                                photoPath?.let { path ->
+                                    com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                                        .collection("users").document(uid)
+                                        .set(mapOf("photoPath" to path), com.google.firebase.firestore.SetOptions.merge())
+                                        .await()
+                                }
                                 uid
                             }.onSuccess {
                                 cloudProfileMessage = "تم نشر اسمك ومدينتك في دليل IMI. معرّف الحساب السحابي: " + it.take(10)
@@ -1379,7 +1409,7 @@ private fun ProfileScreen() {
                 }
             }
         }
-        Text("معرّف IMI الظاهر أعلاه محلي للجهاز. زر نشر الملف ينشئ ملفاً عاماً محدوداً بالاسم والمدينة ومعرّف Firebase؛ الصورة الشخصية لا تُرفع إلى السحابة بعد.", color = ImiMuted, fontSize = 11.sp)
+        Text("معرّف IMI الظاهر أعلاه محلي للجهاز. زر نشر الملف يرفع الاسم والمدينة والصورة المختارة إلى الملف العام المحدود؛ رقم الهاتف لا يُنشر.", color = ImiMuted, fontSize = 11.sp)
     }
     when (profileSection) {
         "الأصدقاء" -> AlertDialog(

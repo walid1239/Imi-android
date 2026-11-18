@@ -179,12 +179,13 @@ test('clients cannot create statuses because trusted server time is required', a
 });
 
 test('status media uploads require owner, are visible to accepted friends, and can be deleted by owner', async () => {
-  const aliceDb = env.authenticatedContext('alice').firestore();
-  await setDoc(doc(aliceDb, 'users/alice/statuses/status-storage'), {
-    ownerUid: 'alice',
-    text: 'صورة الحالة',
-    createdAt: serverTimestamp(),
-    expiresAt: Timestamp.fromDate(new Date(Date.now() + 27 * 60 * 60 * 1000))
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'users/alice/statuses/status-storage'), {
+      ownerUid: 'alice',
+      text: 'صورة الحالة',
+      createdAt: serverTimestamp(),
+      expiresAt: Timestamp.fromDate(new Date(Date.now() + 27 * 60 * 60 * 1000))
+    });
   });
   const aliceStorage = env.authenticatedContext('alice').storage();
   const bobStorage = env.authenticatedContext('bob').storage();

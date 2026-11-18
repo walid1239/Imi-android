@@ -196,11 +196,15 @@ private fun StoriesSection() {
     var showComposer by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
 
-    LaunchedEffect(expiresAt) {
-        if (statusText != null && expiresAt > 0L && System.currentTimeMillis() >= expiresAt) {
-            prefs.edit().clear().apply()
-            statusText = null
-            expiresAt = 0L
+    LaunchedEffect(expiresAt, statusText) {
+        if (statusText != null && expiresAt > 0L) {
+            val remainingMillis = expiresAt - System.currentTimeMillis()
+            if (remainingMillis > 0L) kotlinx.coroutines.delay(remainingMillis)
+            if (System.currentTimeMillis() >= expiresAt) {
+                prefs.edit().clear().apply()
+                statusText = null
+                expiresAt = 0L
+            }
         }
     }
 
@@ -225,7 +229,16 @@ private fun StoriesSection() {
         }
         if (statusText != null) {
             Text(statusText!!, color = ImiMuted, fontSize = 12.sp, maxLines = 2)
-            Text("تنتهي حالتك بعد 28 ساعة من نشرها على هذا الجهاز.", color = ImiMuted, fontSize = 10.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("تنتهي حالتك بعد 28 ساعة من نشرها على هذا الجهاز.", color = ImiMuted, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = {
+                    prefs.edit().clear().apply()
+                    statusText = null
+                    expiresAt = 0L
+                }, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) {
+                    Text("حذف الحالة", color = Color(0xFFFF6685), fontSize = 11.sp)
+                }
+            }
         }
     }
     if (showComposer) {

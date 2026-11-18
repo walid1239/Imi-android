@@ -109,6 +109,46 @@ test('only conversation members can upload conversation media', async () => {
   ));
 });
 
+test('Reels metadata is owner-created and immutable to clients', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  const payload = {
+    ownerUid: 'alice',
+    caption: 'مقطع اختبار قواعد الأمان',
+    videoUrl: 'https://example.invalid/reels/alice/test.mp4',
+    storagePath: 'reels/alice/test.mp4',
+    contentType: 'video/mp4',
+    createdAt: serverTimestamp()
+  };
+
+  await assertSucceeds(setDoc(doc(aliceDb, 'reels/reel-1'), payload));
+  await assertSucceeds(getDoc(doc(bobDb, 'reels/reel-1')));
+  await assertFails(setDoc(doc(bobDb, 'reels/reel-2'), { ...payload, ownerUid: 'alice' }));
+  await assertFails(setDoc(doc(aliceDb, 'reels/reel-3'), { ...payload, ownerUid: 'bob' }));
+  await assertFails(setDoc(doc(aliceDb, 'reels/reel-1'), { ...payload, caption: 'تعديل غير مسموح' }));
+});
+
+test('Reels storage accepts owner video uploads and rejects foreign or non-video uploads', async () => {
+  const aliceStorage = env.authenticatedContext('alice').storage();
+  const bobStorage = env.authenticatedContext('bob').storage();
+  const aliceVideo = ref(aliceStorage, 'reels/alice/test.mp4');
+
+  await assertSucceeds(uploadBytes(
+    aliceVideo,
+    new Blob(['video-data'], { type: 'video/mp4' })
+  ));
+  await assertSucceeds(getBytes(ref(bobStorage, 'reels/alice/test.mp4')));
+  await assertFails(uploadBytes(
+    ref(bobStorage, 'reels/alice/attacker.mp4'),
+    new Blob(['video-data'], { type: 'video/mp4' })
+  ));
+  await assertFails(uploadBytes(
+    ref(aliceStorage, 'reels/alice/not-a-video.jpg'),
+    new Blob(['image-data'], { type: 'image/jpeg' })
+  ));
+  await assertFails(getBytes(ref(env.unauthenticatedContext().storage(), 'reels/alice/test.mp4')));
+});
+
 test('a user can publish a status with text and an optional owned media path', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   await assertSucceeds(setDoc(doc(aliceDb, 'users/alice/statuses/status-1'), {

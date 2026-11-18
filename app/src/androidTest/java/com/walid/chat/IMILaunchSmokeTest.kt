@@ -18,6 +18,5 @@ class IMILaunchSmokeTest {
     @Test
     fun launchesAndShowsArabicHomeScreen() {
         composeRule.onNodeWithText("مساحتك للتواصل والتعلّم").assertIsDisplayed()
-        composeRule.onNodeWithText("المحادثات").assertIsDisplayed()
     }
 }

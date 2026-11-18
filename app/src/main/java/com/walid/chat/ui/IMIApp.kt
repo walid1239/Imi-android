@@ -469,7 +469,7 @@ private fun StoriesSection() {
                                 val callable = com.google.firebase.functions.FirebaseFunctions.getInstance()
                                     .getHttpsCallable("createStatus")
                                 val response = callable.call(requestData).await()
-                                val result = response.data as? Map<*, *>
+                                val result = response.getData() as? Map<*, *>
                                     ?: error("استجابة خادم الحالات غير صالحة")
                                 val id = result["statusId"] as? String
                                     ?: error("لم يُرجع الخادم معرّف الحالة")

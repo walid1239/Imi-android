@@ -280,6 +280,7 @@ private fun StoriesSection() {
     val scope = rememberCoroutineScope()
     var statusText by remember { mutableStateOf<String?>(null) }
     var statusMediaPath by remember { mutableStateOf<String?>(null) }
+    var statusBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var statusDocumentId by remember { mutableStateOf<String?>(null) }
     var expiresAt by remember { mutableStateOf<Long?>(null) }
     var showComposer by remember { mutableStateOf(false) }
@@ -331,6 +332,18 @@ private fun StoriesSection() {
         }
     }
 
+    LaunchedEffect(statusMediaPath, configured) {
+        statusBitmap = null
+        val path = statusMediaPath ?: return@LaunchedEffect
+        val bucket = storage ?: return@LaunchedEffect
+        runCatching {
+            val bytes = bucket.reference.child(path).getBytes(20L * 1024L * 1024L).await()
+            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                ?: error("تعذر فك صورة الحالة")
+        }.onSuccess { statusBitmap = it }
+            .onFailure { message = it.localizedMessage ?: "تعذر تحميل صورة الحالة من السحابة" }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionHeader("الحالات", if (statusText == null && statusMediaPath == null) "أضف حالتك" else "حالتي", { showComposer = true })
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -355,10 +368,19 @@ private fun StoriesSection() {
         if (statusText != null || statusMediaPath != null) {
             statusText?.let { Text(it, color = ImiMuted, fontSize = 12.sp, maxLines = 3) }
             if (statusMediaPath != null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Image, null, tint = ImiBlue, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("صورة محفوظة في سحابة IMI", color = ImiMuted, fontSize = 11.sp)
+                if (statusBitmap != null) {
+                    Image(
+                        bitmap = statusBitmap!!.asImageBitmap(),
+                        contentDescription = "صورة الحالة",
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp).clip(RoundedCornerShape(14.dp)),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = ImiBlue, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("جارٍ تحميل صورة الحالة من السحابة…", color = ImiMuted, fontSize = 11.sp)
+                    }
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -379,6 +401,7 @@ private fun StoriesSection() {
                             }.onSuccess {
                                 statusText = null
                                 statusMediaPath = null
+                                statusBitmap = null
                                 statusDocumentId = null
                                 expiresAt = null
                                 message = "حُذفت حالتك من السحابة."

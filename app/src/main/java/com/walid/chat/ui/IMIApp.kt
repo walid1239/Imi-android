@@ -768,6 +768,13 @@ private fun ProfileScreen() {
     }
     var editing by remember { mutableStateOf(false) }
     var profileSection by remember { mutableStateOf<String?>(null) }
+    val localUserId = remember(profilePrefs) {
+        val existing = profilePrefs.getString("local_user_id", null)
+        if (existing != null) existing
+        else java.util.UUID.randomUUID().toString().replace("-", "").take(16).uppercase().also {
+            profilePrefs.edit().putString("local_user_id", it).apply()
+        }
+    }
     var avatarUri by remember(profilePrefs) {
         mutableStateOf(profilePrefs.getString("avatar_uri", null))
     }
@@ -795,7 +802,9 @@ private fun ProfileScreen() {
         }
     }
     Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        PageHeader("حسابي", "ملفك الشخصي") { IconAction(Icons.Filled.Settings, "الإعدادات") }
+        PageHeader("حسابي", "ملفك الشخصي") {
+            IconAction(Icons.Filled.Settings, "الإعدادات") { profileSection = "الإعدادات" }
+        }
         Surface(color = ImiSurface, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Box(Modifier.size(86.dp).clip(CircleShape).background(ImiBlue.copy(alpha = .2f)), contentAlignment = Alignment.Center) {
@@ -824,6 +833,26 @@ private fun ProfileScreen() {
                 }
                 Text(displayName, color = ImiText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Text(city, color = ImiMuted, fontSize = 12.sp)
+                Surface(color = ImiSurface2, shape = RoundedCornerShape(10.dp)) {
+                    Row(
+                        Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("معرّفك المحلي", color = ImiMuted, fontSize = 10.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(localUserId, color = ImiBlue, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.width(8.dp))
+                        IconButton(
+                            onClick = {
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("IMI ID", localUserId))
+                            },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(Icons.Filled.ContentCopy, "نسخ المعرّف", tint = ImiMuted, modifier = Modifier.size(15.dp))
+                        }
+                    }
+                }
                 OutlinedButton(onClick = { editing = !editing }) {
                     Icon(Icons.Filled.Edit, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
@@ -849,7 +878,7 @@ private fun ProfileScreen() {
                 }
             }
         }
-        Text("الاسم والمدينة محفوظان محلياً على هذا الجهاز؛ لم يُفعّل تسجيل الحساب أو المزامنة عبر الإنترنت.", color = ImiMuted, fontSize = 11.sp)
+        Text("المعرّف والاسم والمدينة محفوظة محلياً على هذا الجهاز فقط. هذا ليس حساباً سحابياً، ولا يتيح العثور على مستخدمين أو المزامنة بين الأجهزة.", color = ImiMuted, fontSize = 11.sp)
     }
     when (profileSection) {
         "الأصدقاء" -> AlertDialog(

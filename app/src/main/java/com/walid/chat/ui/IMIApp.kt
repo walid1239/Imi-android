@@ -31,6 +31,15 @@ import org.json.JSONObject
 import com.walid.chat.ui.theme.IMITheme
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageMetadata
+import android.app.DownloadManager
+import android.os.Environment
+import android.widget.Toast
 
 private val ImiBackground = Color(0xFF07090F)
 private val ImiSurface = Color(0xFF111522)
@@ -451,12 +460,7 @@ private fun FeatureTile(title: String, subtitle: String, icon: androidx.compose.
 }
 
 private data class DemoChat(val name: String, val message: String, val time: String, val unread: Int, val color: Color)
-private val demoChats = listOf(
-    DemoChat("أحمد", "هل أنت متاح اليوم؟", "10:42", 2, Color(0xFF3D6BFF)),
-    DemoChat("سارة", "أرسلت لك الصورة 😊", "09:18", 0, Color(0xFFE27B9B)),
-    DemoChat("مجموعة الأصدقاء", "يوسف: نلتقي مساءً", "أمس", 4, Color(0xFF3AAE9B)),
-    DemoChat("مريم", "شكراً جزيلاً!", "أمس", 0, Color(0xFFE1A34B))
-)
+private val demoChats = emptyList<DemoChat>()
 
 @Composable
 private fun ChatMessageBubble(message: String) {
@@ -842,151 +846,237 @@ private fun ChatsScreen() {
     }
 }
 
+private data class CloudReel(
+    val id: String,
+    val ownerUid: String,
+    val caption: String,
+    val videoUrl: String,
+    val storagePath: String,
+    val createdAtLabel: String
+)
+
 @Composable
 private fun ReelsScreen() {
     val context = LocalContext.current
-    val prefs = remember(context) {
-        context.getSharedPreferences("imi_local_reels", android.content.Context.MODE_PRIVATE)
+    val scope = rememberCoroutineScope()
+    var reels by remember { mutableStateOf<List<CloudReel>>(emptyList()) }
+    var selected by remember { mutableStateOf<CloudReel?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var caption by remember { mutableStateOf("") }
+    val configured = remember(context) {
+        FirebaseApp.getApps(context.applicationContext).isNotEmpty()
+            && FirebaseAuth.getInstance().currentUser != null
     }
-    var videoUris by remember(prefs) {
-        mutableStateOf(
+    val auth = remember(configured) { if (configured) FirebaseAuth.getInstance() else null }
+    val db = remember(configured) { if (configured) FirebaseFirestore.getInstance() else null }
+    val storage = remember(configured) { if (configured) FirebaseStorage.getInstance() else null }
+
+    fun loadReels() {
+        if (db == null || auth?.currentUser == null) {
+            error = "خدمة Firebase غير مهيأة؛ لن نعرض مقاطع تجريبية."
+            reels = emptyList()
+            return
+        }
+        scope.launch {
+            busy = true
             runCatching {
-                val array = JSONArray(prefs.getString("videos", "[]"))
-                List(array.length()) { array.getString(it) }
-            }.getOrDefault(emptyList())
-        )
+                db.collection("reels")
+                    .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(50)
+                    .get().await().documents.mapNotNull { doc ->
+                        val url = doc.getString("videoUrl") ?: return@mapNotNull null
+                        val owner = doc.getString("ownerUid") ?: return@mapNotNull null
+                        val path = doc.getString("storagePath") ?: return@mapNotNull null
+                        CloudReel(
+                            id = doc.id,
+                            ownerUid = owner,
+                            caption = doc.getString("caption").orEmpty(),
+                            videoUrl = url,
+                            storagePath = path,
+                            createdAtLabel = doc.getTimestamp("createdAt")?.toDate()?.toString().orEmpty()
+                        )
+                    }
+            }.onSuccess {
+                reels = it
+                if (selected?.id !in it.map { reel -> reel.id }) selected = it.firstOrNull()
+                error = if (it.isEmpty()) "لا توجد مقاطع منشورة بعد. أضف أول مقطع حقيقي إلى موجز IMI." else null
+            }.onFailure {
+                error = "تعذر تحميل موجز Reels من السحابة: ${it.localizedMessage ?: "خطأ غير معروف"}"
+            }
+            busy = false
+        }
     }
-    var selectedUri by remember { mutableStateOf(videoUris.firstOrNull()) }
+
     val picker = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
+            val uid = auth?.currentUser?.uid
+            if (uid == null || storage == null || db == null) {
+                error = "يجب تسجيل الدخول إلى Firebase قبل نشر مقطع."
+            } else {
+                scope.launch {
+                    busy = true
+                    error = null
+                    runCatching {
+                        val mime = context.contentResolver.getType(uri)
+                            ?: error("تعذر تحديد نوع الفيديو")
+                        require(mime in listOf("video/mp4", "video/webm")) { "الصيغة المدعومة حالياً MP4 أو WebM فقط." }
+                        val id = db.collection("reels").document().id
+                        val extension = if (mime == "video/webm") "webm" else "mp4"
+                        val path = "reels/$uid/$id.$extension"
+                        val ref = storage.reference.child(path)
+                        val metadata = StorageMetadata.Builder().setContentType(mime).build()
+                        ref.putFile(uri, metadata).await()
+                        val url = ref.downloadUrl.await().toString()
+                        db.collection("reels").document(id).set(
+                            mapOf(
+                                "ownerUid" to uid,
+                                "caption" to caption.trim().take(300),
+                                "videoUrl" to url,
+                                "storagePath" to path,
+                                "contentType" to mime,
+                                "createdAt" to FieldValue.serverTimestamp()
+                            )
+                        ).await()
+                        caption = ""
+                    }.onFailure {
+                        error = "فشل رفع المقطع أو نشره: ${it.localizedMessage ?: "خطأ غير معروف"}"
+                    }
+                    busy = false
+                    loadReels()
+                }
             }
-            val value = uri.toString()
-            if (value !in videoUris) {
-                videoUris = listOf(value) + videoUris
-                val saved = JSONArray()
-                videoUris.forEach { saved.put(it) }
-                prefs.edit().putString("videos", saved.toString()).apply()
-            }
-            selectedUri = value
         }
     }
-    val player = remember(selectedUri) {
-        selectedUri?.let {
+
+    val player = remember(selected?.videoUrl) {
+        selected?.videoUrl?.let { url ->
             ExoPlayer.Builder(context).build().apply {
-                setMediaItem(MediaItem.fromUri(android.net.Uri.parse(it)))
+                setMediaItem(MediaItem.fromUri(url))
                 prepare()
                 playWhenReady = false
             }
         }
     }
-    DisposableEffect(player) {
-        onDispose { player?.release() }
-    }
+    DisposableEffect(player) { onDispose { player?.release() } }
+    LaunchedEffect(configured) { loadReels() }
 
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        PageHeader("Reels", "مقاطع الفيديو على هذا الجهاز") {
-            IconAction(Icons.Filled.Add, "إضافة فيديو") {
-                picker.launch(arrayOf("video/*"))
-            }
+        PageHeader("Reels", "موجز فيديوهات منشورة على سحابة IMI") {
+            IconAction(Icons.Filled.Refresh, "تحديث الموجز") { loadReels() }
         }
-        if (selectedUri != null && player != null) {
-            Surface(color = Color.Black, shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth().weight(1f)) {
+        OutlinedTextField(
+            value = caption,
+            onValueChange = { caption = it.take(300) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("وصف المقطع (اختياري)") }
+        )
+        Button(
+            onClick = { picker.launch(arrayOf("video/mp4", "video/webm")) },
+            enabled = configured && !busy,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Filled.CloudUpload, null)
+            Spacer(Modifier.width(8.dp))
+            Text("نشر فيديو من الهاتف إلى السحابة")
+        }
+        if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+        error?.let { Text(it, color = ImiMuted, fontSize = 12.sp) }
+        if (selected != null && player != null) {
+            Surface(color = Color.Black, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().weight(1f)) {
                 AndroidView(
-                    factory = { viewContext ->
-                        PlayerView(viewContext).apply {
-                            this.player = player
-                            useController = true
-                        }
-                    },
+                    factory = { viewContext -> PlayerView(viewContext).apply { this.player = player; useController = true } },
                     update = { it.player = player },
                     modifier = Modifier.fillMaxSize()
                 )
             }
-        } else {
-            Surface(
-                color = ImiSurface,
-                shape = RoundedCornerShape(22.dp),
-                modifier = Modifier.fillMaxWidth().weight(1f)
-            ) {
-                Column(
-                    Modifier.fillMaxWidth().padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+            Text(selected?.caption?.ifBlank { "بدون وصف" } ?: "", color = ImiText, maxLines = 2)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        val reel = selected ?: return@OutlinedButton
+                        runCatching {
+                            val request = DownloadManager.Request(android.net.Uri.parse(reel.videoUrl))
+                                .setTitle("IMI Reel ${reel.id}")
+                                .setDescription("تنزيل مقطع من IMI")
+                                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "IMI-${reel.id}.mp4")
+                            (context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
+                            Toast.makeText(context, "بدأ تنزيل المقطع", Toast.LENGTH_SHORT).show()
+                        }.onFailure {
+                            Toast.makeText(context, "تعذر بدء التنزيل: ${it.localizedMessage}", Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Icon(Icons.Filled.VideoLibrary, null, tint = ImiBlue, modifier = Modifier.size(58.dp))
-                    Spacer(Modifier.height(12.dp))
-                    Text("مكتبة مقاطع IMI", color = ImiText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    Text(
-                        "أضف فيديو من هاتفك لتشغيله داخل التطبيق. هذه المقاطع محلية ولا تُرفع إلى الإنترنت.",
-                        color = ImiMuted,
-                        fontSize = 12.sp,
-                        lineHeight = 19.sp
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    Button(onClick = { picker.launch(arrayOf("video/*")) }) {
-                        Icon(Icons.Filled.Add, null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("اختيار فيديو")
-                    }
+                    Icon(Icons.Filled.Download, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("تحميل الفيديو")
+                }
+                if (selected?.ownerUid == auth?.currentUser?.uid) {
+                    OutlinedButton(onClick = {
+                        val reel = selected ?: return@OutlinedButton
+                        scope.launch {
+                            busy = true
+                            runCatching {
+                                db?.collection("reels")?.document(reel.id)?.delete()?.await()
+                                storage?.reference?.child(reel.storagePath)?.delete()?.await()
+                            }.onFailure { error = "تعذر حذف المقطع: ${it.localizedMessage}" }
+                            busy = false
+                            selected = null
+                            loadReels()
+                        }
+                    }) { Icon(Icons.Filled.DeleteOutline, null); Text("حذف") }
+                }
+            }
+        } else if (!busy) {
+            Surface(color = ImiSurface, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().weight(1f)) {
+                Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Icon(Icons.Filled.VideoLibrary, null, tint = ImiBlue, modifier = Modifier.size(52.dp))
+                    Text("موجز Reels السحابي", color = ImiText, fontWeight = FontWeight.Bold)
+                    Text("لن نعرض أسماء أو فيديوهات تجريبية. ستظهر هنا المقاطع التي يرفعها المستخدمون فعلياً بعد تهيئة Firebase.", color = ImiMuted, fontSize = 12.sp)
                 }
             }
         }
-        if (videoUris.isNotEmpty()) {
-            Text("مقاطعك المحفوظة (${videoUris.size})", color = ImiText, fontWeight = FontWeight.SemiBold)
-            LazyColumn(
-                modifier = Modifier.heightIn(max = 190.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                items(videoUris) { uri ->
-                    val isSelected = uri == selectedUri
+        if (reels.isNotEmpty()) {
+            Text("المقاطع المنشورة (${reels.size})", color = ImiText, fontWeight = FontWeight.SemiBold)
+            LazyColumn(Modifier.heightIn(max = 150.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(reels, key = { it.id }) { reel ->
                     Surface(
-                        color = if (isSelected) ImiBlue.copy(alpha = .16f) else ImiSurface,
+                        color = if (selected?.id == reel.id) ImiBlue.copy(alpha = .18f) else ImiSurface,
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth().clickable { selectedUri = uri }
+                        modifier = Modifier.fillMaxWidth().clickable { selected = reel }
                     ) {
-                        Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.PlayCircle, null, tint = if (isSelected) ImiBlue else ImiMuted)
-                            Spacer(Modifier.width(9.dp))
-                            Text(
-                                android.net.Uri.parse(uri).lastPathSegment ?: "مقطع فيديو",
-                                color = ImiText,
-                                fontSize = 12.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            IconButton(onClick = {
-                                videoUris = videoUris.filterNot { it == uri }
-                                val saved = JSONArray()
-                                videoUris.forEach { saved.put(it) }
-                                prefs.edit().putString("videos", saved.toString()).apply()
-                                if (selectedUri == uri) selectedUri = videoUris.firstOrNull()
-                            }) {
-                                Icon(Icons.Filled.DeleteOutline, "حذف من القائمة", tint = Color(0xFFFF6685))
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.PlayCircle, null, tint = ImiBlue)
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(reel.caption.ifBlank { "مقطع فيديو" }, color = ImiText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("معرّف الناشر: ${reel.ownerUid.take(8)}", color = ImiMuted, fontSize = 10.sp)
                             }
+                            IconButton(onClick = {
+                                selected = reel
+                                runCatching {
+                                    val request = DownloadManager.Request(android.net.Uri.parse(reel.videoUrl))
+                                        .setTitle("IMI Reel ${reel.id}")
+                                        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                        .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "IMI-${reel.id}.mp4")
+                                    (context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
+                                }.onFailure { error = "تعذر التنزيل: ${it.localizedMessage}" }
+                            }) { Icon(Icons.Filled.Download, "تحميل", tint = ImiMuted) }
                         }
                     }
                 }
             }
         }
-        Text(
-            "المشغل والقائمة يعملان محلياً فقط؛ لا يوجد نشر Reels أو موجز مشترك أو رفع سحابي في هذه النسخة.",
-            color = ImiMuted,
-            fontSize = 10.sp
-        )
     }
 }
-
 @Composable
 private fun AcademyScreen() {
     val context = LocalContext.current

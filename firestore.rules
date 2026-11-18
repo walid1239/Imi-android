@@ -70,6 +70,23 @@ service cloud.firestore {
       allow delete: if isSelf(uid);
     }
 
+    // Published Reels metadata. Videos themselves live in Firebase Storage.
+    match /reels/{reelId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['ownerUid', 'caption', 'videoUrl', 'storagePath', 'contentType', 'createdAt'])
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.caption is string
+        && request.resource.data.caption.size() <= 300
+        && request.resource.data.videoUrl is string
+        && request.resource.data.storagePath is string
+        && request.resource.data.storagePath.matches('reels/' + request.auth.uid + '/.*')
+        && request.resource.data.contentType in ['video/mp4', 'video/webm']
+        && request.resource.data.createdAt == request.time;
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+
     match /conversations/{conversationId} {
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly(['participants', 'createdBy', 'createdAt', 'lastMessage', 'lastMessageAt', 'lastSenderUid'])

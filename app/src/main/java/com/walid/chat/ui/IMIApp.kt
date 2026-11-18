@@ -212,48 +212,90 @@ private fun StoriesSection() {
         context.getSharedPreferences("imi_local_status", android.content.Context.MODE_PRIVATE)
     }
     var statusText by remember(prefs) { mutableStateOf(prefs.getString("text", null)) }
+    var statusImageUri by remember(prefs) { mutableStateOf(prefs.getString("image_uri", null)) }
     var expiresAt by remember(prefs) { mutableStateOf(prefs.getLong("expires_at", 0L)) }
     var showComposer by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
+    var draftImageUri by remember { mutableStateOf<String?>(null) }
+    val statusImagePicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            draftImageUri = uri.toString()
+        }
+    }
+    val statusImageBitmap = remember(statusImageUri) {
+        statusImageUri?.let { savedUri ->
+            runCatching {
+                context.contentResolver.openInputStream(android.net.Uri.parse(savedUri))?.use { stream ->
+                    android.graphics.BitmapFactory.decodeStream(stream)
+                }
+            }.getOrNull()
+        }
+    }
+    val draftImageBitmap = remember(draftImageUri) {
+        draftImageUri?.let { savedUri ->
+            runCatching {
+                context.contentResolver.openInputStream(android.net.Uri.parse(savedUri))?.use { stream ->
+                    android.graphics.BitmapFactory.decodeStream(stream)
+                }
+            }.getOrNull()
+        }
+    }
 
-    LaunchedEffect(expiresAt, statusText) {
-        if (statusText != null && expiresAt > 0L) {
+    LaunchedEffect(expiresAt, statusText, statusImageUri) {
+        if ((statusText != null || statusImageUri != null) && expiresAt > 0L) {
             val remainingMillis = expiresAt - System.currentTimeMillis()
             if (remainingMillis > 0L) kotlinx.coroutines.delay(remainingMillis)
             if (System.currentTimeMillis() >= expiresAt) {
                 prefs.edit().clear().apply()
                 statusText = null
+                statusImageUri = null
                 expiresAt = 0L
             }
         }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionHeader("الحالات", if (statusText == null) "أضف حالتك" else "حالتي", { showComposer = true })
+        SectionHeader("الحالات", if (statusText == null && statusImageUri == null) "أضف حالتك" else "حالتي", { showComposer = true })
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.width(58.dp).clickable { showComposer = true }
             ) {
                 Box(Modifier.size(54.dp).clip(CircleShape).background(ImiSurface2), contentAlignment = Alignment.Center) {
-                    if (statusText == null) Icon(Icons.Filled.Add, null, tint = ImiBlue, modifier = Modifier.size(25.dp))
+                    if (statusText == null && statusImageUri == null) Icon(Icons.Filled.Add, null, tint = ImiBlue, modifier = Modifier.size(25.dp))
                     else Text("أنا", color = ImiText, fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.height(5.dp))
-                Text(if (statusText == null) "أضف حالة" else "حالتي", color = ImiMuted, fontSize = 10.sp, maxLines = 1)
+                Text(if (statusText == null && statusImageUri == null) "أضف حالة" else "حالتي", color = ImiMuted, fontSize = 10.sp, maxLines = 1)
             }
             StoryBubble("أحمد", false, ImiPurple)
             StoryBubble("سارة", false, Color(0xFFE27B9B))
             StoryBubble("يوسف", false, Color(0xFF3AAE9B))
             StoryBubble("مريم", false, Color(0xFFE1A34B))
         }
-        if (statusText != null) {
-            Text(statusText!!, color = ImiMuted, fontSize = 12.sp, maxLines = 2)
+        if (statusText != null || statusImageUri != null) {
+            if (statusText != null) Text(statusText!!, color = ImiMuted, fontSize = 12.sp, maxLines = 2)
+            if (statusImageBitmap != null) {
+                Image(
+                    bitmap = statusImageBitmap.asImageBitmap(),
+                    contentDescription = "صورة الحالة",
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).clip(RoundedCornerShape(16.dp))
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("تنتهي حالتك بعد 28 ساعة من نشرها على هذا الجهاز.", color = ImiMuted, fontSize = 10.sp, modifier = Modifier.weight(1f))
                 TextButton(onClick = {
                     prefs.edit().clear().apply()
                     statusText = null
+                    statusImageUri = null
                     expiresAt = 0L
                 }, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) {
                     Text("حذف الحالة", color = Color(0xFFFF6685), fontSize = 11.sp)
@@ -276,15 +318,19 @@ private fun StoriesSection() {
             confirmButton = {
                 TextButton(onClick = {
                     val value = draft.trim()
-                    if (value.isNotEmpty()) {
+                    if (value.isNotEmpty() || draftImageUri != null) {
                         val expiry = System.currentTimeMillis() + 28L * 60L * 60L * 1000L
-                        prefs.edit().putString("text", value).putLong("expires_at", expiry).apply()
-                        statusText = value
+                        prefs.edit().putString("text", value.takeIf { it.isNotEmpty() })
+                            .putString("image_uri", draftImageUri)
+                            .putLong("expires_at", expiry).apply()
+                        statusText = value.takeIf { it.isNotEmpty() }
+                        statusImageUri = draftImageUri
                         expiresAt = expiry
                         draft = ""
+                        draftImageUri = null
                         showComposer = false
                     }
-                }, enabled = draft.isNotBlank()) { Text("نشر") }
+                }, enabled = draft.isNotBlank() || draftImageUri != null) { Text("نشر") }
             },
             dismissButton = {
                 TextButton(onClick = { showComposer = false }) { Text("إلغاء") }

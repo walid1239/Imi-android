@@ -44,10 +44,11 @@ service firebase.storage {
     // Public-to-authenticated-user Reels; only the owner can upload/delete.
     match /reels/{uid}/{fileName} {
       allow read: if signedIn();
-      allow write: if signedIn()
+      allow create, update: if signedIn()
         && request.auth.uid == uid
         && request.resource.size < 100 * 1024 * 1024
         && request.resource.contentType.matches('video/(mp4|webm)');
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
 
     match /conversations/{conversationId}/{fileName=**} {

@@ -921,7 +921,7 @@ private fun ReelsScreen() {
                     error = null
                     runCatching {
                         val mime = context.contentResolver.getType(uri)
-                            ?: error("تعذر تحديد نوع الفيديو")
+                            ?: throw IllegalArgumentException("تعذر تحديد نوع الفيديو")
                         require(mime in listOf("video/mp4", "video/webm")) { "الصيغة المدعومة حالياً MP4 أو WebM فقط." }
                         val id = db.collection("reels").document().id
                         val extension = if (mime == "video/webm") "webm" else "mp4"

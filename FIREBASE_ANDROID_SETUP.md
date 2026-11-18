@@ -20,7 +20,7 @@
 base64 -w 0 google-services.json
 ```
 
-أدخل الناتج في GitHub > Settings > Secrets and variables > Actions. لا ترسل الملف أو محتواه أو مفاتيح خاصة في المحادثة. يفحص CI معرّف المشروع واسم الحزمة قبل بناء APK. إذا لم يوجد السر، ينجح بناء الاختبارات لكنه ينتج APK بلا ربط Firebase.
+أدخل الناتج في GitHub > Settings > Secrets and variables > Actions. أضف أيضًا secret باسم `FIREBASE_PROJECT_ID` بالقيمة نفسها التي يعرضها Firebase Console لمشروعك. يتحقق CI من تطابق معرّف المشروع داخل الملف مع هذا السر، ومن اسم الحزمة `com.walid.chat`؛ إذا غاب أحد السرّين مع وجود ملف الإعداد فسيفشل التحقق بدل إنشاء APK مربوط بمشروع غير مقصود. إذا لم يوجد `GOOGLE_SERVICES_JSON_BASE64` أصلًا، ينجح بناء الاختبارات لكن ينتج APK بلا ربط Firebase. لا ترسل الملف أو محتواه أو مفاتيح خاصة في المحادثة.
 
 ## 3. إعداد النشر السحابي عبر GitHub OIDC
 

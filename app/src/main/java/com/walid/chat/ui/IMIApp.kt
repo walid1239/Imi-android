@@ -402,6 +402,7 @@ private val demoChats = listOf(
 private fun ChatMessageBubble(message: String) {
     val context = LocalContext.current
     val imageUri = message.takeIf { it.startsWith("@image:") }?.removePrefix("@image:")
+    val audioPath = message.takeIf { it.startsWith("@audio:") }?.removePrefix("@audio:")
     val bitmap = remember(imageUri) {
         imageUri?.let { savedUri ->
             runCatching {
@@ -413,18 +414,51 @@ private fun ChatMessageBubble(message: String) {
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
         Surface(color = ImiBlue.copy(alpha = .2f), shape = RoundedCornerShape(16.dp)) {
-            if (imageUri != null && bitmap != null) {
-                Image(
+            when {
+                imageUri != null && bitmap != null -> Image(
                     bitmap = bitmap.asImageBitmap(),
                     contentDescription = "صورة مرفقة برسالة",
                     modifier = Modifier.widthIn(max = 240.dp).heightIn(max = 260.dp).clip(RoundedCornerShape(12.dp))
                 )
-            } else if (imageUri != null) {
-                Text("تعذّر فتح الصورة المرفقة", color = ImiMuted, modifier = Modifier.padding(12.dp))
-            } else {
-                Text(message, color = ImiText, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+                imageUri != null -> Text("تعذّر فتح الصورة المرفقة", color = ImiMuted, modifier = Modifier.padding(12.dp))
+                audioPath != null -> AudioMessagePlayer(audioPath)
+                else -> Text(message, color = ImiText, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun AudioMessagePlayer(path: String) {
+    var playing by remember(path) { mutableStateOf(false) }
+    val context = LocalContext.current
+    val player = remember(path) { android.media.MediaPlayer() }
+    DisposableEffect(player) {
+        player.setOnCompletionListener { playing = false }
+        onDispose { runCatching { player.release() } }
+    }
+    Row(
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        IconButton(onClick = {
+            if (playing) {
+                runCatching { player.pause() }
+                playing = false
+            } else {
+                runCatching {
+                    player.reset()
+                    player.setDataSource(path)
+                    player.prepare()
+                    player.start()
+                    playing = true
+                }.onFailure { playing = false }
+            }
+        }) {
+            Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "إيقاف مؤقت" else "تشغيل الرسالة الصوتية", tint = ImiBlue)
+        }
+        Text(if (playing) "تشغيل الرسالة الصوتية…" else "رسالة صوتية", color = ImiText, fontSize = 13.sp)
     }
 }
 
@@ -436,7 +470,36 @@ private fun ChatsScreen() {
     var showNewChat by remember { mutableStateOf(false) }
     var showDeleteChat by remember { mutableStateOf(false) }
     var newChatName by remember { mutableStateOf("") }
+    var isRecording by remember { mutableStateOf(false) }
+    var recorder by remember { mutableStateOf<android.media.MediaRecorder?>(null) }
+    var recordingPath by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    val audioPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            runCatching {
+                val folder = java.io.File(context.filesDir, "voice_messages").apply { mkdirs() }
+                val file = java.io.File(folder, "voice_${System.currentTimeMillis()}.m4a")
+                val activeRecorder = android.media.MediaRecorder()
+                activeRecorder.setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
+                activeRecorder.setOutputFormat(android.media.MediaRecorder.OutputFormat.MPEG_4)
+                activeRecorder.setAudioEncoder(android.media.MediaRecorder.AudioEncoder.AAC)
+                activeRecorder.setAudioEncodingBitRate(96000)
+                activeRecorder.setAudioSamplingRate(44100)
+                activeRecorder.setOutputFile(file.absolutePath)
+                activeRecorder.prepare()
+                activeRecorder.start()
+                recorder = activeRecorder
+                recordingPath = file.absolutePath
+                isRecording = true
+            }.onFailure {
+                runCatching { recorder?.release() }
+                recorder = null
+                isRecording = false
+            }
+        }
+    }
     val chatPrefs = remember(context) {
         context.getSharedPreferences("imi_local_chat", android.content.Context.MODE_PRIVATE)
     }
@@ -488,7 +551,7 @@ private fun ChatsScreen() {
         }
     }
     val localChats = localChatNames.map { name ->
-        DemoChat(name, sentMessages[name]?.lastOrNull()?.let { if (it.startsWith("@image:")) "صورة" else it } ?: "ابدأ محادثة جديدة", "الآن", 0, ImiBlue)
+        DemoChat(name, sentMessages[name]?.lastOrNull()?.let { if (it.startsWith("@image:")) "صورة" else if (it.startsWith("@audio:")) "رسالة صوتية" else it } ?: "ابدأ محادثة جديدة", "الآن", 0, ImiBlue)
     }
     val filtered = (demoChats + localChats).distinctBy { it.name }.filter { it.name.contains(query, true) }
     if (opened != null) {
@@ -511,10 +574,43 @@ private fun ChatsScreen() {
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = {
+                        if (isRecording) {
+                            val activeRecorder = recorder
+                            val savedPath = recordingPath
+                            runCatching { activeRecorder?.stop() }
+                            runCatching { activeRecorder?.release() }
+                            recorder = null
+                            recordingPath = null
+                            isRecording = false
+                            val chatName = opened
+                            if (savedPath != null && chatName != null && java.io.File(savedPath).length() > 0L) {
+                                val updated = sentMessages[chatName].orEmpty() + "@audio:$savedPath"
+                                sentMessages[chatName] = updated
+                                val root = JSONObject()
+                                sentMessages.forEach { (name, messages) -> root.put(name, JSONArray(messages)) }
+                                chatPrefs.edit().putString("messages", root.toString()).apply()
+                            }
+                        } else if (androidx.core.content.ContextCompat.checkSelfPermission(
+                                context, android.Manifest.permission.RECORD_AUDIO
+                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                            audioPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+                        } else {
+                            audioPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+                        }
+                    }
+                ) {
+                    Icon(
+                        if (isRecording) Icons.Filled.Stop else Icons.Filled.Mic,
+                        if (isRecording) "إيقاف التسجيل وإرسال" else "تسجيل رسالة صوتية",
+                        tint = if (isRecording) Color(0xFFFF6685) else ImiMuted
+                    )
+                }
                 IconButton(onClick = { imageMessagePicker.launch(arrayOf("image/*")) }) {
                     Icon(Icons.Filled.Image, "إرفاق صورة", tint = ImiMuted)
                 }
-                OutlinedTextField(value = draft, onValueChange = { draft = it }, modifier = Modifier.weight(1f), placeholder = { Text("اكتب رسالة…") }, singleLine = true)
+                OutlinedTextField(value = draft, onValueChange = { draft = it }, modifier = Modifier.weight(1f), placeholder = { Text(if (isRecording) "جارٍ تسجيل الصوت…" else "اكتب رسالة…") }, singleLine = true, enabled = !isRecording)
                 IconButton(
                     onClick = {
                         val text = draft.trim()

@@ -4,6 +4,14 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Apply Firebase resource processing only when the app-specific config is present.
+// This keeps public CI builds possible without committing google-services.json.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
+//}
+
 android {
     namespace = "com.walid.chat"
     compileSdk = 35

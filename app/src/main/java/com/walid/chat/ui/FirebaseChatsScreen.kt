@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,6 +26,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.walid.chat.data.model.Chat
 import com.walid.chat.data.model.ChatMessage
+import com.walid.chat.data.model.PublicProfile
 import com.walid.chat.data.repository.FirebaseChatRepository
 import com.walid.chat.data.repository.FirebaseChatRepositoryFactory
 import kotlinx.coroutines.launch
@@ -47,6 +49,12 @@ internal fun FirebaseChatsScreen() {
     var loading by remember { mutableStateOf(true) }
     var sending by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
+    var showSearch by remember { mutableStateOf(false) }
+    var searchText by remember { mutableStateOf("") }
+    var searchResults by remember { mutableStateOf<List<PublicProfile>>(emptyList()) }
+    var searching by remember { mutableStateOf(false) }
+    var creatingChatUid by remember { mutableStateOf<String?>(null) }
+    var searchError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         try {
@@ -90,6 +98,9 @@ internal fun FirebaseChatsScreen() {
                 Column(Modifier.weight(1f)) {
                     Text("المحادثات", color = CloudText, fontSize = 23.sp, fontWeight = FontWeight.Bold)
                     Text("محادثاتك المتزامنة عبر السحابة", color = CloudMuted, fontSize = 12.sp)
+                }
+                IconButton(onClick = { showSearch = true; searchText = ""; searchResults = emptyList(); searchError = null }) {
+                    Icon(Icons.Filled.PersonAdd, "محادثة جديدة", tint = CloudBlue)
                 }
                 IconButton(onClick = {
                     val repo = repository
@@ -198,6 +209,115 @@ internal fun FirebaseChatsScreen() {
                     }
                 ) { Icon(Icons.Filled.Send, "إرسال", tint = CloudBlue) }
             }
+        }
+        if (showSearch) {
+            AlertDialog(
+                onDismissRequest = { if (creatingChatUid == null) showSearch = false },
+                containerColor = CloudSurface,
+                title = { Text("بدء محادثة جديدة", color = CloudText, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(
+                            value = searchText,
+                            onValueChange = { searchText = it; searchError = null },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text("اسم المستخدم") },
+                            placeholder = { Text("اكتب حرفين على الأقل") },
+                            enabled = !searching && creatingChatUid == null
+                        )
+                        searchError?.let { Text(it, color = Color(0xFFFFA0A0), fontSize = 12.sp) }
+                        if (searching) LinearProgressIndicator(Modifier.fillMaxWidth(), color = CloudBlue)
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            items(searchResults, key = { it.uid }) { profile ->
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable(enabled = creatingChatUid == null) {
+                                            val repo = repository
+                                            if (repo != null) {
+                                                creatingChatUid = profile.uid
+                                                scope.launch {
+                                                    repo.createDirectConversation(profile.uid).fold(
+                                                        onSuccess = { chatId ->
+                                                            val chat = Chat(
+                                                                id = chatId,
+                                                                title = profile.displayName,
+                                                                lastMessage = "",
+                                                                timestamp = "",
+                                                                unreadCount = 0
+                                                            )
+                                                            chats = listOf(chat) + chats.filterNot { it.id == chatId }
+                                                            selectedChat = chat
+                                                            showSearch = false
+                                                            errorText = null
+                                                        },
+                                                        onFailure = { searchError = it.localizedMessage ?: "تعذر إنشاء المحادثة" }
+                                                    )
+                                                    creatingChatUid = null
+                                                }
+                                            }
+                                        }
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        Modifier.size(36.dp).clip(CircleShape).background(CloudBlue.copy(alpha = .2f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(profile.displayName.take(1), color = CloudText, fontWeight = FontWeight.Bold)
+                                    }
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(profile.displayName, color = CloudText, fontWeight = FontWeight.SemiBold)
+                                        profile.city?.takeIf { it.isNotBlank() }?.let {
+                                            Text(it, color = CloudMuted, fontSize = 11.sp)
+                                        }
+                                    }
+                                    if (creatingChatUid == profile.uid) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(18.dp),
+                                            color = CloudBlue,
+                                            strokeWidth = 2.dp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (!searching && searchText.trim().length >= 2 && searchResults.isEmpty() && searchError == null) {
+                            Text("لا توجد نتائج مطابقة.", color = CloudMuted, fontSize = 12.sp)
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = searchText.trim().length >= 2 && !searching && creatingChatUid == null,
+                        onClick = {
+                            val repo = repository
+                            if (repo != null) scope.launch {
+                                searching = true
+                                searchError = null
+                                repo.searchPublicProfiles(searchText).fold(
+                                    onSuccess = { searchResults = it },
+                                    onFailure = { searchError = it.localizedMessage ?: "تعذر البحث عن المستخدمين" }
+                                )
+                                searching = false
+                            } else {
+                                searchError = "الاتصال السحابي غير متاح"
+                            }
+                        }
+                    ) { Text("بحث", color = CloudBlue) }
+                },
+                dismissButton = {
+                    TextButton(
+                        enabled = creatingChatUid == null,
+                        onClick = { showSearch = false }
+                    ) { Text("إغلاق", color = CloudMuted) }
+                }
+            )
         }
     }
 }

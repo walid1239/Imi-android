@@ -8,6 +8,7 @@ This repository is a native Android app. These files define a **security baselin
 - `publicProfiles/{uid}`: minimal public profile projection; readable only by authenticated users.
 - `users/{uid}/friends/{friendUid}`: accepted friendship records. Client writes are deliberately denied; create them only through a trusted, authenticated server workflow after validating both users.
 - `users/{uid}/statuses/{statusId}`: owner writes; owner and accepted friends read while unexpired. Maximum lifetime is 28 hours.
+  - **Important limitation:** the current Android client calculates `expiresAt` using the device clock, while rules only enforce a maximum of 28 hours. This does not guarantee an exact 28-hour lifetime. Production must create the status and its expiry in a trusted server workflow using server time (+28 hours), then test the boundary.
 - `conversations/{conversationId}`: member list and bounded last-message preview.
 - `conversations/{conversationId}/messages/{messageId}`: members read; a signed-in member may create a message only as themselves. Message edits and deletes are denied in this initial baseline.
 - Storage paths are scoped to account or conversation membership and enforce MIME and size limits. Status media paths include the status document ID so reads can check its 28-hour expiry.

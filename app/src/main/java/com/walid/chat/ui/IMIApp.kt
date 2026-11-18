@@ -1278,8 +1278,11 @@ private fun ProfileScreen() {
             profilePrefs.edit().putString("avatar_uri", avatarUri).apply()
         }
     }
-    val avatarBitmap = remember(avatarUri) {
-        avatarUri?.let { savedUri ->
+    var avatarBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+
+    // Decode a device-selected image immediately; if none is cached, restore the cloud avatar below.
+    LaunchedEffect(avatarUri) {
+        avatarBitmap = avatarUri?.let { savedUri ->
             runCatching {
                 context.contentResolver.openInputStream(android.net.Uri.parse(savedUri))?.use { stream ->
                     android.graphics.BitmapFactory.decodeStream(stream)
@@ -1288,8 +1291,8 @@ private fun ProfileScreen() {
         }
     }
 
-    // Restore the private cloud profile when this device opens an authenticated session.
-    // Local preferences remain a cache; Firestore is the source of truth when configured.
+    // Restore private profile fields and the Storage avatar for this authenticated session.
+    // The cloud photoPath is the durable reference; a local content URI is only a device cache.
     LaunchedEffect(context) {
         runCatching {
             if (com.google.firebase.FirebaseApp.getApps(context.applicationContext).isEmpty()) {
@@ -1318,6 +1321,13 @@ private fun ProfileScreen() {
                 cloudLanguages?.let {
                     languages = it
                     profilePrefs.edit().putString("languages", it).apply()
+                }
+                val cloudPhotoPath = snapshot.getString("photoPath")
+                if (avatarUri == null && !cloudPhotoPath.isNullOrBlank()) {
+                    val bytes = com.google.firebase.storage.FirebaseStorage.getInstance()
+                        .reference.child(cloudPhotoPath).getBytes(10L * 1024L * 1024L).await()
+                    avatarBitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        ?: error("تعذر قراءة صورة الحساب من السحابة")
                 }
             }
         }.onFailure {

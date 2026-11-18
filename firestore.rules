@@ -41,13 +41,13 @@ service cloud.firestore {
           && request.resource.data.expiresAt > request.time
           && request.resource.data.expiresAt <= request.time + duration.value(28, 'h')
           && (
-            (request.resource.data.text is string
-              && request.resource.data.text.size() <= 700
-              && !('mediaPath' in request.resource.data))
-            ||
-            (request.resource.data.mediaPath is string
-              && request.resource.data.mediaPath.matches('users/' + uid + '/statuses/.*')
-              && !('text' in request.resource.data))
+            (!('text' in request.resource.data)
+              || (request.resource.data.text is string
+                && request.resource.data.text.size() <= 700))
+            && (!('mediaPath' in request.resource.data)
+              || (request.resource.data.mediaPath is string
+                && request.resource.data.mediaPath.matches('users/' + uid + '/statuses/.*')))
+            && (('text' in request.resource.data) || ('mediaPath' in request.resource.data))
           );
         allow read: if isSelf(uid)
           || (areFriends(uid, request.auth.uid)

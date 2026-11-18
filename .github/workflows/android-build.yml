@@ -67,10 +67,11 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::GOOGLE_SERVICES_JSON_BASE64 is not configured. Build and tests may run, but no APK release artifact will be published."
+            echo "::warning::GOOGLE_SERVICES_JSON_BASE64 is not configured. The APK will be test-only and will not connect to the configured Firebase project."
           fi
 
       - name: Run unit tests and assemble debug APK
+        id: android_build
         run: gradle --no-daemon testDebugUnitTest assembleDebug assembleDebugAndroidTest
 
       - name: Run IMI on Android emulator
@@ -82,10 +83,11 @@ jobs:
           profile: pixel_2
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
-          wait-for-boot-timeout: 900
+          emulator-boot-timeout: 900
           script: gradle --no-daemon connectedDebugAndroidTest
 
       - name: Upload debug APK for device verification
+        if: always() && steps.android_build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.firebase_config.outputs.configured == 'true' && 'IMI-debug-apk-firebase-configured' || 'IMI-debug-apk-no-firebase-config' }}

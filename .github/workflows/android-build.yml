@@ -45,6 +45,18 @@ jobs:
       - name: Verify Gradle configuration
         run: gradle --version
 
+      - name: Configure Firebase Android app when secret is available
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
+            mkdir -p app
+            printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > app/google-services.json
+            test -s app/google-services.json
+          else
+            echo "Firebase config secret is not set; Android build will run without live Firebase initialization."
+          fi
+
       - name: Run unit tests and assemble debug APK
         run: gradle --no-daemon testDebugUnitTest assembleDebug
 

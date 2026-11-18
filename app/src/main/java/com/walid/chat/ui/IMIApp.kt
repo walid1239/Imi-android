@@ -552,6 +552,7 @@ private fun ProfileScreen() {
         mutableStateOf(profilePrefs.getString("city", "المغرب") ?: "المغرب")
     }
     var editing by remember { mutableStateOf(false) }
+    var profileSection by remember { mutableStateOf<String?>(null) }
     var avatarUri by remember(profilePrefs) {
         mutableStateOf(profilePrefs.getString("avatar_uri", null))
     }
@@ -593,10 +594,18 @@ private fun ProfileScreen() {
                         Icon(Icons.Filled.Person, null, tint = ImiBlue, modifier = Modifier.size(48.dp))
                     }
                 }
-                OutlinedButton(onClick = { imagePicker.launch(arrayOf("image/*")) }) {
-                    Icon(Icons.Filled.CameraAlt, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(if (avatarBitmap == null) "اختيار صورة شخصية" else "تغيير الصورة")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(onClick = { imagePicker.launch(arrayOf("image/*")) }) {
+                        Icon(Icons.Filled.CameraAlt, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (avatarBitmap == null) "اختيار صورة شخصية" else "تغيير الصورة")
+                    }
+                    if (avatarUri != null) {
+                        TextButton(onClick = {
+                            avatarUri = null
+                            profilePrefs.edit().remove("avatar_uri").apply()
+                        }) { Text("إزالة", color = Color(0xFFFF6685)) }
+                    }
                 }
                 Text(displayName, color = ImiText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Text(city, color = ImiMuted, fontSize = 12.sp)
@@ -618,7 +627,7 @@ private fun ProfileScreen() {
             }
         }
         listOf("الأصدقاء", "الخصوصية والأمان", "الإعدادات").forEach { label ->
-            Surface(color = ImiSurface, shape = RoundedCornerShape(15.dp), modifier = Modifier.fillMaxWidth().clickable { }) {
+            Surface(color = ImiSurface, shape = RoundedCornerShape(15.dp), modifier = Modifier.fillMaxWidth().clickable { profileSection = label }) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(label, color = ImiText, modifier = Modifier.weight(1f))
                     Icon(Icons.Filled.ChevronLeft, null, tint = ImiMuted)
@@ -626,5 +635,25 @@ private fun ProfileScreen() {
             }
         }
         Text("الاسم والمدينة محفوظان محلياً على هذا الجهاز؛ لم يُفعّل تسجيل الحساب أو المزامنة عبر الإنترنت.", color = ImiMuted, fontSize = 11.sp)
+    }
+    when (profileSection) {
+        "الأصدقاء" -> AlertDialog(
+            onDismissRequest = { profileSection = null },
+            title = { Text("الأصدقاء") },
+            text = { Text("قائمة الأصدقاء والبحث عن مستخدمين تحتاج إلى ربط حسابات IMI وخدمة الخادم. لم تتم إضافة أشخاص وهميين.", color = ImiMuted) },
+            confirmButton = { TextButton(onClick = { profileSection = null }) { Text("حسناً") } }
+        )
+        "الخصوصية والأمان" -> AlertDialog(
+            onDismissRequest = { profileSection = null },
+            title = { Text("الخصوصية والأمان") },
+            text = { Text("إعدادات الخصوصية الفعلية ستُتاح بعد تفعيل الحساب والمزامنة. حالياً تُحفظ بيانات الملف محلياً على هذا الجهاز فقط.", color = ImiMuted) },
+            confirmButton = { TextButton(onClick = { profileSection = null }) { Text("حسناً") } }
+        )
+        "الإعدادات" -> AlertDialog(
+            onDismissRequest = { profileSection = null },
+            title = { Text("إعدادات IMI") },
+            text = { Text("إصدار الواجهة الأولية. لا يوجد تسجيل دخول أو مزامنة سحابية مفعّلة في هذه النسخة.", color = ImiMuted) },
+            confirmButton = { TextButton(onClick = { profileSection = null }) { Text("إغلاق") } }
+        )
     }
 }

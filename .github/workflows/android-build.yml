@@ -53,8 +53,13 @@ jobs:
             mkdir -p app
             printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > app/google-services.json
             test -s app/google-services.json
+            jq -e '
+              .project_info.project_id == "cosmic-altar-m6shk"
+              and any(.client[]; .client_info.android_client_info.package_name == "com.walid.chat")
+            ' app/google-services.json >/dev/null
+            echo "Firebase Android config validated for cosmic-altar-m6shk / com.walid.chat."
           else
-            echo "Firebase config secret is not set; Android build will run without live Firebase initialization."
+            echo "::warning::GOOGLE_SERVICES_JSON_BASE64 is not configured. This APK is a build-only artifact and will not connect to the live Firebase project."
           fi
 
       - name: Run unit tests and assemble debug APK

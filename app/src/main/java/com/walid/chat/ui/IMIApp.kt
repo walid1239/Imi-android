@@ -339,6 +339,7 @@ private fun ChatsScreen() {
     var opened by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
     var showNewChat by remember { mutableStateOf(false) }
+    var showDeleteChat by remember { mutableStateOf(false) }
     var newChatName by remember { mutableStateOf("") }
     val context = LocalContext.current
     val chatPrefs = remember(context) {
@@ -380,7 +381,8 @@ private fun ChatsScreen() {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconAction(Icons.Filled.ArrowForward, "رجوع") { opened = null }
                 Spacer(Modifier.width(12.dp))
-                Text(opened!!, color = ImiText, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                Text(opened!!, color = ImiText, fontWeight = FontWeight.Bold, fontSize = 19.sp, modifier = Modifier.weight(1f))
+                IconAction(Icons.Filled.DeleteOutline, "حذف المحادثة") { showDeleteChat = true }
             }
             Spacer(Modifier.height(20.dp))
             Text("رسائلك محفوظة على هذا الجهاز فقط، وليست مرسلة عبر الإنترنت.", color = ImiMuted, fontSize = 12.sp)
@@ -418,6 +420,35 @@ private fun ChatsScreen() {
                     enabled = draft.isNotBlank()
                 ) { Icon(Icons.Filled.Send, null, tint = ImiBlue) }
             }
+        }
+        if (showDeleteChat) {
+            AlertDialog(
+                onDismissRequest = { showDeleteChat = false },
+                title = { Text("حذف المحادثة من هذا الجهاز؟") },
+                text = { Text("سيتم حذف الرسائل المحفوظة محلياً لهذه المحادثة. لا يؤثر ذلك على أي حساب أو جهاز آخر.", color = ImiMuted) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val chatName = opened
+                        if (chatName != null) {
+                            sentMessages.remove(chatName)
+                            val root = JSONObject()
+                            sentMessages.forEach { (name, messages) -> root.put(name, JSONArray(messages)) }
+                            chatPrefs.edit().putString("messages", root.toString()).apply()
+                            if (chatName in localChatNames) {
+                                localChatNames = localChatNames.filterNot { it == chatName }
+                                val names = JSONArray()
+                                localChatNames.forEach { names.put(it) }
+                                chatPrefs.edit().putString("chat_names", names.toString()).apply()
+                            }
+                            opened = null
+                        }
+                        showDeleteChat = false
+                    }) { Text("حذف", color = Color(0xFFFF6685)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteChat = false }) { Text("إلغاء") }
+                }
+            )
         }
         return
     }

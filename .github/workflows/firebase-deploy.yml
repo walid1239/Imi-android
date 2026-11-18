@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: imi-firebase-production-deploy
@@ -38,10 +39,11 @@ jobs:
             exit 1
           fi
 
-      - name: Authenticate to Google Cloud
+      - name: Authenticate to Google Cloud using GitHub OIDC
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

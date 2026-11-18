@@ -1,5 +1,6 @@
 package com.walid.chat.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -463,12 +465,51 @@ private fun ProfileScreen() {
         mutableStateOf(profilePrefs.getString("city", "المغرب") ?: "المغرب")
     }
     var editing by remember { mutableStateOf(false) }
+    var avatarUri by remember(profilePrefs) {
+        mutableStateOf(profilePrefs.getString("avatar_uri", null))
+    }
+    val imagePicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            avatarUri = uri.toString()
+            profilePrefs.edit().putString("avatar_uri", avatarUri).apply()
+        }
+    }
+    val avatarBitmap = remember(avatarUri) {
+        avatarUri?.let { savedUri ->
+            runCatching {
+                context.contentResolver.openInputStream(android.net.Uri.parse(savedUri))?.use { stream ->
+                    android.graphics.BitmapFactory.decodeStream(stream)
+                }
+            }.getOrNull()
+        }
+    }
     Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         PageHeader("حسابي", "ملفك الشخصي") { IconAction(Icons.Filled.Settings, "الإعدادات") }
         Surface(color = ImiSurface, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Box(Modifier.size(86.dp).clip(CircleShape).background(ImiBlue.copy(alpha = .2f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.Person, null, tint = ImiBlue, modifier = Modifier.size(48.dp))
+                    if (avatarBitmap != null) {
+                        Image(
+                            bitmap = avatarBitmap.asImageBitmap(),
+                            contentDescription = "الصورة الشخصية",
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Icon(Icons.Filled.Person, null, tint = ImiBlue, modifier = Modifier.size(48.dp))
+                    }
+                }
+                OutlinedButton(onClick = { imagePicker.launch(arrayOf("image/*")) }) {
+                    Icon(Icons.Filled.CameraAlt, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (avatarBitmap == null) "اختيار صورة شخصية" else "تغيير الصورة")
                 }
                 Text(displayName, color = ImiText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Text(city, color = ImiMuted, fontSize = 12.sp)

@@ -35,8 +35,8 @@ service firebase.storage {
       allow read: if signedIn()
         && statusIsActive()
         && (request.auth.uid == uid || acceptedFriend(uid));
-      // Require an active server-timestamped status document before accepting media.
-      // The client creates the status document first, then uploads the referenced file.
+      // Require an active status document created by the trusted callable before accepting media.
+      // The client uploads only after the callable returns the server-created status ID.
       allow create, update: if signedIn()
         && request.auth.uid == uid
         && statusIsActive()

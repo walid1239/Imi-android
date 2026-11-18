@@ -90,7 +90,7 @@ test('users can upload only their own avatar files', async () => {
   const aliceAvatar = ref(aliceStorage, 'users/alice/avatars/avatar.png');
   const foreignAvatar = ref(bobStorage, 'users/alice/avatars/attacker.png');
   await assertSucceeds(uploadBytes(aliceAvatar, new Blob(['png-data'], { type: 'image/png' })));
-  await assertFails(uploadBytes(чужойAvatar, new Blob(['png-data'], { type: 'image/png' })));
+  await assertFails(uploadBytes(foreignAvatar, new Blob(['png-data'], { type: 'image/png' })));
 });
 
 test('only conversation members can upload conversation media', async () => {

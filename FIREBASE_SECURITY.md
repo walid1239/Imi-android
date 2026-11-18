@@ -10,7 +10,7 @@ This repository is a native Android app. These files define a **security baselin
 - `users/{uid}/statuses/{statusId}`: owner writes; owner and accepted friends read while unexpired. Maximum lifetime is 28 hours.
 - `conversations/{conversationId}`: member list and bounded last-message preview.
 - `conversations/{conversationId}/messages/{messageId}`: members read; a signed-in member may create a message only as themselves. Message edits and deletes are denied in this initial baseline.
-- Storage paths are scoped to account or conversation membership and enforce MIME and size limits.
+- Storage paths are scoped to account or conversation membership and enforce MIME and size limits. Status media paths include the status document ID so reads can check its 28-hour expiry.
 
 ## Authentication decision
 
@@ -32,6 +32,6 @@ Never trust a UID supplied by the client as proof of identity. Every protected w
 - The rules intentionally deny friend-list writes. A trusted backend endpoint or Cloud Function must validate friend requests and mutual acceptance before creating accepted friendship records.
 - The initial rules do not implement delivery/read receipts, group membership changes, blocking, reporting, moderation, or end-to-end encryption.
 - Firestore rules cannot filter arbitrary query results. Client queries must include constraints compatible with the rules, especially participant membership and status expiry.
-- Storage status reads currently check for a friend relationship document; the Firestore status rule additionally requires its status to be accepted. Align both checks to the exact friendship schema before production deployment.
+- Friendship records must use the exact `status: 'accepted'` schema in both Firestore and Storage. Status media must use `users/{uid}/statuses/{statusId}/{fileName}` so Storage can check the matching Firestore expiry timestamp.
 - Do not add broad `allow read, write: if true` rules, service-account keys, private signing keys, or admin credentials to the repository.
 - Firebase Admin credentials belong only in a managed server environment, never in the Android APK.

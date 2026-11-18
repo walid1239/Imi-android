@@ -545,28 +545,89 @@ private fun ReelsScreen() {
 
 @Composable
 private fun AcademyScreen() {
+    val context = LocalContext.current
+    val progressPrefs = remember(context) {
+        context.getSharedPreferences("imi_academy_progress", android.content.Context.MODE_PRIVATE)
+    }
+    val courses = listOf(
+        Triple("التعلّم الذاتي", "خطوات عملية لبناء عادة تعلّم مستمرة", "حدّد هدفاً صغيراً وواضحاً، وقسّمه إلى جلسات قصيرة. خصّص وقتاً ثابتاً للتعلّم، واكتب في نهاية كل جلسة ما فهمته وما يحتاج إلى مراجعة. الاستمرارية أهم من طول الجلسة."),
+        Triple("اللغة الإنجليزية", "ابدأ بالمفردات والجمل اليومية", "تعلّم خمس كلمات جديدة يومياً ضمن جمل مفيدة. استمع إلى نطقها، ثم كوّن جملتين من عندك. راجع الكلمات بعد يوم ثم بعد أسبوع لتثبيتها في الذاكرة."),
+        Triple("أساسيات البرمجة", "افهم المتغيرات والشروط والحلقات", "المتغير يخزّن قيمة يمكن استعمالها لاحقاً. الشرط يختار مسار التنفيذ حسب نتيجة اختبار، والحلقة تكرّر مجموعة تعليمات. ابدأ بأمثلة صغيرة وجرّب تغيير القيم ولاحظ النتيجة.")
+    )
+    var completed by remember(progressPrefs) {
+        mutableStateOf(
+            runCatching {
+                val array = JSONArray(progressPrefs.getString("completed", "[]"))
+                List(array.length()) { array.getString(it) }.toSet()
+            }.getOrDefault(emptySet())
+        )
+    }
+    var selectedCourse by remember { mutableStateOf<Int?>(null) }
     Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         PageHeader("IMI Academy", "تعلّم مهارات جديدة")
         Surface(color = ImiSurface, shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Filled.School, null, tint = ImiPurple, modifier = Modifier.size(34.dp))
                 Text("بوابتك إلى المعرفة", color = ImiText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("ستجد هنا الدروس والمسارات التعليمية عند إضافة المحتوى وربط الخدمة.", color = ImiMuted, fontSize = 13.sp, lineHeight = 20.sp)
+                Text("دروس قصيرة يمكنك قراءتها دون اتصال. تقدّمك يُحفظ على هذا الجهاز.", color = ImiMuted, fontSize = 13.sp, lineHeight = 20.sp)
+                Text("${completed.size} من ${courses.size} دروس مكتملة", color = ImiBlue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                LinearProgressIndicator(
+                    progress = { completed.size.toFloat() / courses.size.toFloat() },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = ImiBlue,
+                    trackColor = ImiSurface2
+                )
             }
         }
-        listOf("التعلّم الذاتي", "اللغات", "التقنية والبرمجة").forEachIndexed { index, title ->
-            Surface(color = ImiSurface, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+        courses.forEachIndexed { index, course ->
+            val isDone = index.toString() in completed
+            Surface(
+                color = ImiSurface,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth().clickable { selectedCourse = index }
+            ) {
                 Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(ImiPurple.copy(alpha = .16f)), contentAlignment = Alignment.Center) {
-                        Text("${index + 1}", color = Color(0xFFB69BFF), fontWeight = FontWeight.Bold)
+                    Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(ImiPurple.copy(alpha = .16f)), contentAlignment = Alignment.Center) {
+                        if (isDone) Icon(Icons.Filled.CheckCircle, null, tint = ImiGreen)
+                        else Text("${index + 1}", color = Color(0xFFB69BFF), fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.width(12.dp))
-                    Text(title, color = ImiText, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(course.first, color = ImiText, fontWeight = FontWeight.SemiBold)
+                        Text(course.second, color = ImiMuted, fontSize = 11.sp)
+                    }
                     Icon(Icons.Filled.ChevronLeft, null, tint = ImiMuted)
                 }
             }
         }
-        Text("الأقسام المعروضة حالياً هي هيكل واجهة، وليست دروساً منشورة.", color = ImiMuted, fontSize = 11.sp)
+        Text("هذه دروس تأسيسية محلية وليست محتوى منشوراً من خادم أو مدرسين.", color = ImiMuted, fontSize = 11.sp)
+    }
+    selectedCourse?.let { index ->
+        val course = courses[index]
+        val isDone = index.toString() in completed
+        AlertDialog(
+            onDismissRequest = { selectedCourse = null },
+            title = { Text(course.first) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(course.second, color = ImiBlue, fontWeight = FontWeight.SemiBold)
+                    Text(course.third, color = ImiMuted, lineHeight = 21.sp)
+                    if (isDone) Text("تم إكمال هذا الدرس", color = ImiGreen, fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    completed = if (isDone) completed - index.toString() else completed + index.toString()
+                    val saved = JSONArray()
+                    completed.forEach { saved.put(it) }
+                    progressPrefs.edit().putString("completed", saved.toString()).apply()
+                    selectedCourse = null
+                }) { Text(if (isDone) "إلغاء الإكمال" else "تحديد كمكتمل") }
+            },
+            dismissButton = {
+                TextButton(onClick = { selectedCourse = null }) { Text("إغلاق") }
+            }
+        )
     }
 }
 

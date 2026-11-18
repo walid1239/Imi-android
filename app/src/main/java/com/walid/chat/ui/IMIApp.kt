@@ -314,6 +314,21 @@ private fun StoriesSection() {
                     label = { Text("ماذا تريد أن تشارك؟") },
                     maxLines = 4
                 )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { statusImagePicker.launch(arrayOf("image/*")) }) {
+                        Icon(Icons.Filled.Image, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (draftImageUri == null) "إرفاق صورة" else "تغيير الصورة")
+                    }
+                    if (draftImageBitmap != null) {
+                        Image(
+                            bitmap = draftImageBitmap.asImageBitmap(),
+                            contentDescription = "معاينة صورة الحالة",
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 150.dp).clip(RoundedCornerShape(12.dp))
+                        )
+                        TextButton(onClick = { draftImageUri = null }) { Text("إزالة الصورة") }
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = {

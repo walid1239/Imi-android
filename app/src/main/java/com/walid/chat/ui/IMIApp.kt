@@ -399,6 +399,36 @@ private val demoChats = listOf(
 )
 
 @Composable
+private fun ChatMessageBubble(message: String) {
+    val context = LocalContext.current
+    val imageUri = message.takeIf { it.startsWith("@image:") }?.removePrefix("@image:")
+    val bitmap = remember(imageUri) {
+        imageUri?.let { savedUri ->
+            runCatching {
+                context.contentResolver.openInputStream(android.net.Uri.parse(savedUri))?.use { stream ->
+                    android.graphics.BitmapFactory.decodeStream(stream)
+                }
+            }.getOrNull()
+        }
+    }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+        Surface(color = ImiBlue.copy(alpha = .2f), shape = RoundedCornerShape(16.dp)) {
+            if (imageUri != null && bitmap != null) {
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = "صورة مرفقة برسالة",
+                    modifier = Modifier.widthIn(max = 240.dp).heightIn(max = 260.dp).clip(RoundedCornerShape(12.dp))
+                )
+            } else if (imageUri != null) {
+                Text("تعذّر فتح الصورة المرفقة", color = ImiMuted, modifier = Modifier.padding(12.dp))
+            } else {
+                Text(message, color = ImiText, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+            }
+        }
+    }
+}
+
+@Composable
 private fun ChatsScreen() {
     var query by remember { mutableStateOf("") }
     var opened by remember { mutableStateOf<String?>(null) }
@@ -437,8 +467,28 @@ private fun ChatsScreen() {
         }
         restored
     }
+    val imageMessagePicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            val chatName = opened
+            if (chatName != null) {
+                val updated = sentMessages[chatName].orEmpty() + "@image:${uri}"
+                sentMessages[chatName] = updated
+                val root = JSONObject()
+                sentMessages.forEach { (name, messages) -> root.put(name, JSONArray(messages)) }
+                chatPrefs.edit().putString("messages", root.toString()).apply()
+            }
+        }
+    }
     val localChats = localChatNames.map { name ->
-        DemoChat(name, sentMessages[name]?.lastOrNull() ?: "ابدأ محادثة جديدة", "الآن", 0, ImiBlue)
+        DemoChat(name, sentMessages[name]?.lastOrNull()?.let { if (it.startsWith("@image:")) "صورة" else it } ?: "ابدأ محادثة جديدة", "الآن", 0, ImiBlue)
     }
     val filtered = (demoChats + localChats).distinctBy { it.name }.filter { it.name.contains(query, true) }
     if (opened != null) {
@@ -457,14 +507,13 @@ private fun ChatsScreen() {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(sentMessages[opened].orEmpty()) { message ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-                        Surface(color = ImiBlue.copy(alpha = .2f), shape = RoundedCornerShape(16.dp)) {
-                            Text(message, color = ImiText, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
-                        }
-                    }
+                    ChatMessageBubble(message)
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { imageMessagePicker.launch(arrayOf("image/*")) }) {
+                    Icon(Icons.Filled.Image, "إرفاق صورة", tint = ImiMuted)
+                }
                 OutlinedTextField(value = draft, onValueChange = { draft = it }, modifier = Modifier.weight(1f), placeholder = { Text("اكتب رسالة…") }, singleLine = true)
                 IconButton(
                     onClick = {

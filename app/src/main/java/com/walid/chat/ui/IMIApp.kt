@@ -1287,6 +1287,43 @@ private fun ProfileScreen() {
             }.getOrNull()
         }
     }
+
+    // Restore the private cloud profile when this device opens an authenticated session.
+    // Local preferences remain a cache; Firestore is the source of truth when configured.
+    LaunchedEffect(context) {
+        runCatching {
+            if (com.google.firebase.FirebaseApp.getApps(context.applicationContext).isEmpty()) {
+                return@LaunchedEffect
+            }
+            val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+            val user = auth.currentUser ?: auth.signInAnonymously().await().user
+                ?: error("تعذر فتح جلسة الحساب")
+            val snapshot = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                .collection("users").document(user.uid).get().await()
+            if (snapshot.exists()) {
+                snapshot.getString("displayName")?.let {
+                    displayName = it
+                    profilePrefs.edit().putString("display_name", it).apply()
+                }
+                snapshot.getString("city")?.let {
+                    city = it
+                    profilePrefs.edit().putString("city", it).apply()
+                }
+                snapshot.getString("bio")?.let {
+                    bio = it
+                    profilePrefs.edit().putString("bio", it).apply()
+                }
+                val cloudLanguages = (snapshot.get("languages") as? List<*>)
+                    ?.filterIsInstance<String>()?.joinToString(", ")
+                cloudLanguages?.let {
+                    languages = it
+                    profilePrefs.edit().putString("languages", it).apply()
+                }
+            }
+        }.onFailure {
+            cloudProfileMessage = it.localizedMessage ?: "تعذر تحميل الملف الخاص من السحابة"
+        }
+    }
     Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         PageHeader("حسابي", "ملفك الشخصي") {
             IconAction(Icons.Filled.Settings, "الإعدادات") { profileSection = "الإعدادات" }

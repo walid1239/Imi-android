@@ -243,6 +243,7 @@ private fun ChatsScreen() {
     var query by remember { mutableStateOf("") }
     var opened by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
+    val sentMessages = remember { mutableStateMapOf<String, List<String>>() }
     val filtered = demoChats.filter { it.name.contains(query, true) }
     if (opened != null) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -253,10 +254,32 @@ private fun ChatsScreen() {
             }
             Spacer(Modifier.height(20.dp))
             Text("هذه محادثة تجريبية على الجهاز فقط.", color = ImiMuted, fontSize = 12.sp)
-            Spacer(Modifier.weight(1f))
+            LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = PaddingValues(vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(sentMessages[opened].orEmpty()) { message ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                        Surface(color = ImiBlue.copy(alpha = .2f), shape = RoundedCornerShape(16.dp)) {
+                            Text(message, color = ImiText, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+                        }
+                    }
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(value = draft, onValueChange = { draft = it }, modifier = Modifier.weight(1f), placeholder = { Text("اكتب رسالة…") }, singleLine = true)
-                IconButton(onClick = { draft = "" }, enabled = draft.isNotBlank()) { Icon(Icons.Filled.Send, null, tint = ImiBlue) }
+                IconButton(
+                    onClick = {
+                        val text = draft.trim()
+                        val chatName = opened
+                        if (text.isNotEmpty() && chatName != null) {
+                            sentMessages[chatName] = sentMessages[chatName].orEmpty() + text
+                            draft = ""
+                        }
+                    },
+                    enabled = draft.isNotBlank()
+                ) { Icon(Icons.Filled.Send, null, tint = ImiBlue) }
             }
         }
         return

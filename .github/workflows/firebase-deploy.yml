@@ -1,8 +1,6 @@
 name: IMI Firebase Cloud Deployment
 
 on:
-  push:
-    branches: [ main, master ]
   workflow_dispatch:
     inputs:
       project_id:

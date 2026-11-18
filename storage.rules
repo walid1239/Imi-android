@@ -1,0 +1,45 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isConversationMember(conversationId) {
+      return signedIn()
+        && firestore.exists(/databases/(default)/documents/conversations/$(conversationId))
+        && request.auth.uid in firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.participants;
+    }
+
+    match /users/{uid}/avatars/{fileName} {
+      allow read: if signedIn();
+      allow write: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+
+    match /users/{uid}/statuses/{fileName} {
+      allow read: if signedIn()
+        && (
+          request.auth.uid == uid
+          || firestore.exists(/databases/(default)/documents/users/$(uid)/friends/$(request.auth.uid))
+        );
+      allow write: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.size < 20 * 1024 * 1024
+        && request.resource.contentType.matches('(image/(jpeg|png|webp)|video/(mp4|webm))');
+    }
+
+    match /conversations/{conversationId}/{fileName=**} {
+      allow read: if isConversationMember(conversationId);
+      allow write: if isConversationMember(conversationId)
+        && request.resource.size < 50 * 1024 * 1024
+        && request.resource.contentType.matches('(image/(jpeg|png|webp)|audio/(mpeg|mp4|aac|ogg|wav|webm)|video/(mp4|webm))');
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -8,6 +8,6 @@ import com.walid.chat.data.model.Chat
  * and Firestore security rules have been reviewed.
  */
 interface ChatRepository {
-    suspend fun getHats(): Result<List<Chat>>
+    suspend fun getChats(): Result<List<Chat>>
     suspend fun sendMessage(chatId: String, text: String): Result<Unit>
 }

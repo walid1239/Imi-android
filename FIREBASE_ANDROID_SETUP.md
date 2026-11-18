@@ -4,6 +4,8 @@
 
 ## 1. إنشاء المشروع وربط تطبيق Android
 
+تم استلام إعداد Android من المستخدم ويشير إلى `project_id: imi-indroid` و`project_number: 135769436246` واسم الحزمة `com.walid.chat`. هذه القيم تحدد وجهة البناء المقصودة، لكنها لا تثبت وحدها ملكية المشروع أو تفعيل الخدمات السحابية.
+
 1. أنشئ أو اختر مشروع Firebase تملكه أنت من https://console.firebase.google.com/ .
 2. سجّل معرّف المشروع الحقيقي من Project settings. لا تفترض أن `cosmic-altar-m6shk` هو المشروع الصحيح؛ يجب أن تؤكد ذلك من حسابك.
 3. أضف تطبيق Android بمعرّف الحزمة الدقيق `com.walid.chat`.
@@ -14,13 +16,7 @@
 
 ## 2. إعداد بناء Android في GitHub
 
-لإنتاج APK مهيأ لمشروعك، أضف GitHub Actions secret باسم `GOOGLE_SERVICES_JSON_BASE64` وقيمته محتوى ملف `google-services.json` بعد ترميزه Base64. مثال Linux/macOS:
-
-```sh
-base64 -w 0 google-services.json
-```
-
-أدخل الناتج في GitHub > Settings > Secrets and variables > Actions. أضف أيضًا secret باسم `FIREBASE_PROJECT_ID` بالقيمة نفسها التي يعرضها Firebase Console لمشروعك. يتحقق CI من تطابق معرّف المشروع داخل الملف مع هذا السر، ومن اسم الحزمة `com.walid.chat`؛ إذا غاب أحد السرّين مع وجود ملف الإعداد فسيفشل التحقق بدل إنشاء APK مربوط بمشروع غير مقصود. إذا لم يوجد `GOOGLE_SERVICES_JSON_BASE64` أصلًا، ينجح بناء الاختبارات لكن ينتج APK بلا ربط Firebase. لا ترسل الملف أو محتواه أو مفاتيح خاصة في المحادثة.
+يدعم workflow الآن secret باسم `GOOGLE_SERVICES_JSON` لتضع فيه محتوى ملف `google-services.json` مباشرةً (متعدد الأسطر)، دون تحويل Base64. ويمكن بدلًا منه استخدام `GOOGLE_SERVICES_JSON_BASE64` لمن لديه قيمة Base64 جاهزة. لا تضف السرّين معًا. أضف أيضًا secret باسم `FIREBASE_PROJECT_ID` بالقيمة المطابقة تمامًا لـ `project_info.project_id` داخل الملف. يتحقق CI من تطابق معرّف المشروع واسم الحزمة `com.walid.chat` قبل البناء؛ إذا لم توجد إعدادات Firebase، يكون APK الناتج تجريبيًا وغير متصل بالمشروع. لا تضع الملف في المستودع ولا ترسله في محادثة عامة.
 
 ## 3. إعداد النشر السحابي عبر GitHub OIDC
 

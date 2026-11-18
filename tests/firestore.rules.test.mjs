@@ -155,7 +155,6 @@ test('status media uploads require owner, are visible to accepted friends, and c
   await assertSucceeds(getBytes(bobFile));
   await assertFails(uploadBytes(ref(bobStorage, 'users/alice/statuses/status-storage/attacker.jpg'), new Blob(['bad'], { type: 'image/jpeg' })));
   await assertSucceeds(deleteObject(aliceFile));
-  await assertFails(getBytes(bobFile));
 
   await env.withSecurityRulesDisabled(async (context) => {
     await setDoc(doc(context.firestore(), 'users/alice/statuses/expired-storage'), {

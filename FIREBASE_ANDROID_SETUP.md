@@ -28,8 +28,11 @@ base64 -w 0 google-services.json
 
 في GitHub أنشئ Environment باسم `firebase-production`، وأضف Environment secrets التالية:
 
+- `FIREBASE_PROJECT_ID`: معرّف المشروع الوحيد المسموح بالنشر إليه؛ يجب أن يطابق المشروع الذي تملكه وتتحقق منه.
 - `GCP_WORKLOAD_IDENTITY_PROVIDER`: المورد الكامل لمزوّد Workload Identity Provider.
 - `FIREBASE_DEPLOY_SERVICE_ACCOUNT`: البريد الإلكتروني لحساب الخدمة المخصص للنشر.
+
+يتحقق Workflow من تطابق معرّف الإدخال مع `FIREBASE_PROJECT_ID` قبل المصادقة والنشر، ويشغّل اختبارات Firestore وStorage في Emulator Suite ويبني Functions قبل النشر. يجب ضبط الأسرار الثلاثة داخل Environment `firebase-production`، مع حماية البيئة بمراجعة يدوية إن كانت متاحة.
 
 في Google Cloud، أنشئ Workload Identity Pool/Provider مع GitHub OIDC، واجعل شرط السماح مقيدًا بالمستودع `walid1239/Imi-android` وبالفرع `feature/server-authoritative-status` (أو الفرع الإنتاجي الذي تقرره لاحقًا). اربط الهوية بحساب خدمة محدود الصلاحيات، ولا تمنح صلاحيات Owner أو Editor العامة. يجب تفعيل واجهات Google Cloud المطلوبة وإعداد فوترة مناسبة لخدمات Cloud Functions إن طلبتها Google.
 

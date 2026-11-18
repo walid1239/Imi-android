@@ -205,7 +205,7 @@ test('status media uploads require owner, are visible to accepted friends, and c
     });
   });
   const expiredPath = 'users/alice/statuses/expired-storage/status.jpg';
-  await assertSucceeds(uploadBytes(ref(aliceStorage, expiredPath), new Blob(['expired'], { type: 'image/jpeg' })));
+  await assertFails(uploadBytes(ref(aliceStorage, expiredPath), new Blob(['expired'], { type: 'image/jpeg' })));
   await assertFails(getBytes(ref(bobStorage, expiredPath)));
 });
 

@@ -48,16 +48,21 @@ jobs:
         id: firebase_config
         env:
           GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: |
           if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
             mkdir -p app
             printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > app/google-services.json
             test -s app/google-services.json
-            jq -e '
-              .project_info.project_id == "cosmic-altar-m6shk"
+            if [ -z "$FIREBASE_PROJECT_ID" ]; then
+              echo "::error::Set the FIREBASE_PROJECT_ID secret to the project you own before using Firebase config."
+              exit 1
+            fi
+            jq -e --arg project_id "$FIREBASE_PROJECT_ID" '
+              .project_info.project_id == $project_id
               and any(.client[]; .client_info.android_client_info.package_name == "com.walid.chat")
             ' app/google-services.json >/dev/null
-            echo "Firebase Android config validated for cosmic-altar-m6shk / com.walid.chat."
+            echo "Firebase Android config validated for the protected project ID and package com.walid.chat."
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"

@@ -6,6 +6,7 @@ import {
   assertFails,
   assertSucceeds
 } from '@firebase/rules-unit-testing';
+import { ref, uploadBytes } from 'firebase/storage';
 import {
   doc,
   getDoc,

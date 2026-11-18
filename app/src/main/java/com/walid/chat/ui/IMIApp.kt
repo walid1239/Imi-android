@@ -185,15 +185,76 @@ private fun WelcomeCard() {
 
 @Composable
 private fun StoriesSection() {
+    val context = LocalContext.current
+    val prefs = remember(context) {
+        context.getSharedPreferences("imi_local_status", android.content.Context.MODE_PRIVATE)
+    }
+    var statusText by remember(prefs) { mutableStateOf(prefs.getString("text", null)) }
+    var expiresAt by remember(prefs) { mutableStateOf(prefs.getLong("expires_at", 0L)) }
+    var showComposer by remember { mutableStateOf(false) }
+    var draft by remember { mutableStateOf("") }
+
+    LaunchedEffect(expiresAt) {
+        if (statusText != null && expiresAt > 0L && System.currentTimeMillis() >= expiresAt) {
+            prefs.edit().clear().apply()
+            statusText = null
+            expiresAt = 0L
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionHeader("الحالات", "عرض الكل", {})
+        SectionHeader("الحالات", if (statusText == null) "أضف حالتك" else "حالتي", { showComposer = true })
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            StoryBubble("أضف حالة", true, ImiBlue)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.width(58.dp).clickable { showComposer = true }
+            ) {
+                Box(Modifier.size(54.dp).clip(CircleShape).background(ImiSurface2), contentAlignment = Alignment.Center) {
+                    if (statusText == null) Icon(Icons.Filled.Add, null, tint = ImiBlue, modifier = Modifier.size(25.dp))
+                    else Text("أنا", color = ImiText, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(5.dp))
+                Text(if (statusText == null) "أضف حالة" else "حالتي", color = ImiMuted, fontSize = 10.sp, maxLines = 1)
+            }
             StoryBubble("أحمد", false, ImiPurple)
             StoryBubble("سارة", false, Color(0xFFE27B9B))
             StoryBubble("يوسف", false, Color(0xFF3AAE9B))
             StoryBubble("مريم", false, Color(0xFFE1A34B))
         }
+        if (statusText != null) {
+            Text(statusText!!, color = ImiMuted, fontSize = 12.sp, maxLines = 2)
+            Text("تنتهي حالتك بعد 28 ساعة من نشرها على هذا الجهاز.", color = ImiMuted, fontSize = 10.sp)
+        }
+    }
+    if (showComposer) {
+        AlertDialog(
+            onDismissRequest = { showComposer = false },
+            title = { Text("إضافة حالة") },
+            text = {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    label = { Text("ماذا تريد أن تشارك؟") },
+                    maxLines = 4
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val value = draft.trim()
+                    if (value.isNotEmpty()) {
+                        val expiry = System.currentTimeMillis() + 28L * 60L * 60L * 1000L
+                        prefs.edit().putString("text", value).putLong("expires_at", expiry).apply()
+                        statusText = value
+                        expiresAt = expiry
+                        draft = ""
+                        showComposer = false
+                    }
+                }, enabled = draft.isNotBlank()) { Text("نشر") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showComposer = false }) { Text("إلغاء") }
+            }
+        )
     }
 }
 

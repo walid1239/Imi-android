@@ -19,7 +19,7 @@
 app/google-services.json
 ```
 
-لا ترفع الملف إلى GitHub العام. لا يحتوي ملف إعداد Android عادةً على مفتاح Admin، لكنه يعرّف التطبيق ومشروع Firebase؛ نفضّل حفظه كسرّ CI وتوليد الملف أثناء GitHub Actions.
+لا ترفع الملف إلى GitHub العام. لا يحتوي ملف إعداد Android عادةً على مفتاح Admin، لكنه يعرّف التطبيق ومشروع Firebase. أصبح Gradle يفعّل Google Services تلقائياً عند وجود الملف. ولتفعيل Firebase في بناء GitHub Actions، أضف GitHub Actions secret باسم `GOOGLE_SERVICES_JSON_BASE64` وقيمته محتوى الملف بعد ترميزه Base64 (على جهازك نفّذ `base64 -w 0 google-services.json`). يقرأ workflow السر وينشئ `app/google-services.json` مؤقتاً أثناء البناء. إذا لم تضف السر، يستمر البناء لكن التطبيق لن يتصل بمشروع Firebase.
 
 ## سلوك الجلسة
 

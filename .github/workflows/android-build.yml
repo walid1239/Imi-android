@@ -79,6 +79,15 @@ jobs:
         id: android_build
         run: gradle --no-daemon testDebugUnitTest assembleDebug assembleDebugAndroidTest
 
+      - name: Upload debug APK for device verification
+        if: always() && steps.android_build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.firebase_config.outputs.configured == 'true' && 'IMI-debug-apk-firebase-configured' || 'IMI-debug-apk-no-firebase-config' }}
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Run IMI on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -90,15 +99,6 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 900
           script: gradle --no-daemon connectedDebugAndroidTest
-
-      - name: Upload debug APK for device verification
-        if: always() && steps.android_build.outcome == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.firebase_config.outputs.configured == 'true' && 'IMI-debug-apk-firebase-configured' || 'IMI-debug-apk-no-firebase-config' }}
-          path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-          retention-days: 14
 
   security-rules:
     name: Firebase security rules tests

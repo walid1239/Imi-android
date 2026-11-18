@@ -280,6 +280,7 @@ private fun StoriesSection() {
     val scope = rememberCoroutineScope()
     var statusText by remember { mutableStateOf<String?>(null) }
     var statusMediaPath by remember { mutableStateOf<String?>(null) }
+    var statusDocumentId by remember { mutableStateOf<String?>(null) }
     var expiresAt by remember { mutableStateOf<Long?>(null) }
     var showComposer by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
@@ -321,6 +322,7 @@ private fun StoriesSection() {
                 .orderBy("expiresAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
                 .limit(1).get().await().documents.firstOrNull()
         }.onSuccess { doc ->
+            statusDocumentId = doc?.id
             statusText = doc?.getString("text")
             statusMediaPath = doc?.getString("mediaPath")
             expiresAt = doc?.getTimestamp("expiresAt")?.toDate()?.time
@@ -370,14 +372,14 @@ private fun StoriesSection() {
                         loading = true
                         scope.launch {
                             runCatching {
-                                val query = db.collection("users").document(uid).collection("statuses")
-                                    .whereGreaterThan("expiresAt", com.google.firebase.Timestamp.now())
-                                    .get().await()
-                                query.documents.forEach { it.reference.delete().await() }
+                                val documentId = statusDocumentId ?: error("لم يتم العثور على معرّف الحالة")
+                                db.collection("users").document(uid).collection("statuses")
+                                    .document(documentId).delete().await()
                                 if (path != null) runCatching { storage?.reference?.child(path)?.delete()?.await() }
                             }.onSuccess {
                                 statusText = null
                                 statusMediaPath = null
+                                statusDocumentId = null
                                 expiresAt = null
                                 message = "حُذفت حالتك من السحابة."
                             }.onFailure {
@@ -448,6 +450,7 @@ private fun StoriesSection() {
                                 db.collection("users").document(uid).collection("statuses").document(id).set(data).await()
                                 data
                             }.onSuccess { data ->
+                                statusDocumentId = id
                                 statusText = data["text"] as? String
                                 statusMediaPath = data["mediaPath"] as? String
                                 expiresAt = (data["expiresAt"] as? com.google.firebase.Timestamp)?.toDate()?.time

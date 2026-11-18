@@ -67,7 +67,7 @@ fun IMIApp(cloudSessionMessage: String? = null) {
                         onReels = { selected = ImiTab.Reels },
                         onAcademy = { selected = ImiTab.Academy }
                     )
-                    ImiTab.Chats -> ChatsScreen()
+                    ImiTab.Chats -> FirebaseChatsScreen()
                     ImiTab.Reels -> ReelsScreen()
                     ImiTab.Academy -> AcademyScreen()
                     ImiTab.Profile -> ProfileScreen()

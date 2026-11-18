@@ -12,6 +12,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.common.MediaItem
+import androidx.media3.ui.PlayerView
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -519,27 +523,146 @@ private fun ChatsScreen() {
 
 @Composable
 private fun ReelsScreen() {
-    var liked by remember { mutableStateOf(false) }
-    Box(Modifier.fillMaxSize().padding(18.dp)) {
-        Column(Modifier.fillMaxWidth()) {
-            PageHeader("Reels", "اكتشف مقاطع قصيرة")
-            Spacer(Modifier.height(16.dp))
-            Surface(color = ImiSurface, shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth().weight(1f)) {
-                Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF202C56), Color(0xFF17152E), ImiBackground))), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Filled.PlayCircle, null, tint = ImiBlue, modifier = Modifier.size(64.dp))
-                        Spacer(Modifier.height(12.dp))
-                        Text("مساحة مقاطع IMI", color = ImiText, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                        Text("سيظهر المحتوى هنا بعد ربط مصدر الفيديوهات", color = ImiMuted, fontSize = 12.sp)
+    val context = LocalContext.current
+    val prefs = remember(context) {
+        context.getSharedPreferences("imi_local_reels", android.content.Context.MODE_PRIVATE)
+    }
+    var videoUris by remember(prefs) {
+        mutableStateOf(
+            runCatching {
+                val array = JSONArray(prefs.getString("videos", "[]"))
+                List(array.length()) { array.getString(it) }
+            }.getOrDefault(emptyList())
+        )
+    }
+    var selectedUri by remember { mutableStateOf(videoUris.firstOrNull()) }
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            val value = uri.toString()
+            if (value !in videoUris) {
+                videoUris = listOf(value) + videoUris
+                val saved = JSONArray()
+                videoUris.forEach { saved.put(it) }
+                prefs.edit().putString("videos", saved.toString()).apply()
+            }
+            selectedUri = value
+        }
+    }
+    val player = remember(selectedUri) {
+        selectedUri?.let {
+            ExoPlayer.Builder(context).build().apply {
+                setMediaItem(MediaItem.fromUri(android.net.Uri.parse(it)))
+                prepare()
+                playWhenReady = false
+            }
+        }
+    }
+    DisposableEffect(player) {
+        onDispose { player?.release() }
+    }
+
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        PageHeader("Reels", "مقاطع الفيديو على هذا الجهاز") {
+            IconAction(Icons.Filled.Add, "إضافة فيديو") {
+                picker.launch(arrayOf("video/*"))
+            }
+        }
+        if (selectedUri != null && player != null) {
+            Surface(color = Color.Black, shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth().weight(1f)) {
+                AndroidView(
+                    factory = { viewContext ->
+                        PlayerView(viewContext).apply {
+                            this.player = player
+                            useController = true
+                        }
+                    },
+                    update = { it.player = player },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        } else {
+            Surface(
+                color = ImiSurface,
+                shape = RoundedCornerShape(22.dp),
+                modifier = Modifier.fillMaxWidth().weight(1f)
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(Icons.Filled.VideoLibrary, null, tint = ImiBlue, modifier = Modifier.size(58.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text("مكتبة مقاطع IMI", color = ImiText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "أضف فيديو من هاتفك لتشغيله داخل التطبيق. هذه المقاطع محلية ولا تُرفع إلى الإنترنت.",
+                        color = ImiMuted,
+                        fontSize = 12.sp,
+                        lineHeight = 19.sp
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Button(onClick = { picker.launch(arrayOf("video/*")) }) {
+                        Icon(Icons.Filled.Add, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("اختيار فيديو")
                     }
                 }
             }
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("محتوى تجريبي — لا توجد فيديوهات مرفوعة", color = ImiMuted, fontSize = 11.sp, modifier = Modifier.weight(1f))
-                IconButton(onClick = { liked = !liked }) { Icon(if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, null, tint = if (liked) Color(0xFFFF6685) else ImiMuted) }
+        }
+        if (videoUris.isNotEmpty()) {
+            Text("مقاطعك المحفوظة (${videoUris.size})", color = ImiText, fontWeight = FontWeight.SemiBold)
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 190.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(videoUris) { uri ->
+                    val isSelected = uri == selectedUri
+                    Surface(
+                        color = if (isSelected) ImiBlue.copy(alpha = .16f) else ImiSurface,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().clickable { selectedUri = uri }
+                    ) {
+                        Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.PlayCircle, null, tint = if (isSelected) ImiBlue else ImiMuted)
+                            Spacer(Modifier.width(9.dp))
+                            Text(
+                                android.net.Uri.parse(uri).lastPathSegment ?: "مقطع فيديو",
+                                color = ImiText,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(onClick = {
+                                videoUris = videoUris.filterNot { it == uri }
+                                val saved = JSONArray()
+                                videoUris.forEach { saved.put(it) }
+                                prefs.edit().putString("videos", saved.toString()).apply()
+                                if (selectedUri == uri) selectedUri = videoUris.firstOrNull()
+                            }) {
+                                Icon(Icons.Filled.DeleteOutline, "حذف من القائمة", tint = Color(0xFFFF6685))
+                            }
+                        }
+                    }
+                }
             }
         }
+        Text(
+            "المشغل والقائمة يعملان محلياً فقط؛ لا يوجد نشر Reels أو موجز مشترك أو رفع سحابي في هذه النسخة.",
+            color = ImiMuted,
+            fontSize = 10.sp
+        )
     }
 }
 

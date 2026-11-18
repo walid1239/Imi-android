@@ -1,5 +1,6 @@
 package com.walid.chat.data.repository
 
+import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
@@ -83,8 +84,8 @@ class FirebaseChatRepository(
  * This factory fails closed if that configuration is missing.
  */
 object FirebaseChatRepositoryFactory {
-    fun create(): FirebaseChatRepository {
-        check(FirebaseApp.getApps(/* context is not required after app startup */ null).isNotEmpty()) {
+    fun create(context: Context): FirebaseChatRepository {
+        check(FirebaseApp.getApps(context.applicationContext).isNotEmpty()) {
             "Firebase غير مهيأ. أضف google-services.json لتطبيق com.walid.chat."
         }
         return FirebaseChatRepository(

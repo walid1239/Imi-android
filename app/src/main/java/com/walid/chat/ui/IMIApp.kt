@@ -448,9 +448,10 @@ private fun StoriesSection() {
                                     data["mediaPath"] = path
                                 }
                                 db.collection("users").document(uid).collection("statuses").document(id).set(data).await()
+                                data["__statusId"] = id
                                 data
                             }.onSuccess { data ->
-                                statusDocumentId = id
+                                statusDocumentId = data["__statusId"] as? String
                                 statusText = data["text"] as? String
                                 statusMediaPath = data["mediaPath"] as? String
                                 expiresAt = (data["expiresAt"] as? com.google.firebase.Timestamp)?.toDate()?.time

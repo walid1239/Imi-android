@@ -49,10 +49,9 @@ service cloud.firestore {
                 && request.resource.data.mediaPath.matches('users/' + uid + '/statuses/.*')))
             && (('text' in request.resource.data) || ('mediaPath' in request.resource.data))
           );
-        allow read: if isSelf(uid)
-          || (areFriends(uid, request.auth.uid)
-            && resource.data.expiresAt is timestamp
-            && resource.data.expiresAt > request.time);
+        allow read: if resource.data.expiresAt is timestamp
+          && resource.data.expiresAt > request.time
+          && (isSelf(uid) || areFriends(uid, request.auth.uid));
         allow update: if false;
         allow delete: if isSelf(uid);
       }

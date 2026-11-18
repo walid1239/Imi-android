@@ -35,8 +35,12 @@ service firebase.storage {
       allow read: if signedIn()
         && statusIsActive()
         && (request.auth.uid == uid || acceptedFriend(uid));
+      // Require an active server-timestamped status document before accepting media.
+      // The client creates the status document first, then uploads the referenced file.
       allow create, update: if signedIn()
         && request.auth.uid == uid
+        && statusIsActive()
+        && firestore.get(/databases/(default)/documents/users/$(uid)/statuses/$(statusId)).data.ownerUid == uid
         && request.resource != null
         && request.resource.size < 20 * 1024 * 1024
         && request.resource.contentType.matches('(image/(jpeg|png|webp)|video/(mp4|webm))');

@@ -44,14 +44,23 @@ private enum class ImiTab(val label: String) {
 }
 
 @Composable
-fun IMIApp() {
+fun IMIApp(cloudSessionMessage: String? = null) {
     var selected by remember { mutableStateOf(ImiTab.Home) }
     IMITheme {
         Scaffold(
             containerColor = ImiBackground,
             bottomBar = { ImiBottomBar(selected) { selected = it } }
         ) { padding ->
-            Box(Modifier.fillMaxSize().background(ImiBackground).padding(padding)) {
+            Column(Modifier.fillMaxSize().background(ImiBackground).padding(padding)) {
+                if (cloudSessionMessage != null) {
+                    Text(
+                        cloudSessionMessage,
+                        color = if (cloudSessionMessage.startsWith("متصل")) ImiGreen else ImiMuted,
+                        fontSize = 10.sp,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+                    )
+                }
+                Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (selected) {
                     ImiTab.Home -> HomeScreen(
                         onChats = { selected = ImiTab.Chats },
@@ -62,6 +71,7 @@ fun IMIApp() {
                     ImiTab.Reels -> ReelsScreen()
                     ImiTab.Academy -> AcademyScreen()
                     ImiTab.Profile -> ProfileScreen()
+                }
                 }
             }
         }

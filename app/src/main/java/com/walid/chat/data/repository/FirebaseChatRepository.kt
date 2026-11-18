@@ -9,6 +9,7 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.walid.chat.data.model.Chat
 import com.walid.chat.data.model.ChatMessage
+import com.walid.chat.data.model.PublicProfile
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -32,10 +33,14 @@ class FirebaseChatRepository(
             .await()
 
         snapshot.documents.map { document ->
+            val members = (document.get("participants") as? List<*>)?.filterIsInstance<String>().orEmpty()
+            val otherUid = members.firstOrNull { it != uid }
+            val profile = otherUid?.let { firestore.collection("publicProfiles").document(it).get().await() }
             val lastAt = document.getTimestamp("lastMessageAt")
             Chat(
                 id = document.id,
-                title = document.getString("title") ?: "محادثة",
+                title = profile?.getString("displayName")?.takeIf { it.isNotBlank() }
+                    ?: otherUid?.take(8)?.let { "مستخدم $it" } ?: "محادثة",
                 lastMessage = document.getString("lastMessage") ?: "",
                 timestamp = lastAt?.toDate()?.toString() ?: "",
                 unreadCount = 0
@@ -111,9 +116,47 @@ class FirebaseChatRepository(
         }.await()
     }
 
+    suspend fun searchPublicProfiles(query: String): Result<List<PublicProfile>> = runCatching {
+        val uid = requireUid()
+        val term = query.trim()
+        require(term.length >= 2) { "اكتب حرفين على الأقل للبحث" }
+        firestore.collection("publicProfiles")
+            .orderBy("displayName")
+            .startAt(term)
+            .endAt(term + "\uf8ff")
+            .limit(20)
+            .get()
+            .await()
+            .documents
+            .filter { it.id != uid }
+            .mapNotNull { doc ->
+                val name = doc.getString("displayName")?.trim().orEmpty()
+                if (name.isBlank()) null else PublicProfile(
+                    uid = doc.id,
+                    displayName = name,
+                    photoPath = doc.getString("photoPath"),
+                    city = doc.getString("city")
+                )
+            }
+    }
+
     suspend fun createDirectConversation(otherUid: String): Result<String> = runCatching {
         val uid = requireUid()
         require(otherUid.isNotBlank() && otherUid != uid) { "المستخدم الآخر غير صالح" }
+        val profile = firestore.collection("publicProfiles").document(otherUid).get().await()
+        require(profile.exists()) { "هذا الحساب غير موجود في الملفات العامة" }
+
+        val existing = firestore.collection("conversations")
+            .whereArrayContains("participants", uid)
+            .get()
+            .await()
+            .documents
+            .firstOrNull { doc ->
+                val members = (doc.get("participants") as? List<*>)?.filterIsInstance<String>()?.toSet()
+                members == setOf(uid, otherUid)
+            }
+        if (existing != null) return@runCatching existing.id
+
         val conversation = firestore.collection("conversations").document()
         conversation.set(mapOf(
             "participants" to listOf(uid, otherUid).sorted(),

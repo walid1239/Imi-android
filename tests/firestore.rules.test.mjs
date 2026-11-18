@@ -157,3 +157,17 @@ test('status media uploads require owner, are visible to accepted friends, and c
   await assertSucceeds(deleteObject(aliceFile));
   await assertFails(getBytes(bobFile));
 });
+
+test('expired statuses cannot be read even by their owner', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const expiredAt = Timestamp.fromDate(new Date(Date.now() - 60 * 1000));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'users/alice/statuses/expired-status'), {
+      ownerUid: 'alice',
+      text: 'حالة منتهية',
+      createdAt: Timestamp.fromDate(new Date(Date.now() - 29 * 60 * 60 * 1000)),
+      expiresAt: expiredAt
+    });
+  });
+  await assertFails(getDoc(doc(aliceDb, 'users/alice/statuses/expired-status')));
+});

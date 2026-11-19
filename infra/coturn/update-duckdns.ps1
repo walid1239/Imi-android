@@ -14,21 +14,15 @@ if ($domain -like "REPLACE*") { throw "Replace the DUCKDNS_DOMAIN placeholder lo
 
 $publicIp = (Invoke-RestMethod -Uri "https://api4.ipify.org").ToString().Trim()
 if ($publicIp -notmatch '^\d{1,3}(\.\d{1,3}){3}$') { throw "Could not determine a public IPv4 address." }
-$defaultRoute = Get-NetRoute -DestinationPrefix "0.0.0.0/0" |
-    Sort-Object RouteMetric |
-    Select-Object -First 1
-$lanIp = if ($defaultRoute) {
-    Get-NetIPAddress -InterfaceIndex $defaultRoute.InterfaceIndex -AddressFamily IPv4 |
-        Where-Object { $_.IPAddress -notlike "169.254.*" -and $_.IPAddress -ne "127.0.0.1" } |
-        Select-Object -First 1 -ExpandProperty IPAddress
-}
-if (-not $lanIp) { throw "Could not find a private LAN IPv4 address; set TURN_EXTERNAL_IP manually." }
+# This is the static private IP assigned to the Coturn container in docker-compose.yml,
+# not the Windows host LAN address used as the router's port-forward destination.
+$containerLanIp = "172.30.250.10"
 
 $uri = "https://www.duckdns.org/update?domains=$([uri]::EscapeDataString($domain))&token=$([uri]::EscapeDataString($env:DUCKDNS_TOKEN))&ip=$publicIp"
 $result = (Invoke-RestMethod -Uri $uri).ToString().Trim()
 if ($result -ne "OK") { throw "DuckDNS update failed (response: $result)." }
 
-$newExternalIp = "$publicIp/$lanIp"
+$newExternalIp = "$publicIp/$containerLanIp"
 $updated = $false
 $lines = $lines | ForEach-Object {
     if ($_ -match '^TURN_EXTERNAL_IP=') { $updated = $true; "TURN_EXTERNAL_IP=$newExternalIp" } else { $_ }

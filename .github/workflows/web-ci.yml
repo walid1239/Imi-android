@@ -15,6 +15,10 @@ on:
       - 'package-lock.json'
       - '.github/workflows/web-ci.yml'
       - 'infra/coturn/**'
+      - 'data/curriculum.json'
+      - 'scripts/seed-curriculum.cjs'
+      - 'scripts/verify-academy-seed.cjs'
+      - 'scripts/test-teacher-emulator.cjs'
       - 'docs/turn-windows.md'
       - 'docs/call-test-plan.md'
   push:

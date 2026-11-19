@@ -66,8 +66,12 @@ async function main() {
     id: 'level-primary', parentId: null, type: 'level', nameAr: 'مستوى اختبار',
     nameFr: 'Niveau test', language: 'ar', order: 1, needsReview: false, status: 'published',
   });
+  await db.doc('curriculumNodes/track-primary').set({
+    id: 'track-primary', parentId: 'level-primary', type: 'track', nameAr: 'مسار اختبار',
+    nameFr: 'Parcours test', language: 'ar', order: 1, needsReview: false, status: 'published',
+  });
   await db.doc('curriculumNodes/subject-math').set({
-    id: 'subject-math', parentId: 'level-primary', type: 'subject', nameAr: 'رياضيات اختبار',
+    id: 'subject-math', parentId: 'track-primary', type: 'subject', nameAr: 'رياضيات اختبار',
     nameFr: 'Mathématiques test', language: 'ar', order: 1, needsReview: false, status: 'published',
   });
   const evidencePath = 'teacher-verification/' + applicantUid + '/identity.pdf';
@@ -156,6 +160,38 @@ async function main() {
   assert.ok(acceptances.contentRights.acceptedAt instanceof Timestamp);
   assert.ok(acceptances.childSafety.acceptedAt instanceof Timestamp);
 
+  const contentId = 'teacher-content-001';
+  const createdContent = await call('createTeacherContent', {
+    contentId,
+    title: 'درس أصلي للاختبار',
+    kind: 'text',
+    content: 'هذا محتوى تعليمي اختباري أصلي يتجاوز الحد الأدنى المطلوب للتحقق من مسار إنشاء المحتوى ومراجعته.',
+    levelId: 'level-primary',
+    trackId: 'track-primary',
+    subjectId: 'subject-math',
+    sourceType: 'original',
+    sourceName: 'محتوى أصلي',
+    license: 'أصلي',
+    permissionNote: 'أنا المؤلف الأصلي وأملك حقوق هذا المحتوى.',
+  }, refreshedApplicantToken);
+  assert.equal(createdContent.status, 'draft');
+  const draftSnapshot = await db.doc('teacherContent/' + contentId).get();
+  const contentReviewOperationId = 'teacher-content-' + contentId + '-' + draftSnapshot.updateTime.toMillis();
+  await assert.rejects(
+    call('reviewTeacherContent', { contentId, approved: true }, refreshedApplicantToken),
+    error => error.code === 'PERMISSION_DENIED',
+  );
+  const contentReview = await call('reviewTeacherContent', { contentId, approved: true }, adminToken);
+  assert.equal(contentReview.status, 'published');
+  assert.equal(contentReview.idempotent, false);
+  const publishedContent = await db.doc('teacherContent/' + contentId).get();
+  assert.equal(publishedContent.get('status'), 'published');
+  assert.equal(publishedContent.get('reviewStatus'), 'approved');
+  const contentAudit = await db.collection('moderationAudit').doc(contentReviewOperationId).get();
+  assert.equal(contentAudit.get('action'), 'teacher_content_published');
+  const repeatedContentReview = await call('reviewTeacherContent', { contentId, approved: true }, adminToken);
+  assert.equal(repeatedContentReview.idempotent, true);
+
   const startsAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
   const scheduled = await call('scheduleTeacherLiveSession', {
     title: 'جلسة اختبار تجريبية',
@@ -170,7 +206,7 @@ async function main() {
   assert.equal(session.get('joinUrl'), null);
   assert.equal(session.get('recordingPath'), null);
 
-  process.stdout.write('PASS: unauthenticated application rejected; non-admin review rejected; review/audit/outbox atomic; claims synced; agreements use server timestamps; mock session cannot create a live room.\\n');
+  process.stdout.write('PASS: unauthenticated application rejected; non-admin teacher and content reviews rejected; teacher and content decisions/audits atomic; outbox claims synced; agreements use server timestamps; mock session cannot create a live room.\\n');
 }
 
 main().catch(error => {

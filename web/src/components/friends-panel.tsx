@@ -53,7 +53,7 @@ export default function FriendsPanel({ user }: { user: User }) {
       collection(db, 'publicProfiles'),
       orderBy('displayName'),
       startAt(value),
-      endAt(value + '\\uf8ff')
+      endAt(value + '\uf8ff')
     );
     return onSnapshot(directoryQuery, snapshot => {
       setResults(snapshot.docs

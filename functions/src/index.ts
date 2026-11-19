@@ -333,7 +333,7 @@ export const createCourseLesson = onCall<CreateLessonInput>(async (request) => {
   if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0 || order > 100000) {
     throw new HttpsError("invalid-argument", "ترتيب الدرس غير صالح.");
   }
-  let source;
+  let source: ReturnType<typeof validateLessonSource>;
   try {
     source = validateLessonSource(request.data ?? {});
   } catch (error) {

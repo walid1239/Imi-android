@@ -123,10 +123,10 @@ docker compose down
 ## 9) اختبار Trickle ICE من شبكة مختلفة
 
 1. شغّل Coturn وتأكد أن السجلات لا تعرض أخطاء إعداد أو مصادقة.
-2. افتح صفحة Trickle ICE الخاصة بعينة WebRTC في جهاز على شبكة مختلفة. استخدم بيانات الهاتف مع إيقاف Wi-Fi، لا تستخدم Wi-Fi المنزل نفسه.
+2. افتح صفحة Trickle ICE الرسمية: `https://webrtc.github.io/samples/src/content/peerconnection/trickle-ice/`، في جهاز على شبكة مختلفة. استخدم بيانات الهاتف مع إيقاف Wi-Fi، لا تستخدم Wi-Fi المنزل نفسه.
 3. أضف:
    - `stun:stun.l.google.com:19302`
-   - `turn:TURN_HOST:3478?transport=udp`
+   - `turn:TURN_HOST:TURN_PORT?transport=udp` (القيمة الافتراضية `TURN_PORT=3478`)
 4. لتجربة Coturn محلياً دون نشر Function، أنشئ بيانات اعتماد مؤقتة من ملف `.env` المحلي:
    ```powershell
    .\\test-credentials.ps1

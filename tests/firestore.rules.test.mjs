@@ -714,6 +714,7 @@ test('only conversation members can upload conversation media', async () => {
 test('Reels metadata is server-created and visible to others only after approval', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();
+  const adminDb = env.authenticatedContext('admin', { admin: true }).firestore();
   await env.withSecurityRulesDisabled(async context => {
     const db = context.firestore();
     await setDoc(doc(db, 'reels/pending01'), {
@@ -730,6 +731,7 @@ test('Reels metadata is server-created and visible to others only after approval
 
   await assertSucceeds(getDoc(doc(aliceDb, 'reels/pending01')));
   await assertFails(getDoc(doc(bobDb, 'reels/pending01')));
+  await assertSucceeds(getDoc(doc(adminDb, 'reels/pending01')));
   await assertSucceeds(getDoc(doc(bobDb, 'reels/approved1')));
   const payload = {
     ownerUid: 'alice', caption: 'محاولة نشر مباشرة',
@@ -743,6 +745,7 @@ test('Reels metadata is server-created and visible to others only after approval
 test('Reels storage keeps uploads private until server approval', async () => {
   const aliceStorage = env.authenticatedContext('alice').storage();
   const bobStorage = env.authenticatedContext('bob').storage();
+  const adminStorage = env.authenticatedContext('admin', { admin: true }).storage();
   await env.withSecurityRulesDisabled(async context => {
     const db = context.firestore();
     await setDoc(doc(db, 'reels/pending02'), {
@@ -759,6 +762,7 @@ test('Reels storage keeps uploads private until server approval', async () => {
   await assertSucceeds(uploadBytes(pendingVideo, new Blob(['video-data'], { type: 'video/mp4' })));
   await assertSucceeds(getBytes(pendingVideo));
   await assertFails(getBytes(ref(bobStorage, 'reels/alice/pending02/video.mp4')));
+  await assertSucceeds(getBytes(ref(adminStorage, 'reels/alice/pending02/video.mp4')));
   await assertSucceeds(uploadBytes(
     ref(aliceStorage, 'reels/alice/approved2/video.mp4'),
     new Blob(['approved-video'], { type: 'video/mp4' })

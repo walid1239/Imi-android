@@ -43,7 +43,7 @@ service firebase.storage {
         && firestore.get(/databases/(default)/documents/users/$(uid)/statuses/$(statusId)).data.ownerUid == uid
         && request.resource != null
         && request.resource.size < 20 * 1024 * 1024
-        && request.resource.contentType.matches('(image/(jpeg|png|webp)|video/(mp4|webm))');
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
       allow delete: if signedIn() && request.auth.uid == uid;
     }
 

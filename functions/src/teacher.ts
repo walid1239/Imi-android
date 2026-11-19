@@ -399,15 +399,15 @@ export const reconcileTeacherClaims = onSchedule("every 15 minutes", async () =>
       await applyTeacherClaimsOutboxOperation({ targetUid, desiredTeacher }, {
         getUser: async () => ({ customClaims: current }),
         setCustomClaims: async (_uid, claims) => getAuth().setCustomUserClaims(targetUid, claims),
-        markApplied: async () => db.collection("teacherClaimsReconciliation").doc(operationId).set({
+        markApplied: async () => { await db.collection("teacherClaimsReconciliation").doc(operationId).set({
           targetUid, desiredTeacher, detectedMismatch: true,
           repairedAt: FieldValue.serverTimestamp(), status: "repaired",
-        }, { merge: true }),
-        markPending: async error => db.collection("teacherClaimsReconciliation").doc(operationId).set({
+        }, { merge: true }); },
+        markPending: async error => { await db.collection("teacherClaimsReconciliation").doc(operationId).set({
           targetUid, desiredTeacher, detectedMismatch: true,
           lastError: error instanceof Error ? error.message.slice(0, 500) : "Unknown error",
           checkedAt: FieldValue.serverTimestamp(), status: "pending",
-        }, { merge: true }),
+        }, { merge: true }); },
       });
     } catch {
       // Auth or Firestore may be temporarily unavailable; retry on the next scheduled pass.

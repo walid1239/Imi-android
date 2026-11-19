@@ -6,7 +6,7 @@ Audit gate added to `.github/workflows/web-ci.yml` on 2026-11-19. The gate runs 
 
 Run: https://github.com/walid1239/Imi-android/actions/runs/44571317873
 
-- `functions`: completed successfully, including `npm audit --audit-level=high` and the Functions test script. This establishes no high/critical advisory was reported by that command at that run.
+- `functions`: completed successfully, including `npm audit --audit-level=high` and the Functions test script. No high/critical advisory was reported. The full audit output also reported one **moderate** advisory in transitive `uuid` (<11.1.1), reached through `gaxios` / `google-gax` / Google Cloud Firestore/Storage packages under `firebase-admin`. It is documented as remaining rather than forcing a potentially breaking major dependency change.
 - `web`: failed the audit gate. npm reported 6 findings (1 moderate, 5 high). The high findings included:
   - `@grpc/grpc-js` affected versions before 1.13.6 and 1.14.0–1.14.4; patched releases include 1.13.6 and 1.14.5. The observed dependency tree included the vulnerable gRPC package through Firebase Firestore packages.
   - `postcss` versions through 8.5.22; patched version 8.5.23 or later.

@@ -105,12 +105,12 @@ jobs:
   playwright-e2e:
     name: Playwright browser tests against Firebase Emulator
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: web
     env:
-      NEXT_PUBLIC_FIREBASE_API_KEY: emulator-api-key
+      NEXT_PUBLIC_FIREBASE_API_KEY: fake-api-key
       NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: localhost
       NEXT_PUBLIC_FIREBASE_PROJECT_ID: demo-imi-playwright
       NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: demo-imi-playwright.firebasestorage.app
@@ -119,11 +119,26 @@ jobs:
       NEXT_PUBLIC_FIREBASE_EMULATORS: "true"
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
+      - name: Install and compile Functions for the emulator
+        working-directory: .
+        run: |
+          npm install --prefix functions --no-audit --no-fund
+          npm run build --prefix functions
       - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
-      - name: Run browser E2E against disposable Auth and Firestore emulators
+      - name: Run browser E2E against disposable Auth, Firestore and Functions emulators
         working-directory: .
-        run: npx --yes firebase-tools@13.29.2 emulators:exec --only auth,firestore --project demo-imi-playwright "cd web && npm run e2e"
+        run: >-
+          npx --yes firebase-tools@13.29.2 emulators:exec
+          --only auth,firestore,functions,storage
+          --project demo-imi-playwright
+          "curl -fsS http://127.0.0.1:9099/emulator/v1/projects/demo-imi-playwright/accounts >/dev/null &&
+          cd functions && node scripts/seed-e2e.cjs &&
+          cd ../web && npm run e2e"

@@ -213,10 +213,15 @@ export const acceptFriendRequest = onCall<FriendRequestActionInput>(async (reque
     }
     const ownFriendRef = db.collection("users").doc(uid).collection("friends").doc(fromUid);
     const senderFriendRef = db.collection("users").doc(fromUid).collection("friends").doc(uid);
-    const [ownFriend, senderFriend] = await Promise.all([
+    const ownBlockRef = db.collection("users").doc(uid).collection("blockedUsers").doc(fromUid);
+    const senderBlockRef = db.collection("users").doc(fromUid).collection("blockedUsers").doc(uid);
+    const [ownFriend, senderFriend, ownBlock, senderBlock] = await Promise.all([
       transaction.get(ownFriendRef),
       transaction.get(senderFriendRef),
+      transaction.get(ownBlockRef),
+      transaction.get(senderBlockRef),
     ]);
+    if (ownBlock.exists || senderBlock.exists) throw new HttpsError("permission-denied", "لا يمكن قبول طلب الصداقة بسبب إعدادات الحظر.");
     if ((ownFriend.exists && ownFriend.get("status") !== "accepted")
       || (senderFriend.exists && senderFriend.get("status") !== "accepted")) {
       throw new HttpsError("failed-precondition", "توجد علاقة صداقة غير متسقة؛ لم يتم تغييرها.");

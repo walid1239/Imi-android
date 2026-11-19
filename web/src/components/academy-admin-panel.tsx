@@ -9,6 +9,7 @@ import { db } from '@/lib/firebase/client';
 type Course = { id: string; title: string; description: string; category: string; published: boolean };
 type Lesson = { id: string; title: string; content: string; videoUrl?: string; order: number; published: boolean; sourceType?: string; sourceName?: string; reviewStatus?: string };
 type ContentReport = { id: string; reporterUid: string; courseId: string; lessonId: string; reason: string; details: string; status: string };
+type TeacherApplication = { uid: string; fullName: string; subjectIds: string[]; levelIds: string[]; status: string };
 
 export default function AcademyAdminPanel({ user }: { user: User }) {
   const [authorized, setAuthorized] = useState<boolean | null>(null);
@@ -16,6 +17,7 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
   const [selectedId, setSelectedId] = useState('');
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [reports, setReports] = useState<ContentReport[]>([]);
+  const [teacherApplications, setTeacherApplications] = useState<TeacherApplication[]>([]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
@@ -61,6 +63,18 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
         courseId: item.get('courseId') || '', lessonId: item.get('lessonId') || '',
         reason: item.get('reason') || '', details: item.get('details') || '',
         status: item.get('status') || 'open',
+      })));
+    }, reason => setError(reason.message));
+  }, [authorized]);
+
+  useEffect(() => {
+    if (!authorized) { setTeacherApplications([]); return; }
+    return onSnapshot(query(collection(db, 'teacherApplications'), orderBy('submittedAt', 'desc'), limit(100)), snapshot => {
+      setTeacherApplications(snapshot.docs.map(item => ({
+        uid: item.id, fullName: item.get('fullName') || '',
+        subjectIds: Array.isArray(item.get('subjectIds')) ? item.get('subjectIds') : [],
+        levelIds: Array.isArray(item.get('levelIds')) ? item.get('levelIds') : [],
+        status: item.get('status') || 'pending',
       })));
     }, reason => setError(reason.message));
   }, [authorized]);
@@ -116,6 +130,21 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
       <h2 className="mt-2 text-2xl font-black">إدارة الأكاديمية</h2>
       <p className="mt-2 text-sm text-slate-400">أنشئ محتوى حقيقياً كمسودات ثم انشره بعد مراجعته. صلاحية المشرف يتحقق منها Firebase.</p>
     </header>
+
+    <section className="space-y-3 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+      <div className="flex items-center justify-between"><h3 className="font-bold">طلبات توثيق الأساتذة ({teacherApplications.filter(item => item.status === 'pending').length})</h3><span className="text-xs text-slate-500">أحدث 100 طلب</span></div>
+      {teacherApplications.filter(item => item.status === 'pending').length === 0 ? <p className="text-sm text-slate-500">لا توجد طلبات معلقة.</p> : teacherApplications.filter(item => item.status === 'pending').map(application => <article key={application.uid} className="rounded-xl border border-white/10 p-3">
+        <strong className="text-sm">{application.fullName}</strong>
+        <p className="mt-1 text-xs text-slate-400">UID: {application.uid}</p>
+        <p className="mt-1 text-xs text-slate-400">المستويات: {application.levelIds.join('، ')}</p>
+        <p className="mt-1 text-xs text-slate-400">المواد: {application.subjectIds.join('، ')}</p>
+        <p className="mt-2 text-xs text-slate-500">وثيقة الإثبات لا تُعرض هنا ولا يملك الوصول إليها إلا المشرف عبر صلاحيات التخزين.</p>
+        <div className="mt-3 flex gap-2">
+          <button disabled={busy} onClick={() => call('reviewTeacherApplication', { uid: application.uid, approved: true, note: '' }, 'تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق.')} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold disabled:opacity-50">اعتماد التوثيق</button>
+          <button disabled={busy} onClick={() => call('reviewTeacherApplication', { uid: application.uid, approved: false, note: 'لم يستوفِ متطلبات التوثيق' }, 'تم رفض طلب التوثيق.')} className="rounded-lg border border-red-400/30 px-3 py-2 text-xs text-red-200 disabled:opacity-50">رفض الطلب</button>
+        </div>
+      </article>)}
+    </section>
 
     <section className="space-y-3 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
       <div className="flex items-center justify-between"><h3 className="font-bold">بلاغات المحتوى ({reports.length})</h3><span className="text-xs text-slate-500">أحدث 100 بلاغ</span></div>

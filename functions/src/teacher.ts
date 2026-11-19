@@ -192,7 +192,7 @@ export const createTeacherContent = onCall<TeacherContentInput>(async request =>
   const title = clean(request.data?.title, 4, 140);
   const kind = request.data?.kind;
   if (!contentId || !/^[A-Za-z0-9_-]+$/.test(contentId) || !title
-    || !["text", "video", "image", "pdf"].includes(String(kind))) {
+    || !["text", "video", "image", "pdf", "embed"].includes(String(kind))) {
     throw new HttpsError("invalid-argument", "عنوان المحتوى أو نوعه أو معرّفه غير صالح.");
   }
   const [level, track, subject] = await Promise.all([
@@ -221,9 +221,16 @@ export const createTeacherContent = onCall<TeacherContentInput>(async request =>
   }
   const body = typeof request.data?.content === "string" ? request.data.content.trim() : "";
   if (kind === "text" && body.length < 50) throw new HttpsError("invalid-argument", "الدرس النصي يجب أن يحتوي على 50 حرفاً على الأقل.");
+  if (kind === "embed") {
+    let host = "";
+    try { host = new URL(sourceUrl).hostname.toLowerCase(); } catch { /* invalid URL is rejected below */ }
+    if (sourceType !== "embed" || !["youtube.com", "www.youtube.com", "youtu.be", "www.youtube-nocookie.com"].includes(host)) {
+      throw new HttpsError("invalid-argument", "يسمح فقط بتضمين رابط يوتيوب صالح.");
+    }
+  }
   if (body.length > 20000) throw new HttpsError("invalid-argument", "محتوى الدرس يتجاوز الحد المسموح.");
   let mediaPath: string | null = null, contentType: string | null = null, fileName: string | null = null;
-  if (kind !== "text") {
+  if (kind !== "text" && kind !== "embed") {
     mediaPath = clean(request.data?.mediaPath, 10, 400);
     contentType = clean(request.data?.contentType, 3, 100);
     fileName = clean(request.data?.fileName, 1, 120);

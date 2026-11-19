@@ -153,6 +153,16 @@ test('teacher application and studio routes explain verification gate', async ({
   await expect(page.getByRole('link', { name: 'طلب توثيق' })).toBeVisible();
 });
 
+test('login exposes country-aware phone OTP with local E.164 validation', async ({ page }) => {
+  await page.goto('/login');
+  await expect(page.getByRole('heading', { name: 'الدخول برقم الهاتف (OTP)' })).toBeVisible();
+  await expect(page.getByLabel('الدولة')).toBeVisible();
+  await expect(page.getByLabel('رقم الهاتف')).toBeVisible();
+  await page.getByLabel('رقم الهاتف').fill('061234567');
+  await page.getByRole('button', { name: 'إرسال رمز التحقق' }).click();
+  await expect(page.getByRole('alert')).toContainText('أدخل 9 أرقام بعد رمز الدولة');
+});
+
 test('privacy and terms remain visibly marked as drafts', async ({ page }) => {
   await page.goto('/privacy');
   await expect(page.getByText(/مسودة ما قبل الإطلاق/)).toBeVisible();

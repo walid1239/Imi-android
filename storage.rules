@@ -14,7 +14,9 @@ service firebase.storage {
     function acceptedFriend(ownerUid) {
       return signedIn()
         && firestore.exists(/databases/(default)/documents/users/$(ownerUid)/friends/$(request.auth.uid))
-        && firestore.get(/databases/(default)/documents/users/$(ownerUid)/friends/$(request.auth.uid)).data.status == 'accepted';
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)/friends/$(ownerUid))
+        && firestore.get(/databases/(default)/documents/users/$(ownerUid)/friends/$(request.auth.uid)).data.status == 'accepted'
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)/friends/$(ownerUid)).data.status == 'accepted';
     }
 
     match /users/{uid}/avatars/{fileName} {

@@ -55,6 +55,7 @@ export default function CallControls({
   const respondToCall = httpsCallable<{ callId: string; decision: 'accepted' | 'rejected' }, { status: string }>(functions, 'respondToCall');
   const endCallAction = httpsCallable<{ callId: string }, { status: string }>(functions, 'endCall');
   const getIceServers = httpsCallable<Record<string, never>, { turnAvailable: boolean; iceServers: RTCIceServer[]; expiresAt: number | null }>(functions, 'getIceServers');
+  const restartCallIce = httpsCallable<{ callId: string; sdp: string }, { offerRevision: number }>(functions, 'restartCallIce');
 
   function cleanupSession() {
     unsubsRef.current.forEach(unsubscribe => unsubscribe());
@@ -179,9 +180,7 @@ export default function CallControls({
           const retryOffer = await peer.createOffer({ iceRestart: true });
           await peer.setLocalDescription(retryOffer);
           lastOfferSdpRef.current = retryOffer.sdp ?? '';
-          await updateDoc(doc(db, 'calls', callId), {
-            offer: { type: retryOffer.type, sdp: retryOffer.sdp }
-          });
+          await restartCallIce({ callId, sdp: retryOffer.sdp ?? '' });
         })().catch(() => setError('تعذّر الاتصال، جرّب شبكة أخرى'));
       } else if (peer.iceConnectionState === 'failed') {
         setError('تعذّر الاتصال، جرّب شبكة أخرى');
@@ -233,7 +232,7 @@ export default function CallControls({
         cleanupSession();
         return;
       }
-      if (role === 'caller' && data.answer && data.answer.sdp !== lastAnswerSdpRef.current) {
+      if (role === 'caller' && data.answer && data.answerRevision === data.offerRevision && data.answer.sdp !== lastAnswerSdpRef.current) {
         lastAnswerSdpRef.current = data.answer.sdp ?? '';
         void peer.setRemoteDescription(new RTCSessionDescription(data.answer))
           .then(() => flushPendingCandidates(peer))
@@ -249,7 +248,8 @@ export default function CallControls({
           await peer.setLocalDescription(answer);
           lastAnswerSdpRef.current = answer.sdp ?? '';
           await updateDoc(doc(db, 'calls', callId), {
-            answer: { type: answer.type, sdp: answer.sdp }
+            answer: { type: answer.type, sdp: answer.sdp },
+            answerRevision: typeof data.offerRevision === 'number' ? data.offerRevision : 0
           });
         })().catch(reason => {
           setError(reason instanceof Error ? reason.message : 'تعذر إنشاء إجابة المكالمة.');

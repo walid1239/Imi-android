@@ -31,6 +31,10 @@ before(async () => {
     await setDoc(doc(db, 'users/alice/friends/bob'), { uid: 'bob', status: 'accepted' });
     await setDoc(doc(db, 'users/bob/friends/alice'), { uid: 'alice', status: 'accepted' });
     await setDoc(doc(db, 'friendRequests/alice__bob'), { fromUid: 'alice', toUid: 'bob', status: 'pending' });
+    await setDoc(doc(db, 'courses/math-basics'), { title: 'أساسيات الرياضيات', description: 'دورة اختبار', category: 'رياضيات', published: true });
+    await setDoc(doc(db, 'courses/math-basics/lessons/lesson-1'), { title: 'الأعداد', content: 'محتوى اختبار', published: true });
+    await setDoc(doc(db, 'courses/draft-course'), { title: 'مسودة', published: false });
+    await setDoc(doc(db, 'users/alice/enrollments/math-basics'), { courseId: 'math-basics', completedLessonIds: [] });
     await setDoc(doc(db, 'conversations/chat-1'), {
       participants: ['alice', 'bob'],
       createdBy: 'alice',
@@ -73,6 +77,28 @@ test('status documents are readable only by the owner and a reciprocal accepted 
   await assertSucceeds(getDoc(doc(aliceDb, statusPath)));
   await assertSucceeds(getDoc(doc(bobDb, statusPath)));
   await assertFails(getDoc(doc(malloryDb, statusPath)));
+});
+
+
+test('learners can read published Academy content but cannot publish or modify it', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  await assertSucceeds(getDoc(doc(aliceDb, 'courses/math-basics')));
+  await assertSucceeds(getDoc(doc(bobDb, 'courses/math-basics/lessons/lesson-1')));
+  await assertFails(getDoc(doc(aliceDb, 'courses/draft-course')));
+  await assertFails(getDoc(doc(aliceDb, 'courses/math-basics/lessons/not-published')));
+  await assertFails(setDoc(doc(aliceDb, 'courses/fake-course'), { title: 'مزيف', published: true }));
+  await assertFails(setDoc(doc(aliceDb, 'courses/math-basics/lessons/lesson-2'), { title: 'درس مزيف', published: true }));
+});
+
+test('enrollment and lesson progress are private and server-write-only', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  await assertSucceeds(getDoc(doc(aliceDb, 'users/alice/enrollments/math-basics')));
+  await assertFails(getDoc(doc(bobDb, 'users/alice/enrollments/math-basics')));
+  await assertFails(setDoc(doc(aliceDb, 'users/alice/enrollments/forged-course'), {
+    courseId: 'forged-course', completedLessonIds: ['lesson-1']
+  }));
 });
 
 test('unauthenticated clients cannot read private user documents', async () => {

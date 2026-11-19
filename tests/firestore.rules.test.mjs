@@ -53,6 +53,29 @@ after(async () => {
 });
 
 
+test('notifications are server-created, private to their owner, and clients may only mark them read', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'users/alice/notifications/chat-1_msg-1'), {
+      type: 'message', senderUid: 'bob', conversationId: 'chat-1',
+      messageId: 'msg-1', preview: 'مرحبا', createdAt: serverTimestamp(), readAt: null
+    });
+  });
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  const aliceNotification = doc(aliceDb, 'users/alice/notifications/chat-1_msg-1');
+  await assertSucceeds(getDoc(aliceNotification));
+  await assertFails(getDoc(doc(bobDb, 'users/alice/notifications/chat-1_msg-1')));
+  await assertFails(setDoc(doc(aliceDb, 'users/alice/notifications/forged'), {
+    type: 'message', senderUid: 'alice', preview: 'مزيف', readAt: null
+  }));
+  await assertFails((await import('firebase/firestore')).updateDoc(aliceNotification, {
+    preview: 'تعديل محتوى الإشعار'
+  }));
+  await assertSucceeds((await import('firebase/firestore')).updateDoc(aliceNotification, {
+    readAt: serverTimestamp()
+  }));
+});
+
 test('friend requests are visible only to their sender and recipient and clients cannot forge them', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();

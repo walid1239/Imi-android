@@ -77,7 +77,11 @@ service firebase.storage {
           || (request.resource.contentType.matches('video/(mp4|webm)')
             && request.resource.size <= 50 * 1024 * 1024)
         );
-      allow update, delete: if false;
+      allow update: if false;
+      // Permit cleanup of an orphaned upload only while no message references it.
+      allow delete: if isConversationMember(conversationId)
+        && request.auth.uid == uid
+        && !firestore.exists(/databases/(default)/documents/conversations/$(conversationId)/messages/$(messageId));
     }
 
     match /{allPaths=**} {

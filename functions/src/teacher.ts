@@ -2,6 +2,7 @@ import { getAuth } from "firebase-admin/auth";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { mockLiveProvider } from "./liveProvider";
 
 type AppInput = { fullName?: unknown; subjectIds?: unknown; levelIds?: unknown; evidencePath?: unknown };
 type ProfileInput = { photoPath?: unknown; bio?: unknown; subjectIds?: unknown; levelIds?: unknown; contentAgreement?: unknown; childSafetyAgreement?: unknown };
@@ -145,10 +146,12 @@ export const scheduleTeacherLiveSession = onCall<LiveInput>(async request => {
     throw new HttpsError("failed-precondition", "أكمل صفحة الأستاذ المنشورة والاتفاقيات واختر مادة ضمن ملفك قبل جدولة البث.");
   }
   const ref = db.collection("teacherLiveSessions").doc();
+  const plan = await mockLiveProvider.schedule({
+    sessionId: ref.id, teacherUid: userId, title, subjectId, startsAt,
+  });
   await ref.create({
     id: ref.id, teacherUid: userId, title, subjectId, startsAt: Timestamp.fromDate(startsAt),
-    provider: "mock", status: "mock_scheduled", liveEnabled: false, joinUrl: null, recordingPath: null,
-    createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    ...plan, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
   });
   return { sessionId: ref.id, status: "mock_scheduled", liveEnabled: false };
 });

@@ -6,7 +6,7 @@ import {
   addDoc, collection, doc, endAt, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp,
   setDoc, startAfter, startAt, where, writeBatch, Timestamp
 } from 'firebase/firestore';
-import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
+import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase/client';
 
 type Conversation = {
@@ -417,6 +417,7 @@ export default function ChatPanel({ user }: { user: User }) {
     }
     setBusy(true);
     setError('');
+    let uploadedMediaPath: string | undefined;
     try {
       const conversationRef = doc(db, 'conversations', selectedId);
       const messageRef = doc(collection(conversationRef, 'messages'));
@@ -425,6 +426,7 @@ export default function ChatPanel({ user }: { user: User }) {
       if (attachment) {
         type = attachment.type.startsWith('image/') ? 'image' : attachment.type.startsWith('audio/') ? 'audio' : 'video';
         mediaPath = `conversations/${selectedId}/${user.uid}/${messageRef.id}/${attachment.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100)}`;
+        uploadedMediaPath = mediaPath;
         await uploadBytes(storageRef(storage, mediaPath), attachment, {
           contentType: attachment.type,
           customMetadata: { ownerUid: user.uid, conversationId: selectedId, messageId: messageRef.id }
@@ -448,6 +450,9 @@ export default function ChatPanel({ user }: { user: User }) {
       setDraft('');
       setAttachment(null);
     } catch (reason) {
+      if (uploadedMediaPath) {
+        await deleteObject(storageRef(storage, uploadedMediaPath)).catch(() => {});
+      }
       setError(reason instanceof Error ? reason.message : 'تعذر إرسال الرسالة أو رفع الملف.');
     } finally {
       setBusy(false);

@@ -4,6 +4,8 @@ import { getMessaging } from "firebase-admin/messaging";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { defineSecret } from "firebase-functions/params";
+import { createTurnConfiguration } from "./turnCredentials";
 import { messageNotificationPreview } from "./notificationLogic";
 import {
   isStatusCooldownActive,
@@ -13,6 +15,7 @@ import {
 
 initializeApp();
 const db = getFirestore();
+const TURN_SHARED_SECRET = defineSecret("TURN_SHARED_SECRET");
 
 type CreateStatusInput = {
   text?: unknown;
@@ -620,4 +623,18 @@ export const endCall = onCall<CallActionInput>(async (request) => {
     tx.update(ref, { status: "ended", endedBy: uid, updatedAt: FieldValue.serverTimestamp(), endedAt: FieldValue.serverTimestamp() });
   });
   return { status: "ended" };
+});
+
+
+// Issue authenticated, short-lived TURN credentials. The shared secret is only
+// available to this server function and is never returned to the browser.
+export const getTurnIceServers = onCall({ secrets: [TURN_SHARED_SECRET] }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  const configuration = createTurnConfiguration(
+    uid,
+    TURN_SHARED_SECRET.value() || undefined,
+    process.env.TURN_URLS,
+  );
+  return configuration;
 });

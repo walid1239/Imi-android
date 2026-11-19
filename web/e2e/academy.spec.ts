@@ -89,6 +89,20 @@ test('admin claim exposes the protected Academy administration panel', async ({ 
   await expect(page.getByRole('button', { name: /إدارة الأكاديمية/ })).toBeVisible();
   await page.getByRole('button', { name: /إدارة الأكاديمية/ }).first().click();
   await expect(page.getByRole('heading', { name: 'إدارة الأكاديمية' })).toBeVisible();
+  await expect(page.getByText('أستاذ اختبار آلي')).toBeVisible();
+  await page.getByRole('button', { name: 'اعتماد التوثيق' }).click();
+  await expect(page.getByRole('status')).toContainText('تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق');
+});
+
+
+test('teacher application and studio routes explain verification gate', async ({ page }) => {
+  await login(page, email('b', test.info().project.name));
+  await page.goto('/teacher/apply');
+  await expect(page.getByRole('heading', { name: 'طلب الانضمام كأستاذ' })).toBeVisible();
+  await expect(page.getByLabel('الاسم الكامل')).toBeVisible();
+  await page.goto('/teacher/studio');
+  await expect(page.getByText('حسابك غير موثّق كأستاذ')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'طلب توثيق' })).toBeVisible();
 });
 
 test('privacy and terms remain visibly marked as drafts', async ({ page }) => {

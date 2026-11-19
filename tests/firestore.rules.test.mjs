@@ -45,6 +45,12 @@ before(async () => {
       createdBy: 'alice',
       createdAt: new Date()
     });
+    await setDoc(doc(db, 'conversations/chat-1/messages/msg-1'), {
+      senderUid: 'bob',
+      type: 'text',
+      text: 'رسالة اختبار موجودة',
+      createdAt: new Date()
+    });
   });
 });
 
@@ -234,6 +240,12 @@ test('conversation read receipts and typing state are private to members and sel
   await assertSucceeds(setDoc(aliceReceipt, {
     uid: 'alice', lastReadAt: serverTimestamp(), lastReadMessageId: 'msg-1'
   }));
+  await assertFails(setDoc(doc(aliceDb, 'conversations/chat-1/readReceipts/alice-invalid'), {
+    uid: 'alice-invalid', lastReadAt: serverTimestamp(), lastReadMessageId: 'msg-1'
+  }));
+  await assertFails(setDoc(doc(aliceDb, 'conversations/chat-1/readReceipts/alice'), {
+    uid: 'alice', lastReadAt: serverTimestamp(), lastReadMessageId: 'missing-message'
+  }));
   await assertFails(setDoc(doc(aliceDb, 'conversations/chat-1/readReceipts/bob'), {
     uid: 'bob', lastReadAt: serverTimestamp(), lastReadMessageId: 'msg-1'
   }));
@@ -242,6 +254,9 @@ test('conversation read receipts and typing state are private to members and sel
   const aliceDelivery = doc(aliceDb, 'conversations/chat-1/deliveryReceipts/alice');
   await assertSucceeds(setDoc(aliceDelivery, {
     uid: 'alice', lastDeliveredAt: serverTimestamp(), lastDeliveredMessageId: 'msg-1'
+  }));
+  await assertFails(setDoc(aliceDelivery, {
+    uid: 'alice', lastDeliveredAt: serverTimestamp(), lastDeliveredMessageId: 'missing-message'
   }));
   await assertFails(setDoc(doc(aliceDb, 'conversations/chat-1/deliveryReceipts/bob'), {
     uid: 'bob', lastDeliveredAt: serverTimestamp(), lastDeliveredMessageId: 'msg-1'

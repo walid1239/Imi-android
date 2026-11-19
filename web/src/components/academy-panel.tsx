@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { User } from 'firebase/auth';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { db } from '@/lib/firebase/client';
+import { db, firebaseConfigured } from '@/lib/firebase/client';
 
 type Course = { id: string; title: string; description: string; category: string; coverUrl?: string };
 type Lesson = { id: string; title: string; content: string; videoUrl?: string; order: number };
@@ -27,6 +27,11 @@ export default function AcademyPanel({ user }: { user: User | null }) {
   const selectedLesson = lessons.find(lesson => lesson.id === selectedLessonId) ?? null;
 
   useEffect(() => {
+    if (!firebaseConfigured) {
+      setError('الأكاديمية متاحة للقراءة دون حساب، لكن إعداد اتصال Firebase غير مكتمل حالياً. أكمل إعداد تطبيق الويب في لوحة Firebase ثم أعد تحميل الصفحة.');
+      setLoadingCourses(false);
+      return;
+    }
     const publishedCourses = query(collection(db, 'courses'), where('published', '==', true));
     return onSnapshot(publishedCourses, snapshot => {
       const items = snapshot.docs.map(item => ({
@@ -40,7 +45,10 @@ export default function AcademyPanel({ user }: { user: User | null }) {
       setCourseId(current => current && items.some(item => item.id === current) ? current : (items[0]?.id ?? ''));
       setLoadingCourses(false);
     }, reason => {
-      setError(reason.message);
+      const code = (reason as { code?: string }).code ?? '';
+      setError(code === 'permission-denied'
+        ? 'تعذر عرض الدروس المنشورة بسبب قواعد الوصول. يجب السماح بقراءة المحتوى المنشور فقط.'
+        : 'تعذر الاتصال بالأكاديمية حالياً. تحقق من إعداد Firebase والاتصال بالإنترنت ثم أعد المحاولة.');
       setLoadingCourses(false);
     });
   }, []);

@@ -101,3 +101,29 @@ jobs:
           java-version: '17'
       - run: npm install --no-audit --no-fund
       - run: npm run emulators:test
+
+  playwright-e2e:
+    name: Playwright browser tests against Firebase Emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    env:
+      NEXT_PUBLIC_FIREBASE_API_KEY: emulator-api-key
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: localhost
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: demo-imi-playwright
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: demo-imi-playwright.firebasestorage.app
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
+      NEXT_PUBLIC_FIREBASE_APP_ID: 1:000000000000:web:0000000000000000000000
+      NEXT_PUBLIC_FIREBASE_EMULATORS: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Run browser E2E against disposable Auth and Firestore emulators
+        working-directory: .
+        run: npx --yes firebase-tools@13.29.2 emulators:exec --only auth,firestore --project demo-imi-playwright "cd web && npm run e2e"

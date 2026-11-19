@@ -16,6 +16,9 @@ type Conversation = {
   participants: string[];
   lastMessage: string;
   lastMessageAt: Timestamp | null;
+  type?: string;
+  name?: string;
+  status?: string;
 };
 type PublicProfile = { uid: string; displayName: string; city?: string; photoPath?: string };
 type Message = {
@@ -64,6 +67,9 @@ export default function ChatPanel({ user }: { user: User }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<PublicProfile[]>([]);
   const [searching, setSearching] = useState(false);
+  const [groupMembers, setGroupMembers] = useState<string[]>([]);
+  const [groupName, setGroupName] = useState('');
+  const [blockBusy, setBlockBusy] = useState(false);
   const [profileName, setProfileName] = useState(user.displayName || user.email?.split('@')[0] || 'مستخدم IMI');
   const [profileCity, setProfileCity] = useState('المغرب');
   const [profileReady, setProfileReady] = useState(false);
@@ -99,8 +105,9 @@ export default function ChatPanel({ user }: { user: User }) {
         id: item.id,
         participants: (item.get('participants') as string[]) ?? [],
         lastMessage: item.get('lastMessage') ?? '',
-        lastMessageAt: item.get('lastMessageAt') ?? null
-      }));
+        lastMessageAt: item.get('lastMessageAt') ?? null,
+        type: item.get('type') ?? 'direct', name: item.get('name') ?? '', status: item.get('status') ?? 'active'
+      })).filter(row => row.status !== 'blocked');
       setChats(rows);
       setSelectedId(current => current && rows.some(row => row.id === current) ? current : (rows[0]?.id ?? ''));
       setLoadingChats(false);
@@ -148,7 +155,7 @@ export default function ChatPanel({ user }: { user: User }) {
 
   const selected = useMemo(() => chats.find(chat => chat.id === selectedId), [chats, selectedId]);
 
-  const otherUid = selected?.participants.find(uid => uid !== user.uid) ?? '';
+  const otherUid = selected?.type === 'group' ? '' : (selected?.participants.find(uid => uid !== user.uid) ?? '');
 
   useEffect(() => {
     const updateVisibility = () => setPageVisible(
@@ -401,6 +408,38 @@ export default function ChatPanel({ user }: { user: User }) {
     }
   }
 
+  async function createGroup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (groupName.trim().length < 2 || groupMembers.length < 2 || busy) return;
+    setBusy(true); setError('');
+    try {
+      const action = httpsCallable<{ name: string; participantUids: string[] }, { conversationId: string }>(getFunctions(), 'createGroupConversation');
+      const response = await action({ name: groupName.trim(), participantUids: groupMembers });
+      setSelectedId(response.data.conversationId);
+      setGroupMembers([]); setGroupName(''); setSearchResults([]);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'تعذر إنشاء المجموعة. تأكد من أن الأعضاء أصدقاؤك.');
+    } finally { setBusy(false); }
+  }
+
+  function toggleGroupMember(uid: string) {
+    setGroupMembers(current => current.includes(uid) ? current.filter(value => value !== uid) : [...current, uid]);
+  }
+
+  async function blockSelectedUser() {
+    if (!otherUid || blockBusy) return;
+    if (!window.confirm('هل تريد حظر هذا المستخدم؟ سيُوقف التواصل المباشر وتُحذف الصداقة المتبادلة.')) return;
+    setBlockBusy(true); setError('');
+    try {
+      await httpsCallable(getFunctions(), 'blockUser')({ targetUid: otherUid });
+      setSelectedId('');
+      setMessages([]);
+      setError('تم حظر المستخدم وإيقاف المحادثة المباشرة.');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'تعذر حظر المستخدم.');
+    } finally { setBlockBusy(false); }
+  }
+
   async function toggleVoiceRecording() {
     if (mediaRecorderRef.current?.state === 'recording') {
       mediaRecorderRef.current.stop();
@@ -525,25 +564,30 @@ export default function ChatPanel({ user }: { user: User }) {
         <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="ابحث بالاسم…" className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-blue-500" />
         <button disabled={searching || searchTerm.trim().length < 2} className="w-full rounded-xl border border-blue-500/30 px-3 py-2 text-xs font-semibold text-blue-200 disabled:opacity-40">{searching ? 'جارٍ البحث…' : 'بحث عن مستخدمين'}</button>
       </form>
+      {groupMembers.length > 0 && <form onSubmit={createGroup} className="mb-3 space-y-2 rounded-xl border border-violet-400/20 bg-violet-500/5 p-3">
+        <p className="text-xs text-violet-200">أعضاء المجموعة المختارون: {groupMembers.length}</p>
+        <input value={groupName} onChange={event => setGroupName(event.target.value)} placeholder="اسم المجموعة" minLength={2} maxLength={80} className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm" />
+        <button disabled={busy || groupMembers.length < 2 || groupName.trim().length < 2} className="w-full rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold disabled:opacity-40">إنشاء مجموعة (3 أعضاء على الأقل)</button>
+      </form>}
       {searchResults.length > 0 && <div className="mb-3 space-y-2 rounded-xl border border-blue-500/20 bg-blue-500/5 p-2">
         <p className="px-2 text-xs text-slate-400">نتائج البحث</p>
         {searchResults.map(profile => <div key={profile.uid} className="flex items-center justify-between gap-2 rounded-lg bg-white/[.04] p-2">
           <div className="min-w-0"><p className="truncate text-sm font-semibold">{profile.displayName}</p><p className="truncate text-[10px] text-slate-500">{profile.city || profile.uid.slice(0, 8)}</p></div>
-          <button onClick={() => startConversation(profile.uid)} disabled={busy} className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold disabled:opacity-40">مراسلة</button>
+          <div className="flex shrink-0 gap-1"><button type="button" onClick={() => toggleGroupMember(profile.uid)} className={'rounded-lg border px-2 py-2 text-[10px] '+(groupMembers.includes(profile.uid)?'border-violet-400 bg-violet-500/20 text-violet-200':'border-white/10 text-slate-300')}>{groupMembers.includes(profile.uid)?'أُضيف':'للمجموعة'}</button><button type="button" onClick={() => startConversation(profile.uid)} disabled={busy} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold disabled:opacity-40">مراسلة</button></div>
         </div>)}
       </div>}
       {loadingChats ? <p className="p-4 text-sm text-slate-400">جارٍ تحميل المحادثات…</p> : chats.length === 0 ? <p className="rounded-xl bg-white/[.04] p-4 text-sm leading-7 text-slate-400">لا توجد محادثات مرتبطة بهذا الحساب بعد. عندما تبدأ محادثة من تطبيق IMI ستظهر هنا.</p> :
         <div className="space-y-2">{chats.map(chat => {
           const other = chat.participants.find(uid => uid !== user.uid);
           return <button key={chat.id} onClick={() => setSelectedId(chat.id)} className={`w-full rounded-xl p-3 text-right ${selectedId === chat.id ? 'bg-blue-600/20 ring-1 ring-blue-500/50' : 'bg-white/[.035] hover:bg-white/[.07]'}`}>
-            <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold">{other ? `مستخدم ${other.slice(0, 8)}` : 'محادثة جماعية'}</span><span className="shrink-0 text-[10px] text-slate-500">{timeLabel(chat.lastMessageAt)}</span></div>
+            <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold">{chat.type === 'group' ? (chat.name || 'مجموعة IMI') : (other ? `مستخدم ${other.slice(0, 8)}` : 'محادثة')}</span><span className="shrink-0 text-[10px] text-slate-500">{timeLabel(chat.lastMessageAt)}</span></div>
             <p className="mt-2 truncate text-xs text-slate-400">{chat.lastMessage || 'ابدأ المحادثة'}</p>
           </button>;
         })}</div>}
     </aside>
     <div className="flex min-h-[420px] flex-col">
-      <header className="border-b border-white/10 px-4 py-3"><h3 className="font-bold">{selected ? 'المحادثة' : 'الرسائل'}</h3><p className="mt-1 text-xs text-slate-500">{selected ? selected.id : 'اختر محادثة من القائمة'}</p>{otherTyping && <p className="mt-1 text-xs text-emerald-300" aria-live="polite">يكتب الآن…</p>}{otherPresenceAt && <p className="mt-1 text-[11px] text-slate-400">{presenceNow - otherPresenceAt.toMillis() < 90_000 ? 'نشط الآن في هذه المحادثة' : `آخر نشاط في المحادثة: ${timeLabel(otherPresenceAt)}`}</p>}</header>
-      <CallControls user={user} conversationId={selectedId || undefined} calleeUid={otherUid || undefined} />
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3"><div><h3 className="font-bold">{selected?.type === 'group' ? (selected.name || 'مجموعة IMI') : (selected ? 'المحادثة' : 'الرسائل')}</h3><p className="mt-1 text-xs text-slate-500">{selected ? selected.id : 'اختر محادثة من القائمة'}</p>{otherTyping && <p className="mt-1 text-xs text-emerald-300" aria-live="polite">يكتب الآن…</p>}{otherPresenceAt && <p className="mt-1 text-[11px] text-slate-400">{presenceNow - otherPresenceAt.toMillis() < 90_000 ? 'نشط الآن في هذه المحادثة' : `آخر نشاط في المحادثة: ${timeLabel(otherPresenceAt)}`}</p>}</div>{selected && selected.type !== 'group' && otherUid && <button type="button" onClick={blockSelectedUser} disabled={blockBusy} className="rounded-lg border border-red-400/25 px-3 py-2 text-xs text-red-200 disabled:opacity-40">{blockBusy?'جارٍ الحظر…':'حظر المستخدم'}</button>}</header>
+      {selected?.type !== 'group' && <CallControls user={user} conversationId={selectedId || undefined} calleeUid={otherUid || undefined} />}
       <div className="flex-1 space-y-3 overflow-y-auto p-4">
         {selectedId && hasMoreMessages && <button type="button" onClick={loadOlderMessages} disabled={loadingOlder || loadingMessages} className="mx-auto block rounded-lg border border-white/10 px-4 py-2 text-xs text-slate-300 disabled:opacity-50">{loadingOlder ? 'جارٍ تحميل الأقدم…' : 'تحميل رسائل أقدم'}</button>}
         {!selectedId && <p className="py-16 text-center text-sm text-slate-500">لا توجد محادثة محددة.</p>}

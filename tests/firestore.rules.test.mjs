@@ -39,7 +39,7 @@ before(async () => {
     await setDoc(doc(db, 'courses/math-basics/lessons/lesson-1'), { title: 'الأعداد', content: 'محتوى اختبار', published: true });
     await setDoc(doc(db, 'courses/draft-course'), { title: 'مسودة', published: false });
     await setDoc(doc(db, 'users/alice/enrollments/math-basics'), { courseId: 'math-basics', completedLessonIds: [] });
-    await setDoc(doc(db, 'calls/call-1'), { callerUid: 'alice', calleeUid: 'bob', conversationId: 'chat-1', kind: 'video', status: 'ringing', createdAt: new Date(), expiresAt: Timestamp.fromDate(new Date(Date.now() + 60000)) });
+    await setDoc(doc(db, 'calls/call-1'), { callerUid: 'alice', calleeUid: 'bob', conversationId: 'chat-1', kind: 'video', status: 'ringing', offerRevision: 0, answerRevision: -1, iceRestartCount: 0, createdAt: new Date(), expiresAt: Timestamp.fromDate(new Date(Date.now() + 60000)) });
     await setDoc(doc(db, 'conversations/chat-1'), {
       participants: ['alice', 'bob'],
       createdBy: 'alice',
@@ -674,7 +674,7 @@ test('WebRTC signaling is limited to call participants and each side owns its SD
     offer: { type: 'offer', sdp: 'v=0\\r\\n' }
   }));
   await assertFails((await import('firebase/firestore')).updateDoc(call, {
-    answer: { type: 'answer', sdp: 'v=0\\r\\n' }
+    answer: { type: 'answer', sdp: 'v=0\\r\\n' }, answerRevision: 0
   }));
   await assertSucceeds((await import('firebase/firestore')).updateDoc(call, {
     offer: { type: 'offer', sdp: 'v=0\\r\\n' }
@@ -687,14 +687,24 @@ test('WebRTC signaling is limited to call participants and each side owns its SD
       status: 'accepted'
     });
   });
-  await assertSucceeds((await import('firebase/firestore')).updateDoc(call, {
-    offer: { type: 'offer', sdp: 'v=1\\r\\n' }
-  }));
   await assertSucceeds((await import('firebase/firestore')).updateDoc(doc(bob, 'calls/call-1'), {
-    answer: { type: 'answer', sdp: 'v=0\\r\\n' }
+    answer: { type: 'answer', sdp: 'v=0\\r\\n' }, answerRevision: 0
   }));
+  await assertFails((await import('firebase/firestore')).updateDoc(doc(bob, 'calls/call-1'), {
+    answer: { type: 'answer', sdp: 'v=duplicate\\r\\n' }, answerRevision: 0
+  }));
+  await env.withSecurityRulesDisabled(async context => {
+    await (await import('firebase/firestore')).updateDoc(doc(context.firestore(), 'calls/call-1'), {
+      offer: { type: 'offer', sdp: 'v=1\\r\\n' },
+      offerRevision: 1,
+      iceRestartCount: 1
+    });
+  });
   await assertSucceeds((await import('firebase/firestore')).updateDoc(doc(bob, 'calls/call-1'), {
-    answer: { type: 'answer', sdp: 'v=1\\r\\n' }
+    answer: { type: 'answer', sdp: 'v=1\\r\\n' }, answerRevision: 1
+  }));
+  await assertFails((await import('firebase/firestore')).updateDoc(doc(bob, 'calls/call-1'), {
+    answer: { type: 'answer', sdp: 'v=2\\r\\n' }, answerRevision: 2
   }));
   await assertFails((await import('firebase/firestore')).updateDoc(doc(mallory, 'calls/call-1'), {
     status: 'accepted'

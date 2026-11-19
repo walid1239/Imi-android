@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start --hostname 0.0.0.0",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:health": "node scripts/health-smoke.mjs"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.0",

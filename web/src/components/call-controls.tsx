@@ -141,7 +141,9 @@ export default function CallControls({
       if (!event.candidate) return;
       const ownSide = role === 'caller' ? 'callerCandidates' : 'calleeCandidates';
       const candidate = event.candidate.toJSON();
-      const payload: Record<string, string | number> = { candidate: candidate.candidate };
+      const candidateText = event.candidate.candidate;
+      if (!candidateText) return;
+      const payload: Record<string, string | number> = { candidate: candidateText };
       if (candidate.sdpMid) payload.sdpMid = candidate.sdpMid;
       if (typeof candidate.sdpMLineIndex === 'number') payload.sdpMLineIndex = candidate.sdpMLineIndex;
       void addDoc(collection(db, 'calls', callId, ownSide), payload).catch(reason => {

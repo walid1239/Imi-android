@@ -179,6 +179,7 @@ service cloud.firestore {
       match /callerCandidates/{candidateId} {
         allow read: if isCallParticipant(callId);
         allow create: if isCallParticipant(callId)
+          && get(/databases/$(database)/documents/calls/$(callId)).data.status in ['ringing', 'accepted']
           && get(/databases/$(database)/documents/calls/$(callId)).data.callerUid == request.auth.uid
           && request.resource.data.keys().hasOnly(['candidate', 'sdpMid', 'sdpMLineIndex'])
           && request.resource.data.candidate is string
@@ -195,6 +196,7 @@ service cloud.firestore {
       match /calleeCandidates/{candidateId} {
         allow read: if isCallParticipant(callId);
         allow create: if isCallParticipant(callId)
+          && get(/databases/$(database)/documents/calls/$(callId)).data.status in ['ringing', 'accepted']
           && get(/databases/$(database)/documents/calls/$(callId)).data.calleeUid == request.auth.uid
           && request.resource.data.keys().hasOnly(['candidate', 'sdpMid', 'sdpMLineIndex'])
           && request.resource.data.candidate is string

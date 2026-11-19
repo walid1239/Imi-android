@@ -12,7 +12,7 @@ function validate(nodes){
   if(!n||typeof n.id!=='string'||!/^[a-z0-9][a-z0-9_-]{1,100}$/.test(n.id)||ids.has(n.id))throw new Error('Invalid or duplicate node id.');
   ids.add(n.id);
   if(!types.has(n.type)||typeof n.nameAr!=='string'||!n.nameAr.trim()||typeof n.nameFr!=='string'||typeof n.language!=='string'||!Number.isInteger(n.order)||typeof n.needsReview!=='boolean'||!['hidden','published'].includes(n.status))throw new Error(`Invalid node metadata: ${n.id}`);
-  if(n.needsReview===true&&n.status!=='hidden')throw new Error(`Unreviewed curriculum nodes must remain hidden: ${n.id}`);
+  if(n.needsReview!==true||n.status!=='hidden')throw new Error(`Every curriculum node must start hidden and await manual admin approval: ${n.id}`);
   if(n.type==='unit'&&n.status!=='hidden')throw new Error(`Unit placeholders must remain hidden: ${n.id}`);
  }
  for(const n of nodes)if(n.parentId!==null&&!ids.has(n.parentId))throw new Error(`Missing parent for ${n.id}`);

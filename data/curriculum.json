@@ -13,8 +13,8 @@
       "order": 1,
       "semester": null,
       "officialSource": "https://pw.men.gov.ma/%D8%A7%D9%84%D8%AA%D8%B1%D8%A8%D9%8A%D8%A9-%D8%A7%D9%84%D9%88%D8%B7%D9%86%D9%8A%D8%A9",
-      "needsReview": false,
-      "status": "published",
+      "needsReview": true,
+      "status": "hidden",
       "createdAt": null
     },
     {
@@ -1539,8 +1539,8 @@
       "order": 2,
       "semester": null,
       "officialSource": "https://pw.men.gov.ma/%D8%A7%D9%84%D8%AA%D8%B1%D8%A8%D9%8A%D8%A9-%D8%A7%D9%84%D9%88%D8%B7%D9%86%D9%8A%D8%A9",
-      "needsReview": false,
-      "status": "published",
+      "needsReview": true,
+      "status": "hidden",
       "createdAt": null
     },
     {
@@ -3359,8 +3359,8 @@
       "order": 3,
       "semester": null,
       "officialSource": "https://pw.men.gov.ma/%D8%A7%D9%84%D8%AA%D8%B1%D8%A8%D9%8A%D8%A9-%D8%A7%D9%84%D9%88%D8%B7%D9%86%D9%8A%D8%A9",
-      "needsReview": false,
-      "status": "published",
+      "needsReview": true,
+      "status": "hidden",
       "createdAt": null
     },
     {

@@ -16,10 +16,10 @@ async function main() {
     const n = d.data();
     if (n.type === 'lesson') throw new Error('Curriculum tree must not contain lesson nodes.');
     if (n.parentId !== null && !ids.has(n.parentId)) throw new Error('Missing parent for ' + d.id);
-    if (n.needsReview === true && n.status !== 'hidden') throw new Error('Unreviewed node must remain hidden: ' + d.id);
+    if (n.needsReview !== true || n.status !== 'hidden') throw new Error('Every seeded curriculum node must await manual admin approval: ' + d.id);
     if (n.type === 'unit' && n.status !== 'hidden') throw new Error('Unit placeholders must remain hidden.');
   }
   if (!courses.empty || !lessons.empty) throw new Error('Emulator must contain no seeded courses or lessons.');
-  process.stdout.write('PASS: 880 curriculum nodes, unreviewed nodes hidden, zero seeded courses and lessons.\\n');
+  process.stdout.write('PASS: 880 curriculum nodes all hidden pending manual admin approval; zero seeded courses and lessons.\\n');
 }
 main().catch(error => { process.stderr.write(String(error.stack || error) + '\n'); process.exitCode = 1; });

@@ -179,13 +179,21 @@ test('curriculum nodes expose published structure only and block client self-pro
       nameFr: 'Axes à documenter', language: 'unknown', order: 1,
       semester: null, officialSource: null, needsReview: true,
       status: 'hidden', createdAt: new Date(), updatedAt: new Date()
-    });
+    })
+    await setDoc(doc(db, 'curriculumNodes/unreviewed-published'), {
+      id: 'unreviewed-published', parentId: 'primary', type: 'subject', nameAr: 'مادة غير مراجعة',
+      nameFr: 'Matière non révisée', language: 'ar', order: 2,
+      semester: null, officialSource: null, needsReview: true,
+      status: 'published', createdAt: new Date(), updatedAt: new Date()
+    });;
   });
   const guestDb = env.unauthenticatedContext().firestore();
   const aliceDb = env.authenticatedContext('alice').firestore();
   const adminDb = env.authenticatedContext('admin', { admin: true }).firestore();
   await assertSucceeds(getDoc(doc(guestDb, 'curriculumNodes/primary')));
   await assertFails(getDoc(doc(guestDb, 'curriculumNodes/hidden-unit')));
+  await assertFails(getDoc(doc(guestDb, 'curriculumNodes/unreviewed-published')));
+  await assertSucceeds(getDoc(doc(adminDb, 'curriculumNodes/unreviewed-published')));
   await assertSucceeds(getDoc(doc(adminDb, 'curriculumNodes/hidden-unit')));
   await assertFails(setDoc(doc(aliceDb, 'curriculumNodes/forged'), {
     id: 'forged', parentId: null, type: 'level', nameAr: 'مزيف', nameFr: 'Fake',
@@ -567,6 +575,18 @@ test('teacher applications and profiles are private and client writes cannot gra
   await assertSucceeds(getDoc(doc(alice, 'teacherLiveSessions/mock-room')));
   await assertSucceeds(getDoc(doc(admin, 'moderationAudit/audit-1')));
   await assertFails(getDoc(doc(alice, 'moderationAudit/audit-1')));
+});
+
+test('teacher verification evidence is readable only by administrators', async () => {
+  const path = 'teacher-verification/alice/identity.pdf';
+  const applicant = env.authenticatedContext('alice').storage();
+  const otherUser = env.authenticatedContext('bob').storage();
+  const admin = env.authenticatedContext('admin', { admin: true }).storage();
+  const content = new Blob(['%PDF-1.4 test evidence'], { type: 'application/pdf' });
+  await assertSucceeds(uploadBytes(ref(applicant, path), content, { contentType: 'application/pdf' }));
+  await assertFails(getBytes(ref(applicant, path)));
+  await assertFails(getBytes(ref(otherUser, path)));
+  await assertSucceeds(getBytes(ref(admin, path)));
 });
 
 test('blocked direct conversation media becomes unreadable to both participants', async () => {

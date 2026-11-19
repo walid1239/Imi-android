@@ -522,6 +522,60 @@ test('non-members cannot write messages into another conversation', async () => 
 });
 
 
+test('teacher applications and profiles are private and client writes cannot grant roles', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'teacherApplications/alice'), { uid: 'alice', status: 'pending', evidencePath: 'teacher-verification/alice/id.pdf' });
+    await setDoc(doc(db, 'teacherProfiles/alice'), { uid: 'alice', published: true, profileComplete: true });
+    await setDoc(doc(db, 'teacherProfiles/bob'), { uid: 'bob', published: false, profileComplete: false });
+    await setDoc(doc(db, 'teacherLiveSessions/mock-room'), { teacherUid: 'alice', status: 'mock_scheduled' });
+    await setDoc(doc(db, 'teacherLiveSessions/real-room'), { teacherUid: 'alice', status: 'scheduled' });
+    await setDoc(doc(db, 'moderationAudit/audit-1'), { actorUid: 'admin', action: 'teacher_application_approved' });
+  });
+  const alice = env.authenticatedContext('alice').firestore();
+  const mallory = env.authenticatedContext('mallory').firestore();
+  const admin = env.authenticatedContext('admin', { admin: true }).firestore();
+  const guest = env.unauthenticatedContext().firestore();
+  await assertSucceeds(getDoc(doc(alice, 'teacherApplications/alice')));
+  await assertFails(getDoc(doc(mallory, 'teacherApplications/alice')));
+  await assertSucceeds(getDoc(doc(admin, 'teacherApplications/alice')));
+  await assertFails(setDoc(doc(alice, 'teacherApplications/alice'), { uid: 'alice', status: 'approved' }));
+  await assertSucceeds(getDoc(doc(guest, 'teacherProfiles/alice')));
+  await assertFails(getDoc(doc(mallory, 'teacherProfiles/bob')));
+  await assertSucceeds(getDoc(doc(alice, 'teacherProfiles/bob')));
+  await assertFails(setDoc(doc(alice, 'teacherProfiles/alice'), { published: true, verified: true }));
+  await assertSucceeds(getDoc(doc(guest, 'teacherLiveSessions/real-room')));
+  await assertFails(getDoc(doc(guest, 'teacherLiveSessions/mock-room')));
+  await assertSucceeds(getDoc(doc(alice, 'teacherLiveSessions/mock-room')));
+  await assertSucceeds(getDoc(doc(admin, 'moderationAudit/audit-1')));
+  await assertFails(getDoc(doc(alice, 'moderationAudit/audit-1')));
+});
+
+test('teacher verification files are write-only for applicant and readable only by admin', async () => {
+  const aliceStorage = env.authenticatedContext('alice').storage();
+  const malloryStorage = env.authenticatedContext('mallory').storage();
+  const adminStorage = env.authenticatedContext('admin', { admin: true }).storage();
+  const evidence = ref(aliceStorage, 'teacher-verification/alice/identity.pdf');
+  await assertSucceeds(uploadBytes(evidence, new Blob(['pdf-data'], { type: 'application/pdf' })));
+  await assertFails(getBytes(evidence));
+  await assertFails(getBytes(ref(malloryStorage, 'teacher-verification/alice/identity.pdf')));
+  await assertSucceeds(getBytes(ref(adminStorage, 'teacher-verification/alice/identity.pdf')));
+  await assertFails(uploadBytes(ref(malloryStorage, 'teacher-verification/alice/attack.pdf'), new Blob(['x'], { type: 'application/pdf' })));
+  await assertFails(uploadBytes(ref(aliceStorage, 'teacher-verification/alice/large.exe'), new Blob(['x'], { type: 'application/octet-stream' })));
+});
+
+test('only verified teachers can upload avatars and published teacher avatars are public', async () => {
+  const verifiedStorage = env.authenticatedContext('alice', { teacherVerified: true }).storage();
+  const unverifiedStorage = env.authenticatedContext('bob').storage();
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'teacherProfiles/alice'), { uid: 'alice', published: true });
+  });
+  const avatar = ref(verifiedStorage, 'teachers/alice/avatar/profile.png');
+  await assertSucceeds(uploadBytes(avatar, new Blob(['png-data'], { type: 'image/png' })));
+  await assertFails(uploadBytes(ref(unverifiedStorage, 'teachers/bob/avatar/profile.png'), new Blob(['png-data'], { type: 'image/png' })));
+  await assertSucceeds(getBytes(ref(env.unauthenticatedContext().storage(), 'teachers/alice/avatar/profile.png')));
+});
+
 test('users can upload only their own avatar files', async () => {
   const aliceStorage = env.authenticatedContext('alice').storage();
   const bobStorage = env.authenticatedContext('bob').storage();

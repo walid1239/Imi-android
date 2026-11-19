@@ -769,7 +769,7 @@ test('Reels storage keeps uploads private until server approval', async () => {
   ));
   await assertSucceeds(getBytes(ref(bobStorage, 'reels/alice/approved2/video.mp4')));
   await assertFails(uploadBytes(
-    ref(bobStorage, 'reels/bob/attacker01/video.mp4'),
+    ref(bobStorage, 'reels/alice/attacker01/video.mp4'),
     new Blob(['video-data'], { type: 'video/mp4' })
   ));
   await assertFails(uploadBytes(

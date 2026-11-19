@@ -1,5 +1,5 @@
 name: IMI Android CI
-# Keep manual dispatch and PR/push validation available on the feature branch.
+# Keep manual dispatch and PR/push validation available on the feature branch; emulator checks run in Web CI.
 
 on:
   push:

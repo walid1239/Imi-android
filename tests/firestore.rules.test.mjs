@@ -185,7 +185,7 @@ test('curriculum nodes expose published structure only and block client self-pro
       nameFr: 'Matière non révisée', language: 'ar', order: 2,
       semester: null, officialSource: null, needsReview: true,
       status: 'published', createdAt: new Date(), updatedAt: new Date()
-    });;
+    });
   });
   const guestDb = env.unauthenticatedContext().firestore();
   const aliceDb = env.authenticatedContext('alice').firestore();

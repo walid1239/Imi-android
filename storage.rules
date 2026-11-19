@@ -86,6 +86,33 @@ service firebase.storage {
         && !firestore.exists(/databases/(default)/documents/conversations/$(conversationId)/messages/$(messageId));
     }
 
+    // Identity documents are write-only for the applicant and readable only by admins.
+    match /teacher-verification/{uid}/{fileName} {
+      allow read: if signedIn() && request.auth.token.admin == true;
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('(application/pdf|image/jpeg|image/png)');
+      allow update, delete: if false;
+    }
+
+    // Verified teachers may upload a small profile image; published profile images are public.
+    match /teachers/{uid}/avatar/{fileName} {
+      allow read: if signedIn() && request.auth.uid == uid
+        || (firestore.exists(/databases/(default)/documents/teacherProfiles/$(uid))
+          && firestore.get(/databases/(default)/documents/teacherProfiles/$(uid)).data.published == true);
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.auth.token.teacherVerified == true
+        && request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow update, delete: if false;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

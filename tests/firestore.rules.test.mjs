@@ -91,6 +91,20 @@ test('learners can read published Academy content but cannot publish or modify i
   await assertFails(setDoc(doc(aliceDb, 'courses/math-basics/lessons/lesson-2'), { title: 'درس مزيف', published: true }));
 });
 
+test('only verified Academy admins can read draft content; client writes remain denied', async () => {
+  const learnerDb = env.authenticatedContext('learner').firestore();
+  const adminDb = env.authenticatedContext('academy-admin', { admin: true }).firestore();
+  await assertFails(getDoc(doc(learnerDb, 'courses/draft-course')));
+  await assertSucceeds(getDoc(doc(adminDb, 'courses/draft-course')));
+  await assertSucceeds(getDoc(doc(adminDb, 'courses/math-basics/lessons/lesson-1')));
+  await assertFails(setDoc(doc(adminDb, 'courses/admin-forged-course'), {
+    title: 'كتابة من العميل', published: true
+  }));
+  await assertFails(setDoc(doc(adminDb, 'courses/draft-course/lessons/admin-forged-lesson'), {
+    title: 'درس مزيف', published: true
+  }));
+});
+
 test('enrollment and lesson progress are private and server-write-only', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();

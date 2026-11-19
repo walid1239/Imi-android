@@ -711,48 +711,68 @@ test('only conversation members can upload conversation media', async () => {
   ));
 });
 
-test('Reels metadata is owner-created and immutable to clients', async () => {
+test('Reels metadata is server-created and visible to others only after approval', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();
-  const payload = {
-    ownerUid: 'alice',
-    caption: 'مقطع اختبار قواعد الأمان',
-    videoUrl: 'https://example.invalid/reels/alice/test.mp4',
-    storagePath: 'reels/alice/test.mp4',
-    contentType: 'video/mp4',
-    createdAt: serverTimestamp()
-  };
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'reels/pending01'), {
+      ownerUid: 'alice', caption: 'قيد المراجعة',
+      storagePath: 'reels/alice/pending01/video.mp4', contentType: 'video/mp4',
+      status: 'pending', createdAt: new Date()
+    });
+    await setDoc(doc(db, 'reels/approved1'), {
+      ownerUid: 'alice', caption: 'مقطع تمت الموافقة عليه',
+      storagePath: 'reels/alice/approved1/video.mp4', contentType: 'video/mp4',
+      status: 'approved', createdAt: new Date(), reviewedBy: 'admin'
+    });
+  });
 
-  await assertSucceeds(setDoc(doc(aliceDb, 'reels/reel-1'), payload));
-  await assertSucceeds(getDoc(doc(bobDb, 'reels/reel-1')));
-  await assertFails(setDoc(doc(bobDb, 'reels/reel-2'), { ...payload, ownerUid: 'alice' }));
-  await assertFails(setDoc(doc(aliceDb, 'reels/reel-3'), { ...payload, ownerUid: 'bob' }));
-  await assertFails(setDoc(doc(aliceDb, 'reels/reel-1'), { ...payload, caption: 'تعديل غير مسموح' }));
+  await assertSucceeds(getDoc(doc(aliceDb, 'reels/pending01')));
+  await assertFails(getDoc(doc(bobDb, 'reels/pending01')));
+  await assertSucceeds(getDoc(doc(bobDb, 'reels/approved1')));
+  const payload = {
+    ownerUid: 'alice', caption: 'محاولة نشر مباشرة',
+    storagePath: 'reels/alice/forged01/video.mp4', contentType: 'video/mp4',
+    status: 'approved', createdAt: serverTimestamp()
+  };
+  await assertFails(setDoc(doc(aliceDb, 'reels/forged01'), payload));
+  await assertFails(setDoc(doc(aliceDb, 'reels/pending01'), { ...payload, caption: 'تعديل غير مسموح' }));
 });
 
-test('Reels storage accepts owner video uploads and rejects foreign or non-video uploads', async () => {
+test('Reels storage keeps uploads private until server approval', async () => {
   const aliceStorage = env.authenticatedContext('alice').storage();
   const bobStorage = env.authenticatedContext('bob').storage();
-  const aliceVideo = ref(aliceStorage, 'reels/alice/test.mp4');
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'reels/pending02'), {
+      ownerUid: 'alice', status: 'pending',
+      storagePath: 'reels/alice/pending02/video.mp4'
+    });
+    await setDoc(doc(db, 'reels/approved2'), {
+      ownerUid: 'alice', status: 'approved',
+      storagePath: 'reels/alice/approved2/video.mp4'
+    });
+  });
 
+  const pendingVideo = ref(aliceStorage, 'reels/alice/pending02/video.mp4');
+  await assertSucceeds(uploadBytes(pendingVideo, new Blob(['video-data'], { type: 'video/mp4' })));
+  await assertSucceeds(getBytes(pendingVideo));
+  await assertFails(getBytes(ref(bobStorage, 'reels/alice/pending02/video.mp4')));
   await assertSucceeds(uploadBytes(
-    aliceVideo,
+    ref(aliceStorage, 'reels/alice/approved2/video.mp4'),
+    new Blob(['approved-video'], { type: 'video/mp4' })
+  ));
+  await assertSucceeds(getBytes(ref(bobStorage, 'reels/alice/approved2/video.mp4')));
+  await assertFails(uploadBytes(
+    ref(bobStorage, 'reels/bob/attacker01/video.mp4'),
     new Blob(['video-data'], { type: 'video/mp4' })
   ));
   await assertFails(uploadBytes(
-    aliceVideo,
-    new Blob(['replacement-video'], { type: 'video/mp4' })
-  ));
-  await assertSucceeds(getBytes(ref(bobStorage, 'reels/alice/test.mp4')));
-  await assertFails(uploadBytes(
-    ref(bobStorage, 'reels/alice/attacker.mp4'),
-    new Blob(['video-data'], { type: 'video/mp4' })
-  ));
-  await assertFails(uploadBytes(
-    ref(aliceStorage, 'reels/alice/not-a-video.jpg'),
+    ref(aliceStorage, 'reels/alice/invalid01/video.jpg'),
     new Blob(['image-data'], { type: 'image/jpeg' })
   ));
-  await assertFails(getBytes(ref(env.unauthenticatedContext().storage(), 'reels/alice/test.mp4')));
+  await assertFails(getBytes(ref(env.unauthenticatedContext().storage(), 'reels/alice/approved2/video.mp4')));
 });
 
 test('clients cannot create statuses because trusted server time is required', async () => {

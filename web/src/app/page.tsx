@@ -4,7 +4,7 @@ const sections = [
   { href: '/login', title: 'المحادثات', detail: 'تواصل مع أصدقائك برسائل متزامنة.' },
   { href: '/login', title: 'الحالات', detail: 'شارك لحظاتك وتابع تحديثات أصدقائك.' },
   { href: '/login', title: 'Reels', detail: 'اكتشف مقاطع الفيديو القصيرة.' },
-  { href: '/login', title: 'الأكاديمية', detail: 'تعلّم وتابع تقدمك.' },
+  { href: '/academy', title: 'الأكاديمية', detail: 'تعلّم وتابع تقدمك دون حساب.' },
 ];
 
 export default function HomePage() {
@@ -30,7 +30,7 @@ export default function HomePage() {
         </div>
       </section>
       <section id="features" className="grid gap-4 border-t border-white/10 py-8 sm:grid-cols-2 lg:grid-cols-4">{sections.map((item) => <div key={item.title} className="rounded-2xl bg-white/[.035] p-4"><h2 className="font-bold">{item.title}</h2><p className="mt-2 text-sm leading-6 text-slate-400">{item.detail}</p></div>)}</section>
-      <footer className="border-t border-white/10 py-5 text-center text-xs text-slate-500">IMI · تواصل وتعلّم</footer>
+      <footer className="flex flex-wrap items-center justify-center gap-4 border-t border-white/10 py-5 text-xs text-slate-500"><span>IMI · تواصل وتعلّم</span><Link href="/privacy" className="hover:text-blue-300">الخصوصية</Link><Link href="/terms" className="hover:text-blue-300">شروط الاستخدام</Link><Link href="/academy" className="hover:text-blue-300">الأكاديمية</Link></footer>
     </main>
   );
 }

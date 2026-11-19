@@ -561,11 +561,13 @@ test('teacher applications and profiles are private and client writes cannot gra
   await assertFails(getDoc(doc(mallory, 'teacherApplications/alice')));
   await assertSucceeds(getDoc(doc(admin, 'teacherApplications/alice')));
   await assertFails(setDoc(doc(alice, 'teacherApplications/alice'), { uid: 'alice', status: 'approved' }));
-  await assertSucceeds(getDoc(doc(guest, 'teacherProfiles/alice')));
+  await assertFails(getDoc(doc(guest, 'teacherProfiles/alice')));
+  await assertSucceeds(getDoc(doc(mallory, 'teacherProfiles/alice')));
   await assertFails(getDoc(doc(mallory, 'teacherProfiles/bob')));
   await assertSucceeds(getDoc(doc(alice, 'teacherProfiles/bob')));
   await assertFails(setDoc(doc(alice, 'teacherProfiles/alice'), { published: true, verified: true }));
-  await assertSucceeds(getDoc(doc(guest, 'teacherLiveSessions/real-room')));
+  await assertFails(getDoc(doc(guest, 'teacherLiveSessions/real-room')));
+  await assertSucceeds(getDoc(doc(mallory, 'teacherLiveSessions/real-room')));
   await assertFails(getDoc(doc(guest, 'teacherLiveSessions/mock-room')));
   await assertSucceeds(getDoc(doc(alice, 'teacherLiveSessions/mock-room')));
   await assertSucceeds(getDoc(doc(admin, 'moderationAudit/audit-1')));
@@ -611,7 +613,8 @@ test('teacher content drafts stay private until server publication', async () =>
   await assertSucceeds(getDoc(doc(alice, 'teacherContent/draft-1')));
   await assertFails(getDoc(doc(bob, 'teacherContent/draft-1')));
   await assertFails(getDoc(doc(guest, 'teacherContent/draft-1')));
-  await assertSucceeds(getDoc(doc(guest, 'teacherContent/published-1')));
+  await assertFails(getDoc(doc(guest, 'teacherContent/published-1')));
+  await assertSucceeds(getDoc(doc(bob, 'teacherContent/published-1')));
   await assertSucceeds(getDoc(doc(admin, 'teacherContent/draft-1')));
   await assertFails(setDoc(doc(alice, 'teacherContent/forged'), { ownerUid: 'alice', published: true }));
 });

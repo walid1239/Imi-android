@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { User } from 'firebase/auth';
-import { addDoc, collection, limit, onSnapshot, orderBy, query, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, Timestamp } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase/client';
 
@@ -42,8 +42,8 @@ export default function ReelsPanel({ user }: { user: User }) {
     setBusy(true); setProgress(0); setError('');
     const reelRef = collection(db, 'reels');
     try {
-      const { doc } = await import('firebase/firestore');
-      const id = doc(reelRef).id;
+      const reelDocument = doc(reelRef);
+      const id = reelDocument.id;
       const extension = file.type === 'video/webm' ? 'webm' : 'mp4';
       const path = `reels/${user.uid}/${id}.${extension}`;
       const task = uploadBytesResumable(ref(storage, path), file, { contentType: file.type });
@@ -57,7 +57,7 @@ export default function ReelsPanel({ user }: { user: User }) {
           }
         );
       });
-      await addDoc(reelRef, {
+      await setDoc(reelDocument, {
         ownerUid: user.uid,
         caption: caption.trim().slice(0, 300),
         videoUrl: url,

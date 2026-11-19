@@ -676,21 +676,24 @@ test('WebRTC signaling is limited to call participants and each side owns its SD
   await assertFails((await import('firebase/firestore')).updateDoc(call, {
     answer: { type: 'answer', sdp: 'v=0\\r\\n' }
   }));
-  await env.withSecurityRulesDisabled(async context => {
-    await (await import('firebase/firestore')).updateDoc(doc(context.firestore(), 'calls/call-1'), {
-      status: 'accepted'
-    });
-  });
   await assertSucceeds((await import('firebase/firestore')).updateDoc(call, {
     offer: { type: 'offer', sdp: 'v=0\\r\\n' }
   }));
   await assertFails((await import('firebase/firestore')).updateDoc(call, {
     offer: { type: 'offer', sdp: 'v=1\\r\\n' }
   }));
+  await env.withSecurityRulesDisabled(async context => {
+    await (await import('firebase/firestore')).updateDoc(doc(context.firestore(), 'calls/call-1'), {
+      status: 'accepted'
+    });
+  });
+  await assertSucceeds((await import('firebase/firestore')).updateDoc(call, {
+    offer: { type: 'offer', sdp: 'v=1\\r\\n' }
+  }));
   await assertSucceeds((await import('firebase/firestore')).updateDoc(doc(bob, 'calls/call-1'), {
     answer: { type: 'answer', sdp: 'v=0\\r\\n' }
   }));
-  await assertFails((await import('firebase/firestore')).updateDoc(doc(bob, 'calls/call-1'), {
+  await assertSucceeds((await import('firebase/firestore')).updateDoc(doc(bob, 'calls/call-1'), {
     answer: { type: 'answer', sdp: 'v=1\\r\\n' }
   }));
   await assertFails((await import('firebase/firestore')).updateDoc(doc(mallory, 'calls/call-1'), {

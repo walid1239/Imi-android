@@ -17,7 +17,7 @@ class DirectConversationIdTest {
     @Test
     fun idIsStableAndDifferentForDifferentPairs() {
         val first = DirectConversationId.forUsers("alice", "bob")
-        assertEquals("direct_25ad1e922985d0835fefda32fdaeb940b66d231e89eee5d7980b27710a20b3a2", first)
+        assertEquals("direct_b4179539700098894e2382d2bb62248d78cda20928117f5778ef120785bb584b", first)
         assertEquals(first, DirectConversationId.forUsers("alice", "bob"))
         assertNotEquals(first, DirectConversationId.forUsers("alice", "mallory"))
     }

@@ -100,6 +100,8 @@ jobs:
           distribution: temurin
           java-version: '17'
       - run: npm install --no-audit --no-fund
+      - name: Install Functions Admin SDK dependencies for Emulator-only seed scripts
+        run: npm install --prefix functions --no-audit --no-fund
       - run: npm run emulators:test
       - name: Verify curriculum and legacy lesson seeds in a disposable Firestore Emulator
         run: >-

@@ -5,6 +5,7 @@ import { User, getIdTokenResult } from 'firebase/auth';
 import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '@/lib/firebase/client';
+import CurriculumAdminPanel from '@/components/curriculum-admin-panel';
 
 type Course = { id: string; title: string; description: string; category: string; published: boolean };
 type Lesson = { id: string; title: string; content: string; videoUrl?: string; order: number; published: boolean; sourceType?: string; sourceName?: string; reviewStatus?: string };
@@ -130,6 +131,8 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
       <h2 className="mt-2 text-2xl font-black">إدارة الأكاديمية</h2>
       <p className="mt-2 text-sm text-slate-400">أنشئ محتوى حقيقياً كمسودات ثم انشره بعد مراجعته. صلاحية المشرف يتحقق منها Firebase.</p>
     </header>
+
+    <CurriculumAdminPanel />
 
     <section className="space-y-3 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
       <div className="flex items-center justify-between"><h3 className="font-bold">طلبات توثيق الأساتذة ({teacherApplications.filter(item => item.status === 'pending').length})</h3><span className="text-xs text-slate-500">أحدث 100 طلب</span></div>

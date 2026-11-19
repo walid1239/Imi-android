@@ -491,7 +491,8 @@ test('incoming call queries return only calls addressed to the authenticated rec
   const incoming = await getDocs(query(
     collection(bobDb, 'calls'),
     where('calleeUid', '==', 'bob'),
-    where('status', '==', 'ringing')
+    where('status', '==', 'ringing'),
+    where('expiresAt', '>', Timestamp.now())
   ));
   assert.equal(incoming.size, 1);
   await assertFails(getDocs(query(

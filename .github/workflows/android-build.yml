@@ -127,10 +127,10 @@ jobs:
       - name: Install security test dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Build trusted Firebase Functions
+      - name: Build and unit-test trusted Firebase Functions
         run: |
           npm install --prefix functions --no-audit --no-fund
-          npm run build --prefix functions
+          npm test --prefix functions
 
       - name: Run Firestore rules tests in emulator
         run: npx --yes firebase-tools@13.29.2 emulators:exec --only firestore,storage --project demo-imi-security "npm run test:rules"

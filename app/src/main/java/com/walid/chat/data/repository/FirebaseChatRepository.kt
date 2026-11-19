@@ -147,26 +147,49 @@ class FirebaseChatRepository(
         val profile = firestore.collection("publicProfiles").document(otherUid).get().await()
         require(profile.exists()) { "هذا الحساب غير موجود في الملفات العامة" }
 
-        val existing = firestore.collection("conversations")
+        val conversationId = DirectConversationId.forUsers(uid, otherUid)
+        val conversation = firestore.collection("conversations").document(conversationId)
+        val directSnapshot = conversation.get().await()
+        if (directSnapshot.exists()) {
+            val members = (directSnapshot.get("participants") as? List<*>)?.filterIsInstance<String>().orEmpty()
+            require(members.size == 2 && members.toSet() == setOf(uid, otherUid)) {
+                "معرّف المحادثة مرتبط بمشاركين مختلفين"
+            }
+            return@runCatching conversationId
+        }
+
+        // Preserve compatibility with conversations created by older app versions,
+        // which used random Firestore document IDs.
+        val legacyExisting = firestore.collection("conversations")
             .whereArrayContains("participants", uid)
+            .orderBy("lastMessageAt", Query.Direction.DESCENDING)
             .get()
             .await()
             .documents
-            .firstOrNull { doc ->
-                val members = (doc.get("participants") as? List<*>)?.filterIsInstance<String>()?.toSet()
+            .firstOrNull { document ->
+                val members = (document.get("participants") as? List<*>)?.filterIsInstance<String>()?.toSet()
                 members == setOf(uid, otherUid)
             }
-        if (existing != null) return@runCatching existing.id
+        if (legacyExisting != null) return@runCatching legacyExisting.id
 
-        val conversation = firestore.collection("conversations").document()
-        conversation.set(mapOf(
-            "participants" to listOf(uid, otherUid).sorted(),
-            "createdBy" to uid,
-            "createdAt" to FieldValue.serverTimestamp(),
-            "lastMessage" to "",
-            "lastMessageAt" to FieldValue.serverTimestamp()
-        )).await()
-        conversation.id
+        firestore.runTransaction { transaction ->
+            val current = transaction.get(conversation)
+            if (current.exists()) {
+                val members = (current.get("participants") as? List<*>)?.filterIsInstance<String>().orEmpty()
+                require(members.size == 2 && members.toSet() == setOf(uid, otherUid)) {
+                    "معرّف المحادثة مرتبط بمشاركين مختلفين"
+                }
+            } else {
+                transaction.set(conversation, mapOf(
+                    "participants" to listOf(uid, otherUid).sorted(),
+                    "createdBy" to uid,
+                    "createdAt" to FieldValue.serverTimestamp(),
+                    "lastMessage" to "",
+                    "lastMessageAt" to FieldValue.serverTimestamp()
+                ))
+            }
+            conversationId
+        }.await()
     }
 
     private fun requireUid(): String =

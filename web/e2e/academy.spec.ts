@@ -109,10 +109,23 @@ test('admin claim exposes the protected Academy administration panel', async ({ 
   await expect(page.getByRole('heading', { name: 'إدارة الأكاديمية' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'إدارة شجرة المنهاج' })).toBeVisible();
   await expect(page.getByText('أستاذ اختبار آلي')).toBeVisible();
+  await expect(page.getByText('درس أستاذ اختبار منشور')).toBeVisible();
+  await page.getByRole('button', { name: 'اعتماد ونشر' }).click();
+  await expect(page.getByRole('status')).toContainText('تم نشر المحتوى بعد المراجعة');
   await page.getByRole('button', { name: 'اعتماد التوثيق' }).click();
   await expect(page.getByRole('status')).toContainText('تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق');
 });
 
+
+
+test('approved teacher content appears under its curriculum subject', async ({ page }) => {
+  await page.goto('/academy');
+  await page.getByLabel('المستوى').selectOption('e2e-primary');
+  await page.getByLabel('الشعبة أو المسلك').selectOption('e2e-primary-track');
+  await page.getByRole('button', { name: /الرياضيات - اختبار/ }).click();
+  await expect(page.getByText('درس أستاذ اختبار منشور')).toBeVisible();
+  await expect(page.getByText(/هذا نص تجريبي طويل بما يكفي/)).toBeVisible();
+});
 
 test('teacher application and studio routes explain verification gate', async ({ page }) => {
   await login(page, email('b', test.info().project.name));

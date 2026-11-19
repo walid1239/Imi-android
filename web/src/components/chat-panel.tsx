@@ -70,6 +70,7 @@ export default function ChatPanel({ user }: { user: User }) {
   const [groupMembers, setGroupMembers] = useState<string[]>([]);
   const [groupName, setGroupName] = useState('');
   const [blockBusy, setBlockBusy] = useState(false);
+  const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
   const [profileName, setProfileName] = useState(user.displayName || user.email?.split('@')[0] || 'مستخدم IMI');
   const [profileCity, setProfileCity] = useState('المغرب');
   const [profileReady, setProfileReady] = useState(false);
@@ -92,6 +93,10 @@ export default function ChatPanel({ user }: { user: User }) {
     });
     return () => { active = false; };
   }, [user.uid, user.displayName, user.email]);
+
+  useEffect(() => onSnapshot(collection(db, 'users', user.uid, 'blockedUsers'), snapshot => {
+    setBlockedUsers(snapshot.docs.map(item => item.id));
+  }, reason => setError(reason.message)), [user.uid]);
 
   useEffect(() => {
     const q = query(
@@ -426,6 +431,27 @@ export default function ChatPanel({ user }: { user: User }) {
     setGroupMembers(current => current.includes(uid) ? current.filter(value => value !== uid) : [...current, uid]);
   }
 
+  async function addSelectedGroupMembers() {
+    if (!selectedId || selected?.type !== 'group' || groupMembers.length === 0 || busy) return;
+    setBusy(true); setError('');
+    try {
+      await httpsCallable(getFunctions(), 'addGroupParticipants')({ conversationId: selectedId, participantUids: groupMembers });
+      setGroupMembers([]);
+      setNotice('تمت إضافة الأعضاء إلى المجموعة.');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'تعذرت إضافة الأعضاء. يجب أن تكون صديقاً لكل عضو جديد ومشرفاً في المجموعة.');
+    } finally { setBusy(false); }
+  }
+
+  async function unblock(uid: string) {
+    try {
+      await httpsCallable(getFunctions(), 'unblockUser')({ targetUid: uid });
+      setError('');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'تعذر إلغاء الحظر.');
+    }
+  }
+
   async function blockSelectedUser() {
     if (!otherUid || blockBusy) return;
     if (!window.confirm('هل تريد حظر هذا المستخدم؟ سيُوقف التواصل المباشر وتُحذف الصداقة المتبادلة.')) return;
@@ -564,11 +590,14 @@ export default function ChatPanel({ user }: { user: User }) {
         <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="ابحث بالاسم…" className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-blue-500" />
         <button disabled={searching || searchTerm.trim().length < 2} className="w-full rounded-xl border border-blue-500/30 px-3 py-2 text-xs font-semibold text-blue-200 disabled:opacity-40">{searching ? 'جارٍ البحث…' : 'بحث عن مستخدمين'}</button>
       </form>
-      {groupMembers.length > 0 && <form onSubmit={createGroup} className="mb-3 space-y-2 rounded-xl border border-violet-400/20 bg-violet-500/5 p-3">
-        <p className="text-xs text-violet-200">أعضاء المجموعة المختارون: {groupMembers.length}</p>
-        <input value={groupName} onChange={event => setGroupName(event.target.value)} placeholder="اسم المجموعة" minLength={2} maxLength={80} className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm" />
-        <button disabled={busy || groupMembers.length < 2 || groupName.trim().length < 2} className="w-full rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold disabled:opacity-40">إنشاء مجموعة (3 أعضاء على الأقل)</button>
-      </form>}
+      {groupMembers.length > 0 && <div className="mb-3 space-y-2 rounded-xl border border-violet-400/20 bg-violet-500/5 p-3">
+        <p className="text-xs text-violet-200">أعضاء مختارون: {groupMembers.length}</p>
+        {selected?.type === 'group' ? <button type="button" onClick={addSelectedGroupMembers} disabled={busy} className="w-full rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold disabled:opacity-40">إضافة إلى المجموعة الحالية</button> : <form onSubmit={createGroup} className="space-y-2">
+          <input value={groupName} onChange={event => setGroupName(event.target.value)} placeholder="اسم المجموعة" minLength={2} maxLength={80} className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm" />
+          <button disabled={busy || groupMembers.length < 2 || groupName.trim().length < 2} className="w-full rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold disabled:opacity-40">إنشاء مجموعة (3 أعضاء على الأقل)</button>
+        </form>}
+      </div>}
+      {blockedUsers.length > 0 && <div className="mb-3 rounded-xl border border-red-400/20 bg-red-500/5 p-3"><p className="mb-2 text-xs font-bold text-red-200">الحسابات المحظورة</p>{blockedUsers.map(uid=><div key={uid} className="flex items-center justify-between gap-2 py-1"><span className="text-xs text-slate-300">{uid.slice(0,12)}</span><button type="button" onClick={()=>unblock(uid)} className="rounded border border-white/10 px-2 py-1 text-[10px]">إلغاء الحظر</button></div>)}</div>}
       {searchResults.length > 0 && <div className="mb-3 space-y-2 rounded-xl border border-blue-500/20 bg-blue-500/5 p-2">
         <p className="px-2 text-xs text-slate-400">نتائج البحث</p>
         {searchResults.map(profile => <div key={profile.uid} className="flex items-center justify-between gap-2 rounded-lg bg-white/[.04] p-2">

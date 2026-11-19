@@ -37,6 +37,7 @@ async function curriculumIds(value: unknown, type: "level" | "subject"): Promise
 export const submitTeacherApplication = onCall<AppInput>(async request => {
   const userId = request.auth?.uid;
   if (!userId) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  if (request.auth?.token.teacherVerified === true) throw new HttpsError("already-exists", "هذا الحساب موثق كأستاذ بالفعل.");
   const fullName = clean(request.data?.fullName, 3, 80);
   const evidencePath = clean(request.data?.evidencePath, 10, 300);
   if (!fullName) throw new HttpsError("invalid-argument", "الاسم الكامل مطلوب.");
@@ -119,8 +120,10 @@ export const saveTeacherProfile = onCall<ProfileInput>(async request => {
   if (!String(metadata.contentType ?? "").startsWith("image/") || Number(metadata.size ?? 0) > 5 * 1024 * 1024) {
     throw new HttpsError("invalid-argument", "الصورة غير صالحة أو تتجاوز 5 ميغابايت.");
   }
+  const application = await getFirestore().collection("teacherApplications").doc(userId).get();
+  const displayName = typeof application.get("fullName") === "string" ? application.get("fullName") : "أستاذ IMI";
   await getFirestore().collection("teacherProfiles").doc(userId).set({
-    uid: userId, bio, photoPath, subjectIds, levelIds, verified: true, badge: "أستاذ موثّق",
+    uid: userId, displayName, bio, photoPath, subjectIds, levelIds, verified: true, badge: "أستاذ موثّق",
     contentAgreement: true, childSafetyAgreement: true, profileComplete: true, published: true,
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
@@ -270,6 +273,7 @@ export const reviewTeacherContent = onCall<ReviewTeacherContentInput>(async requ
     status: approved ? "published" : "rejected",
     published: approved,
     reviewStatus: approved ? "approved" : "rejected",
+    needsHumanReview: !approved,
     reviewedBy: request.auth.uid,
     reviewedAt: FieldValue.serverTimestamp(),
     reviewNote: typeof request.data.note === "string" ? request.data.note.trim().slice(0, 500) : "",

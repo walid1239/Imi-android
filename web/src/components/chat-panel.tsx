@@ -152,7 +152,7 @@ export default function ChatPanel({ user }: { user: User }) {
         collection(db, 'publicProfiles'),
         orderBy('displayName'),
         startAt(term),
-        endAt(term + '\\uf8ff'),
+        endAt(term + '\uf8ff'),
         limit(15)
       );
       const snapshot = await getDocs(q);

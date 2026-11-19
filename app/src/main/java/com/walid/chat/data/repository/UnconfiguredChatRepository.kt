@@ -13,6 +13,9 @@ class UnconfiguredChatRepository : ChatRepository {
         emit(Result.failure(IllegalStateException("مزامنة الرسائل غير مفعّلة قبل ربط Firebase")))
     }
 
+    override suspend fun loadOlderMessages(chatId: String, before: ChatMessage): Result<List<ChatMessage>> =
+        Result.failure(IllegalStateException("تحميل الرسائل الأقدم غير مفعّل قبل ربط Firebase"))
+
     override suspend fun sendMessage(chatId: String, text: String): Result<Unit> =
         Result.failure(IllegalStateException("إرسال الرسائل غير مفعّل قبل ربط Firebase"))
 }

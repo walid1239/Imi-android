@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase-admin/app";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
+import { getMessaging } from "firebase-admin/messaging";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { messageNotificationPreview } from "./notificationLogic";
@@ -412,9 +413,9 @@ export const notifyConversationMessage = onDocumentCreated(
     await Promise.all(recipients.map(async (recipientUid) => {
       const notificationRef = db.collection("users").doc(recipientUid)
         .collection("notifications").doc(`${conversationId}_${messageId}`);
-      await db.runTransaction(async (transaction) => {
+      const notificationCreated = await db.runTransaction(async (transaction) => {
         const existing = await transaction.get(notificationRef);
-        if (existing.exists) return; // Idempotent across event retries; preserve readAt.
+        if (existing.exists) return false; // Idempotent across event retries; preserve readAt.
         transaction.create(notificationRef, {
           type: "message",
           senderUid,
@@ -424,7 +425,36 @@ export const notifyConversationMessage = onDocumentCreated(
           createdAt: FieldValue.serverTimestamp(),
           readAt: null,
         });
+        return true;
       });
+      if (!notificationCreated) return;
+
+      const tokenSnapshot = await db.collection("users").doc(recipientUid)
+        .collection("fcmTokens").limit(500).get();
+      const tokens = tokenSnapshot.docs
+        .map((tokenDoc) => ({ ref: tokenDoc.ref, token: tokenDoc.get("token") }))
+        .filter((item): item is { ref: FirebaseFirestore.DocumentReference; token: string } =>
+          typeof item.token === "string" && item.token.length > 20
+        );
+      if (tokens.length === 0) return;
+
+      try {
+        const pushResult = await getMessaging().sendEachForMulticast({
+          tokens: tokens.map((item) => item.token),
+          notification: { title: "رسالة جديدة في IMI", body: preview },
+          data: { type: "message", conversationId, messageId, senderUid },
+        });
+        const invalidTokens = pushResult.responses.flatMap((response, index) => {
+          const code = response.error?.code;
+          return code === "messaging/registration-token-not-registered"
+            || code === "messaging/invalid-registration-token"
+            ? [tokens[index].ref]
+            : [];
+        });
+        await Promise.all(invalidTokens.map(tokenRef => tokenRef.delete()));
+      } catch {
+        // Push is best-effort; the durable in-app notification remains available.
+      }
     }));
   }
 );

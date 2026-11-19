@@ -190,7 +190,7 @@ service cloud.firestore {
     // Submission and moderation metadata are written by trusted callables only.
     match /reels/{reelId} {
       allow read: if signedIn()
-        && (resource.data.status == 'approved' || resource.data.ownerUid == request.auth.uid);
+        && (resource.data.status == 'approved' || resource.data.ownerUid == request.auth.uid || isAdmin());
       allow create, update: if false;
       allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
     }

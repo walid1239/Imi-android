@@ -7,7 +7,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '@/lib/firebase/client';
 
 type Course = { id: string; title: string; description: string; category: string; published: boolean };
-type Lesson = { id: string; title: string; content: string; videoUrl?: string; order: number; published: boolean };
+type Lesson = { id: string; title: string; content: string; videoUrl?: string; order: number; published: boolean; sourceType?: string; sourceName?: string; reviewStatus?: string };
 
 export default function AcademyAdminPanel({ user }: { user: User }) {
   const [authorized, setAuthorized] = useState<boolean | null>(null);
@@ -21,6 +21,11 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
   const [content, setContent] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
   const [order, setOrder] = useState('0');
+  const [sourceType, setSourceType] = useState('original');
+  const [sourceName, setSourceName] = useState('محتوى أصلي من IMI');
+  const [sourceUrl, setSourceUrl] = useState('');
+  const [license, setLicense] = useState('محتوى أصلي مملوك لـ IMI');
+  const [permissionNote, setPermissionNote] = useState('مسودة أصلية تحتاج مراجعة بشرية قبل النشر');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -79,8 +84,8 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
     if (!selectedId) return;
     await call('createCourseLesson', {
       courseId: selectedId, title: lessonTitle, content, videoUrl,
-      order: Number(order),
-    }, 'تمت إضافة الدرس كمسودة.');
+      order: Number(order), sourceType, sourceName, sourceUrl, license, permissionNote,
+    }, 'تمت إضافة الدرس كمسودة. لا يمكن نشره قبل استكمال بيانات المصدر ومراجعته.');
     setLessonTitle(''); setContent(''); setVideoUrl(''); setOrder(String(lessons.length + 1));
   }
 
@@ -120,7 +125,7 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
         </div>
 
         {lessons.map(lesson => <div key={lesson.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 p-3">
-          <div className="min-w-0"><p className="truncate text-sm font-semibold">{lesson.title}</p><p className="mt-1 text-[10px] text-slate-500">الترتيب {lesson.order} · {lesson.published ? 'منشور' : 'مسودة'}</p></div>
+          <div className="min-w-0"><p className="truncate text-sm font-semibold">{lesson.title}</p><p className="mt-1 text-[10px] text-slate-500">الترتيب {lesson.order} · {lesson.published ? 'منشور' : 'مسودة'} · {lesson.sourceName || 'مصدر غير محدد'} · {lesson.reviewStatus || 'بانتظار المراجعة'}</p></div>
           <button disabled={busy || (!selected.published && !lesson.published)} onClick={() => call('publishCourseLesson', { courseId: selected.id, lessonId: lesson.id, published: !lesson.published }, lesson.published ? 'تم إخفاء الدرس.' : 'تم نشر الدرس.')} className="shrink-0 rounded-lg border border-white/15 px-3 py-2 text-xs disabled:opacity-40">{lesson.published ? 'إخفاء' : 'نشر'}</button>
         </div>)}
 
@@ -130,6 +135,16 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
           <textarea maxLength={20000} rows={4} value={content} onChange={e => setContent(e.target.value)} placeholder="المحتوى النصي (اختياري)" className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" />
           <input type="url" value={videoUrl} onChange={e => setVideoUrl(e.target.value)} placeholder="رابط فيديو HTTPS (اختياري)" className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" />
           <input type="number" min={0} max={100000} step={1} value={order} onChange={e => setOrder(e.target.value)} aria-label="ترتيب الدرس" className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" />
+          <label className="block text-xs text-slate-400">نوع المصدر
+            <select value={sourceType} onChange={e => setSourceType(e.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+              <option value="official">مصدر رسمي</option><option value="open-license">ترخيص مفتوح</option><option value="embed">تضمين رسمي</option><option value="original">محتوى أصلي</option><option value="teacher-agreement">محتوى أستاذ باتفاق</option>
+            </select>
+          </label>
+          <input required maxLength={160} value={sourceName} onChange={e => setSourceName(e.target.value)} placeholder="اسم المصدر أو صاحب المحتوى" className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" />
+          <input type="url" value={sourceUrl} onChange={e => setSourceUrl(e.target.value)} placeholder="رابط المصدر HTTPS (إلزامي للرسمي والمفتوح والتضمين)" className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" />
+          <input required maxLength={160} value={license} onChange={e => setLicense(e.target.value)} placeholder="الترخيص أو أساس الإذن" className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" />
+          <textarea required maxLength={1000} rows={2} value={permissionNote} onChange={e => setPermissionNote(e.target.value)} placeholder="ملاحظة الإذن والمراجعة البشرية أو الاتفاق" className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" />
+          <p className="text-[11px] leading-5 text-amber-300">لا يُنشر أي درس دون مصدر وترخيص/إذن موثق ومراجع معتمد. المحتوى الأصلي يحتاج مراجعة بشرية، ومحتوى الأستاذ يحتاج اتفاقاً موثقاً.</p>
           <button disabled={busy} className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-bold disabled:opacity-40">إضافة الدرس كمسودة</button>
         </form>}
         {selected.published && <p className="text-xs leading-6 text-slate-500">لإضافة دروس جديدة، ألغِ نشر الدورة أولاً. بعد الإضافة أعد نشر الدروس والدورة.</p>}

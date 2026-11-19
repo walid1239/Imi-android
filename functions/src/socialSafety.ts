@@ -1,4 +1,4 @@
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { FieldValue, getFirestore, type Firestore } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { directConversationId } from "./conversationLogic";
 
@@ -14,7 +14,7 @@ function requireUser(request: { auth?: { uid: string } | null }): string {
   if (!request.auth?.uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
   return request.auth.uid;
 }
-async function ensureNoBlock(db: FirebaseFirestore.Firestore, a: string, b: string) {
+async function ensureNoBlock(db: Firestore, a: string, b: string) {
   const [ab, ba] = await Promise.all([
     db.doc("users/" + a + "/blockedUsers/" + b).get(),
     db.doc("users/" + b + "/blockedUsers/" + a).get(),

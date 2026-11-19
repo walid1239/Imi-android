@@ -245,7 +245,7 @@ service cloud.firestore {
         && request.resource.data.lastMessageId.size() <= 128
         && existsAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId))
         && getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId)).data.senderUid == request.auth.uid
-        && getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId)).data.createdAt == request.time;
+        && getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId)).data.createdAt == request.time
         && (
           (getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId)).data.type == 'text'
             && request.resource.data.lastMessage == getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId)).data.text)

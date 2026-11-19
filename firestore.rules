@@ -5,6 +5,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
     function isSelf(uid) {
       return signedIn() && request.auth.uid == uid;
     }
@@ -54,13 +58,15 @@ service cloud.firestore {
 
     // Published Academy content is read-only for clients; publishing is an admin workflow.
     match /courses/{courseId} {
-      allow read: if signedIn() && resource.data.published == true;
+      allow read: if signedIn() && (resource.data.published == true || isAdmin());
       allow create, update, delete: if false;
 
       match /lessons/{lessonId} {
-        allow read: if signedIn()
-          && get(/databases/$(database)/documents/courses/$(courseId)).data.published == true
-          && resource.data.published == true;
+        allow read: if signedIn() && (
+          isAdmin()
+          || (get(/databases/$(database)/documents/courses/$(courseId)).data.published == true
+            && resource.data.published == true)
+        );
         allow create, update, delete: if false;
       }
     }

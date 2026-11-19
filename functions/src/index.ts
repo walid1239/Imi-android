@@ -458,6 +458,71 @@ export const notifyConversationMessage = onDocumentCreated(
   }
 );
 
+// Notify the callee when a trusted callable creates an incoming call.
+export const notifyIncomingCall = onDocumentCreated("calls/{callId}", async (event) => {
+  const call = event.data;
+  if (!call) return;
+  const callerUid = call.get("callerUid");
+  const calleeUid = call.get("calleeUid");
+  const conversationId = call.get("conversationId");
+  const kind = call.get("kind");
+  if (typeof callerUid !== "string" || typeof calleeUid !== "string"
+    || typeof conversationId !== "string" || (kind !== "audio" && kind !== "video")) return;
+
+  const notificationRef = db.collection("users").doc(calleeUid)
+    .collection("notifications").doc(`call_${event.params.callId}`);
+  const created = await db.runTransaction(async (transaction) => {
+    const existing = await transaction.get(notificationRef);
+    if (existing.exists) return false;
+    transaction.create(notificationRef, {
+      type: "call",
+      senderUid: callerUid,
+      conversationId,
+      callId: event.params.callId,
+      preview: kind === "video" ? "مكالمة فيديو واردة" : "مكالمة صوتية واردة",
+      createdAt: FieldValue.serverTimestamp(),
+      readAt: null,
+    });
+    return true;
+  });
+  if (!created) return;
+
+  const tokenSnapshot = await db.collection("users").doc(calleeUid)
+    .collection("fcmTokens").limit(500).get();
+  const tokens = tokenSnapshot.docs.filter(tokenDoc => {
+    const token = tokenDoc.get("token");
+    return typeof token === "string" && token.length > 20;
+  });
+  if (tokens.length === 0) return;
+
+  try {
+    const pushResult = await getMessaging().sendEachForMulticast({
+      tokens: tokens.map(tokenDoc => tokenDoc.get("token") as string),
+      notification: {
+        title: "مكالمة واردة في IMI",
+        body: kind === "video" ? "لديك مكالمة فيديو واردة." : "لديك مكالمة صوتية واردة.",
+      },
+      data: {
+        type: "call",
+        callId: event.params.callId,
+        conversationId,
+        callerUid,
+        kind,
+      },
+    });
+    const invalidTokens = pushResult.responses.flatMap((response, index) => {
+      const code = response.error?.code;
+      return code === "messaging/registration-token-not-registered"
+        || code === "messaging/invalid-registration-token"
+        ? [tokens[index].ref]
+        : [];
+    });
+    await Promise.all(invalidTokens.map(tokenRef => tokenRef.delete()));
+  } catch {
+    // The in-app call notification remains available if push delivery fails.
+  }
+});
+
 // One-to-one call lifecycle. Identity and state transitions are server-authoritative.
 type CreateCallInput = { conversationId?: unknown; calleeUid?: unknown; kind?: unknown };
 type CallActionInput = { callId?: unknown };

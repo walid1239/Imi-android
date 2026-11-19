@@ -9,6 +9,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
+import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageMetadata
 import com.walid.chat.data.model.Chat
@@ -258,52 +259,19 @@ class FirebaseChatRepository(
     suspend fun createDirectConversation(otherUid: String): Result<String> = runCatching {
         val uid = requireUid()
         require(otherUid.isNotBlank() && otherUid != uid) { "المستخدم الآخر غير صالح" }
-        val profile = firestore.collection("publicProfiles").document(otherUid).get().await()
-        require(profile.exists()) { "هذا الحساب غير موجود في الملفات العامة" }
 
-        val conversationId = DirectConversationId.forUsers(uid, otherUid)
-        val conversation = firestore.collection("conversations").document(conversationId)
-        val directSnapshot = conversation.get().await()
-        if (directSnapshot.exists()) {
-            val members = (directSnapshot.get("participants") as? List<*>)?.filterIsInstance<String>().orEmpty()
-            require(members.size == 2 && members.toSet() == setOf(uid, otherUid)) {
-                "معرّف المحادثة مرتبط بمشاركين مختلفين"
-            }
-            return@runCatching conversationId
-        }
-
-        // Preserve compatibility with conversations created by older app versions,
-        // which used random Firestore document IDs.
-        val legacyExisting = firestore.collection("conversations")
-            .whereArrayContains("participants", uid)
-            .orderBy("lastMessageAt", Query.Direction.DESCENDING)
-            .get()
+        // Conversation creation is server-authoritative. The callable enforces
+        // teacher/student restrictions, block checks, and profile requirements.
+        val response = FirebaseFunctions.getInstance()
+            .getHttpsCallable("createOrGetDirectConversation")
+            .call(mapOf("otherUid" to otherUid))
             .await()
-            .documents
-            .firstOrNull { document ->
-                val members = (document.get("participants") as? List<*>)?.filterIsInstance<String>()?.toSet()
-                members == setOf(uid, otherUid)
-            }
-        if (legacyExisting != null) return@runCatching legacyExisting.id
-
-        firestore.runTransaction { transaction ->
-            val current = transaction.get(conversation)
-            if (current.exists()) {
-                val members = (current.get("participants") as? List<*>)?.filterIsInstance<String>().orEmpty()
-                require(members.size == 2 && members.toSet() == setOf(uid, otherUid)) {
-                    "معرّف المحادثة مرتبط بمشاركين مختلفين"
-                }
-            } else {
-                transaction.set(conversation, mapOf(
-                    "participants" to listOf(uid, otherUid).sorted(),
-                    "createdBy" to uid,
-                    "createdAt" to FieldValue.serverTimestamp(),
-                    "lastMessage" to "",
-                    "lastMessageAt" to FieldValue.serverTimestamp()
-                ))
-            }
-            conversationId
-        }.await()
+        val data = response.data as? Map<*, *>
+            ?: error("استجابة إنشاء المحادثة غير صالحة")
+        val conversationId = data["conversationId"] as? String
+            ?: error("لم يُرجع الخادم معرّف المحادثة")
+        require(conversationId.isNotBlank()) { "معرّف المحادثة فارغ" }
+        conversationId
     }
 
     private fun requireUid(): String =

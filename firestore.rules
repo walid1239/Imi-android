@@ -32,6 +32,17 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, create, update, delete: if isSelf(uid);
 
+      // Server-created in-app notifications. Users may read their own inbox and
+      // mark an unread item as read, but cannot forge or edit notification content.
+      match /notifications/{notificationId} {
+        allow read: if isSelf(uid);
+        allow create, delete: if false;
+        allow update: if isSelf(uid)
+          && resource.data.readAt == null
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt'])
+          && request.resource.data.readAt == request.time;
+      }
+
       match /friends/{friendUid} {
         allow read: if isSelf(uid);
         // Friend relationships must be created through a trusted server workflow.

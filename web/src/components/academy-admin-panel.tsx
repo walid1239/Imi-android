@@ -12,6 +12,7 @@ type Course = { id: string; title: string; description: string; category: string
 type Lesson = { id: string; title: string; content: string; videoUrl?: string; order: number; published: boolean; sourceType?: string; sourceName?: string; reviewStatus?: string };
 type ContentReport = { id: string; reporterUid: string; courseId: string; lessonId: string; reason: string; details: string; status: string };
 type TeacherApplication = { uid: string; fullName: string; subjectIds: string[]; levelIds: string[]; status: string; evidencePath: string };
+type TeacherContent = { id: string; title: string; ownerUid: string; kind: string; subjectId: string; sourceName: string; license: string; status: string };
 
 export default function AcademyAdminPanel({ user }: { user: User }) {
   const [authorized, setAuthorized] = useState<boolean | null>(null);
@@ -21,6 +22,7 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
   const [reports, setReports] = useState<ContentReport[]>([]);
   const [teacherApplications, setTeacherApplications] = useState<TeacherApplication[]>([]);
   const [evidenceUrls, setEvidenceUrls] = useState<Record<string, string>>({});
+  const [teacherContent, setTeacherContent] = useState<TeacherContent[]>([]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
@@ -78,6 +80,18 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
         subjectIds: Array.isArray(item.get('subjectIds')) ? item.get('subjectIds') : [],
         levelIds: Array.isArray(item.get('levelIds')) ? item.get('levelIds') : [],
         status: item.get('status') || 'pending', evidencePath: item.get('evidencePath') || '',
+      })));
+    }, reason => setError(reason.message));
+  }, [authorized]);
+
+  useEffect(() => {
+    if (!authorized) { setTeacherContent([]); return; }
+    return onSnapshot(query(collection(db, 'teacherContent'), orderBy('createdAt', 'desc'), limit(100)), snapshot => {
+      setTeacherContent(snapshot.docs.filter(item => item.get('status') === 'draft').map(item => ({
+        id: item.id, title: item.get('title') || '', ownerUid: item.get('ownerUid') || '',
+        kind: item.get('kind') || '', subjectId: item.get('subjectId') || '',
+        sourceName: item.get('sourceName') || '', license: item.get('license') || '',
+        status: item.get('status') || 'draft',
       })));
     }, reason => setError(reason.message));
   }, [authorized]);
@@ -143,6 +157,19 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
       <h2 className="mt-2 text-2xl font-black">إدارة الأكاديمية</h2>
       <p className="mt-2 text-sm text-slate-400">أنشئ محتوى حقيقياً كمسودات ثم انشره بعد مراجعته. صلاحية المشرف يتحقق منها Firebase.</p>
     </header>
+
+    <section className="space-y-3 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+      <div className="flex items-center justify-between"><h3 className="font-bold">مراجعة محتوى الأساتذة ({teacherContent.length})</h3><span className="text-xs text-slate-500">مسودات تنتظر المراجعة</span></div>
+      {teacherContent.length===0?<p className="text-sm text-slate-500">لا توجد مسودات جديدة.</p>:teacherContent.map(item=><article key={item.id} className="rounded-xl border border-white/10 p-3">
+        <strong className="text-sm">{item.title}</strong>
+        <p className="mt-1 text-xs text-slate-400">الأستاذ: {item.ownerUid} · النوع: {item.kind} · المادة: {item.subjectId}</p>
+        <p className="mt-1 text-xs text-slate-500">المصدر: {item.sourceName} · الرخصة: {item.license}</p>
+        <div className="mt-3 flex gap-2">
+          <button disabled={busy} onClick={()=>call('reviewTeacherContent',{contentId:item.id,approved:true,note:''},'تم نشر المحتوى بعد المراجعة.')} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold disabled:opacity-50">اعتماد ونشر</button>
+          <button disabled={busy} onClick={()=>call('reviewTeacherContent',{contentId:item.id,approved:false,note:'يحتاج إلى تعديل قبل النشر'},'تم رفض المسودة وإعادتها للمراجعة.')} className="rounded-lg border border-red-400/30 px-3 py-2 text-xs text-red-200 disabled:opacity-50">رفض</button>
+        </div>
+      </article>)}
+    </section>
 
     <CurriculumAdminPanel />
 

@@ -44,6 +44,8 @@ internal fun FirebaseChatsScreen() {
     var repository by remember { mutableStateOf<FirebaseChatRepository?>(null) }
     var chats by remember { mutableStateOf<List<Chat>>(emptyList()) }
     var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
+    var hasOlderMessages by remember { mutableStateOf(false) }
+    var loadingOlder by remember { mutableStateOf(false) }
     var selectedChat by remember { mutableStateOf<Chat?>(null) }
     var draft by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(true) }
@@ -80,13 +82,44 @@ internal fun FirebaseChatsScreen() {
         val repo = repository
         if (chat == null || repo == null) {
             messages = emptyList()
+            hasOlderMessages = false
         } else {
+            messages = emptyList()
+            hasOlderMessages = true
             repo.observeMessages(chat.id).collect { result ->
                 result.fold(
-                    onSuccess = { messages = it; errorText = null },
+                    onSuccess = { latest ->
+                        val latestIds = latest.mapTo(mutableSetOf()) { it.id }
+                        messages = (messages.filterNot { it.id in latestIds } + latest)
+                            .distinctBy { it.id }
+                            .sortedWith(compareBy<ChatMessage> { it.createdAt?.toDate()?.time ?: Long.MIN_VALUE }.thenBy { it.id })
+                        if (latest.size < 50) hasOlderMessages = false
+                        errorText = null
+                    },
                     onFailure = { errorText = it.localizedMessage ?: "تعذر مزامنة الرسائل" }
                 )
             }
+        }
+    }
+
+    fun loadOlderMessages() {
+        val chat = selectedChat ?: return
+        val repo = repository ?: return
+        val oldest = messages.firstOrNull() ?: return
+        if (loadingOlder || !hasOlderMessages) return
+        loadingOlder = true
+        scope.launch {
+            repo.loadOlderMessages(chat.id, oldest).fold(
+                onSuccess = { older ->
+                    val knownIds = messages.mapTo(mutableSetOf()) { it.id }
+                    messages = (older.filterNot { it.id in knownIds } + messages)
+                        .distinctBy { it.id }
+                        .sortedWith(compareBy<ChatMessage> { it.createdAt?.toDate()?.time ?: Long.MIN_VALUE }.thenBy { it.id })
+                    hasOlderMessages = older.size == 50
+                },
+                onFailure = { errorText = it.localizedMessage ?: "تعذر تحميل الرسائل الأقدم" }
+            )
+            loadingOlder = false
         }
     }
 
@@ -161,6 +194,15 @@ internal fun FirebaseChatsScreen() {
                 contentPadding = PaddingValues(vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                if (hasOlderMessages && messages.isNotEmpty()) item {
+                    TextButton(
+                        enabled = !loadingOlder,
+                        onClick = { loadOlderMessages() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (loadingOlder) "جارٍ تحميل الأقدم…" else "تحميل رسائل أقدم", color = CloudBlue)
+                    }
+                }
                 items(messages, key = { it.id }) { item ->
                     val ownUid = FirebaseAuth.getInstance().currentUser?.uid
                     Row(

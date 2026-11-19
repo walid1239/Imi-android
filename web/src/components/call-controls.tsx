@@ -349,8 +349,8 @@ export default function CallControls({
           if (report.type === 'candidate-pair' && pair.state === 'succeeded' && pair.nominated) selected = pair;
         });
         if (!selected) return;
-        const local = stats.get(selected.localCandidateId) as RTCIceCandidateStats | undefined;
-        const remote = stats.get(selected.remoteCandidateId) as RTCIceCandidateStats | undefined;
+        const local = stats.get(selected.localCandidateId) as (RTCStats & { candidateType?: string }) | undefined;
+        const remote = stats.get(selected.remoteCandidateId) as (RTCStats & { candidateType?: string }) | undefined;
         const rttMs = (selected.currentRoundTripTime ?? 0) * 1000;
         const quality = rttMs <= 150 ? 'جيد' : rttMs <= 300 ? 'متوسط' : 'ضعيف';
         const path = local?.candidateType === 'relay' || remote?.candidateType === 'relay' ? 'relay' : 'direct';

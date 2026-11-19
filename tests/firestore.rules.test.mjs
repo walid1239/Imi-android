@@ -53,6 +53,27 @@ after(async () => {
 });
 
 
+test('FCM registration tokens are private and owner-managed', async () => {
+  const token = 'fcm-token-abcdefghijklmnopqrstuvwxyz0123456789';
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  const tokenRef = doc(aliceDb, 'users/alice/fcmTokens', token);
+  await assertSucceeds(setDoc(tokenRef, {
+    token, createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+  }));
+  await assertSucceeds(getDoc(tokenRef));
+  await assertFails(getDoc(doc(bobDb, 'users/alice/fcmTokens', token)));
+  await assertFails(setDoc(doc(aliceDb, 'users/alice/fcmTokens/forged-token-abcdefghijklmnopqrstuvwxyz'), {
+    token: 'different-token-abcdefghijklmnopqrstuvwxyz', createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+  }));
+  await assertFails((await import('firebase/firestore')).updateDoc(tokenRef, {
+    token: 'forged-token-abcdefghijklmnopqrstuvwxyz'
+  }));
+  await assertSucceeds((await import('firebase/firestore')).updateDoc(tokenRef, {
+    updatedAt: serverTimestamp()
+  }));
+});
+
 test('notifications are server-created, private to their owner, and clients may only mark them read', async () => {
   await env.withSecurityRulesDisabled(async context => {
     await setDoc(doc(context.firestore(), 'users/alice/notifications/chat-1_msg-1'), {

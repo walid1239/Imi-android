@@ -382,3 +382,83 @@ export const publishCourseLesson = onCall<{ courseId?: unknown; lessonId?: unkno
   });
   return { published: request.data.published };
 });
+
+
+// One-to-one call lifecycle. Identity and state transitions are server-authoritative.
+type CreateCallInput = { conversationId?: unknown; calleeUid?: unknown; kind?: unknown };
+type CallActionInput = { callId?: unknown };
+function callParticipant(data: FirebaseFirestore.DocumentData | undefined, uid: string): boolean {
+  return !!data && (data.callerUid === uid || data.calleeUid === uid);
+}
+
+export const createCall = onCall<CreateCallInput>(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  const conversationId = requireUid(request.data?.conversationId, "معرّف المحادثة غير صالح.");
+  const calleeUid = requireUid(request.data?.calleeUid, "معرّف المتلقي غير صالح.");
+  const kind = request.data?.kind;
+  if (kind !== "audio" && kind !== "video") throw new HttpsError("invalid-argument", "نوع المكالمة غير صالح.");
+  if (calleeUid === uid) throw new HttpsError("invalid-argument", "لا يمكنك الاتصال بنفسك.");
+
+  const conversationRef = db.collection("conversations").doc(conversationId);
+  const callerFriendRef = db.collection("users").doc(uid).collection("friends").doc(calleeUid);
+  const calleeFriendRef = db.collection("users").doc(calleeUid).collection("friends").doc(uid);
+  const callRef = db.collection("calls").doc();
+  await db.runTransaction(async (tx) => {
+    const [conversation, callerFriend, calleeFriend] = await Promise.all([
+      tx.get(conversationRef), tx.get(callerFriendRef), tx.get(calleeFriendRef),
+    ]);
+    const participants = conversation.get("participants");
+    if (!conversation.exists || !Array.isArray(participants) || participants.length !== 2
+      || !participants.includes(uid) || !participants.includes(calleeUid)) {
+      throw new HttpsError("permission-denied", "المكالمة مسموحة فقط بين طرفي محادثة ثنائية.");
+    }
+    if (!callerFriend.exists || !calleeFriend.exists
+      || callerFriend.get("status") !== "accepted" || calleeFriend.get("status") !== "accepted") {
+      throw new HttpsError("failed-precondition", "يجب أن تكون الصداقة مؤكدة لدى الطرفين.");
+    }
+    const now = Timestamp.now();
+    tx.create(callRef, {
+      callerUid: uid, calleeUid, conversationId, kind, status: "ringing",
+      createdAt: now, updatedAt: now,
+      expiresAt: Timestamp.fromMillis(now.toMillis() + 45_000),
+    });
+  });
+  return { callId: callRef.id, status: "ringing", expiresAtMillis: Date.now() + 45_000 };
+});
+
+export const respondToCall = onCall<CallActionInput & { decision?: unknown }>(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  const callId = requireUid(request.data?.callId, "معرّف المكالمة غير صالح.");
+  const decision = request.data?.decision;
+  if (decision !== "accepted" && decision !== "rejected") throw new HttpsError("invalid-argument", "قرار المكالمة غير صالح.");
+  const ref = db.collection("calls").doc(callId);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError("not-found", "المكالمة غير موجودة.");
+    if (snap.get("calleeUid") !== uid) throw new HttpsError("permission-denied", "المتلقي فقط يمكنه الرد.");
+    if (snap.get("status") !== "ringing") throw new HttpsError("failed-precondition", "لم تعد المكالمة في حالة رنين.");
+    if ((snap.get("expiresAt") as Timestamp).toMillis() <= Date.now()) {
+      tx.update(ref, { status: "missed", updatedAt: FieldValue.serverTimestamp() });
+      throw new HttpsError("deadline-exceeded", "انتهت مهلة المكالمة.");
+    }
+    tx.update(ref, { status: decision, updatedAt: FieldValue.serverTimestamp(), respondedAt: FieldValue.serverTimestamp() });
+  });
+  return { status: decision };
+});
+
+export const endCall = onCall<CallActionInput>(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  const callId = requireUid(request.data?.callId, "معرّف المكالمة غير صالح.");
+  const ref = db.collection("calls").doc(callId);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError("not-found", "المكالمة غير موجودة.");
+    if (!callParticipant(snap.data(), uid)) throw new HttpsError("permission-denied", "لست طرفاً في هذه المكالمة.");
+    if (!["ringing", "accepted"].includes(snap.get("status"))) return;
+    tx.update(ref, { status: "ended", endedBy: uid, updatedAt: FieldValue.serverTimestamp(), endedAt: FieldValue.serverTimestamp() });
+  });
+  return { status: "ended" };
+});

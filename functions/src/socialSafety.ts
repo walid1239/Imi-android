@@ -1,3 +1,4 @@
+import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore, type Firestore } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { directConversationId } from "./conversationLogic";
@@ -13,6 +14,13 @@ function validUid(value: unknown): string {
 function requireUser(request: { auth?: { uid: string } | null }): string {
   if (!request.auth?.uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
   return request.auth.uid;
+}
+async function assertSamePrivateChatRole(ids: string[]) {
+  const users = await Promise.all(ids.map(id => getAuth().getUser(id)));
+  const roles = new Set(users.map(user => user.customClaims?.teacherVerified === true));
+  if (roles.size > 1) {
+    throw new HttpsError("permission-denied", "المجموعات الخاصة بين الأساتذة والتلاميذ غير متاحة؛ استخدم قنوات الأكاديمية المراقبة.");
+  }
 }
 async function ensureNoBlock(db: Firestore, a: string, b: string) {
   const [ab, ba] = await Promise.all([
@@ -79,6 +87,7 @@ export const createGroupConversation = onCall<GroupInput>(async request => {
   const participants = [...new Set([actor, ...(request.data.participantUids as unknown[]).map(validUid)])];
   if (participants.length < 3 || participants.length > 50) throw new HttpsError("invalid-argument", "المجموعة تتطلب ثلاثة أعضاء على الأقل.");
   const db = getFirestore();
+  await assertSamePrivateChatRole(participants);
   const checks = participants.filter(uid => uid !== actor);
   await Promise.all(checks.map(async uid => { await ensureNoBlock(db, actor, uid); await ensureFriends(db, actor, uid); }));
   const profiles = await Promise.all(participants.map(uid => db.doc("publicProfiles/" + uid).get()));
@@ -108,6 +117,7 @@ export const addGroupParticipants = onCall<GroupInput & { conversationId?: unkno
   }
   const fresh = additions.filter(uid => !current.includes(uid));
   if (current.length + fresh.length > 50) throw new HttpsError("resource-exhausted", "الحد الأقصى للمجموعة 50 عضواً.");
+  await assertSamePrivateChatRole([...current, ...fresh]);
   await Promise.all(fresh.map(async uid => { await ensureNoBlock(db, actor, uid); await ensureFriends(db, actor, uid); }));
   const profiles = await Promise.all(fresh.map(uid => db.doc("publicProfiles/" + uid).get()));
   if (profiles.some(profile => !profile.exists)) throw new HttpsError("not-found", "تعذر العثور على ملف أحد الأعضاء.");

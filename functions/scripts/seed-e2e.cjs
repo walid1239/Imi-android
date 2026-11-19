@@ -49,7 +49,18 @@ async function main() {
   for (const variant of ['desktop', 'mobile']) {
     await ensureUser('a', variant, 'تلميذ ألف');
     await ensureUser('b', variant, 'تلميذ باء');
+    await ensureUser('c', variant, 'تلميذ جيم');
+    await ensureUser('d', variant, 'تلميذ دال');
     await ensureUser('admin', variant, 'مشرف اختبار', true);
+  }
+
+  for (const variant of ['desktop', 'mobile']) {
+    const a = 'imi-e2e-a-' + variant;
+    for (const other of ['c', 'd']) {
+      const b = 'imi-e2e-' + other + '-' + variant;
+      await db.doc('users/' + a + '/friends/' + b).set({ uid: b, status: 'accepted', createdAt: FieldValue.serverTimestamp() }, { merge: true });
+      await db.doc('users/' + b + '/friends/' + a).set({ uid: a, status: 'accepted', createdAt: FieldValue.serverTimestamp() }, { merge: true });
+    }
   }
 
   const curriculumNodes = [

@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const password = 'IMI-Emulator-Password-2026!';
 const suffix = (project: string) => project.includes('mobile') ? 'mobile' : 'desktop';
-const email = (role: 'a' | 'b' | 'admin', project: string) => `e2e-${role}-${suffix(project)}@imi.test`;
+const email = (role: 'a' | 'b' | 'c' | 'd' | 'admin', project: string) => `e2e-${role}-${suffix(project)}@imi.test`;
 
 async function login(page: Page, address: string) {
   await page.goto('/login');
@@ -108,18 +108,20 @@ test('admin claim exposes the protected Academy administration panel', async ({ 
   await page.getByRole('button', { name: /إدارة الأكاديمية/ }).first().click();
   await expect(page.getByRole('heading', { name: 'إدارة الأكاديمية' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'إدارة شجرة المنهاج' })).toBeVisible();
-  await expect(page.getByText('أستاذ اختبار آلي')).toBeVisible();
-  await expect(page.getByText('درس أستاذ اختبار منشور')).toBeVisible();
-  await page.getByRole('button', { name: 'اعتماد ونشر' }).click();
+  const variant = suffix(test.info().project.name);
+  const teacherUid = 'imi-e2e-a-' + variant;
+  const contentTitle = 'درس أستاذ اختبار منشور ' + variant;
+  await expect(page.getByText(contentTitle)).toBeVisible();
+  await page.locator('article').filter({ hasText: contentTitle }).getByRole('button', { name: 'اعتماد ونشر' }).click();
   await expect(page.getByRole('status')).toContainText('تم نشر المحتوى بعد المراجعة');
-  await page.getByRole('button', { name: 'اعتماد التوثيق' }).click();
+  await page.locator('article').filter({ hasText: teacherUid }).getByRole('button', { name: 'اعتماد التوثيق' }).click();
   await expect(page.getByRole('status')).toContainText('تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق');
 });
 
 
 
 test('verified teachers cannot start private student chats or mixed private groups', async ({ page }) => {
-  await login(page, email('a', test.info().project.name));
+  await login(page, email('c', test.info().project.name));
   await page.goto('/messages');
   await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ جيم');
   await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
@@ -139,7 +141,8 @@ test('approved teacher content appears under its curriculum subject', async ({ p
   await page.getByLabel('المستوى').selectOption('e2e-primary');
   await page.getByLabel('الشعبة أو المسلك').selectOption('e2e-primary-track');
   await page.getByRole('button', { name: /الرياضيات - اختبار/ }).click();
-  await expect(page.getByText('درس أستاذ اختبار منشور')).toBeVisible();
+  const contentTitle = 'درس أستاذ اختبار منشور ' + suffix(test.info().project.name);
+  await expect(page.getByText(contentTitle)).toBeVisible();
   await expect(page.getByText(/هذا نص تجريبي طويل بما يكفي/)).toBeVisible();
 });
 

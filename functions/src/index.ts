@@ -206,3 +206,64 @@ export const removeFriend = onCall<RemoveFriendInput>(async (request) => {
   });
   return { status: "removed" };
 });
+
+
+type CourseEnrollmentInput = { courseId?: unknown; lessonId?: unknown };
+
+export const enrollInCourse = onCall<CourseEnrollmentInput>(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  const courseId = requireUid(request.data?.courseId, "معرّف الدورة غير صالح.");
+  const courseRef = db.collection("courses").doc(courseId);
+  const enrollmentRef = db.collection("users").doc(uid).collection("enrollments").doc(courseId);
+
+  const result = await db.runTransaction(async (transaction) => {
+    const [course, enrollment] = await Promise.all([
+      transaction.get(courseRef),
+      transaction.get(enrollmentRef),
+    ]);
+    if (!course.exists || course.get("published") !== true) {
+      throw new HttpsError("not-found", "هذه الدورة غير متاحة حالياً.");
+    }
+    if (enrollment.exists) return { status: "enrolled" as const };
+    const now = FieldValue.serverTimestamp();
+    transaction.create(enrollmentRef, {
+      courseId,
+      completedLessonIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { status: "enrolled" as const };
+  });
+  return result;
+});
+
+export const completeCourseLesson = onCall<CourseEnrollmentInput>(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  const courseId = requireUid(request.data?.courseId, "معرّف الدورة غير صالح.");
+  const lessonId = requireUid(request.data?.lessonId, "معرّف الدرس غير صالح.");
+  const courseRef = db.collection("courses").doc(courseId);
+  const lessonRef = courseRef.collection("lessons").doc(lessonId);
+  const enrollmentRef = db.collection("users").doc(uid).collection("enrollments").doc(courseId);
+
+  await db.runTransaction(async (transaction) => {
+    const [course, lesson, enrollment] = await Promise.all([
+      transaction.get(courseRef),
+      transaction.get(lessonRef),
+      transaction.get(enrollmentRef),
+    ]);
+    if (!course.exists || course.get("published") !== true
+      || !lesson.exists || lesson.get("published") !== true) {
+      throw new HttpsError("not-found", "الدورة أو الدرس غير متاح.");
+    }
+    if (!enrollment.exists) throw new HttpsError("failed-precondition", "سجّل في الدورة قبل إكمال الدروس.");
+    const completed = enrollment.get("completedLessonIds");
+    if (Array.isArray(completed) && completed.includes(lessonId)) return;
+    transaction.update(enrollmentRef, {
+      completedLessonIds: FieldValue.arrayUnion(lessonId),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return { status: "completed", courseId, lessonId };
+});

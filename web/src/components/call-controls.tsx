@@ -35,6 +35,8 @@ export default function CallControls({
   const [muted, setMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
   const [turnConfigured, setTurnConfigured] = useState(false);
+  const [connectionQuality, setConnectionQuality] = useState('غير متاح');
+  const [connectionPath, setConnectionPath] = useState('unknown');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -45,11 +47,14 @@ export default function CallControls({
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const activeCallIdRef = useRef('');
   const answerStartedRef = useRef(false);
+  const retryCountRef = useRef(0);
+  const lastOfferSdpRef = useRef('');
+  const lastAnswerSdpRef = useRef('');
 
   const createCall = httpsCallable<{ conversationId: string; calleeUid: string; kind: CallKind }, { callId: string }>(functions, 'createCall');
   const respondToCall = httpsCallable<{ callId: string; decision: 'accepted' | 'rejected' }, { status: string }>(functions, 'respondToCall');
   const endCallAction = httpsCallable<{ callId: string }, { status: string }>(functions, 'endCall');
-  const getTurnIceServers = httpsCallable<Record<string, never>, { configured: boolean; iceServers: RTCIceServer[] }>(functions, 'getTurnIceServers');
+  const getIceServers = httpsCallable<Record<string, never>, { turnAvailable: boolean; iceServers: RTCIceServer[]; expiresAt: number | null }>(functions, 'getIceServers');
 
   function cleanupSession() {
     unsubsRef.current.forEach(unsubscribe => unsubscribe());
@@ -60,6 +65,11 @@ export default function CallControls({
     localStreamRef.current = null;
     pendingCandidatesRef.current = [];
     answerStartedRef.current = false;
+    retryCountRef.current = 0;
+    lastOfferSdpRef.current = '';
+    lastAnswerSdpRef.current = '';
+    setConnectionQuality('غير متاح');
+    setConnectionPath('unknown');
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
     activeCallIdRef.current = '';
@@ -112,15 +122,24 @@ export default function CallControls({
     if (!navigator.mediaDevices?.getUserMedia || typeof RTCPeerConnection === 'undefined') {
       throw new Error('المتصفح لا يدعم المكالمات أو لا يوفر إذن الميكروفون والكاميرا.');
     }
-    let iceServers: RTCIceServer[] = [];
+    const stunUrls = (process.env.NEXT_PUBLIC_STUN_URLS || 'stun:stun.l.google.com:19302')
+      .split(',')
+      .map(value => value.trim())
+      .filter(value => value.startsWith('stun:') || value.startsWith('stuns:'));
+    let iceServers: RTCIceServer[] = [{ urls: stunUrls.length ? stunUrls : ['stun:stun.l.google.com:19302'] }];
+    let iceTransportPolicy: RTCIceTransportPolicy =
+      process.env.NEXT_PUBLIC_ICE_TRANSPORT_POLICY === 'relay' ? 'relay' : 'all';
     try {
-      const turnResult = await getTurnIceServers({});
-      iceServers = turnResult.data.iceServers;
-      setTurnConfigured(turnResult.data.configured);
-      if (!turnResult.data.configured) setError('خادم Coturn الداخلي غير مهيأ؛ لن يستخدم IMI خوادم STUN خارجية، وقد يقتصر الاتصال على الشبكات التي تسمح بالاتصال المباشر.');
+      const iceResult = await getIceServers({});
+      iceServers = iceResult.data.iceServers;
+      setTurnConfigured(iceResult.data.turnAvailable);
+      if (!iceResult.data.turnAvailable) {
+        setError('خادم TURN غير مهيأ؛ سيُستخدم STUN فقط، وقد يفشل الاتصال بين بعض الشبكات.');
+      }
     } catch {
       setTurnConfigured(false);
-      setError('تعذر جلب إعداد Coturn الداخلي؛ لن يستخدم IMI خوادم STUN خارجية، وقد لا ينجح الاتصال عبر شبكات مختلفة.');
+      iceTransportPolicy = 'all';
+      setError('تعذّر جلب إعدادات الاتصال؛ سيُستخدم STUN فقط. إذا تعذّر الاتصال، جرّب شبكة أخرى.');
     }
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: true,
@@ -132,7 +151,7 @@ export default function CallControls({
       await localVideoRef.current.play().catch(() => {});
     }
 
-    const peer = new RTCPeerConnection({ iceServers });
+    const peer = new RTCPeerConnection({ iceServers, iceTransportPolicy });
     peerRef.current = peer;
     stream.getTracks().forEach(track => peer.addTrack(track, stream));
     peer.ontrack = event => {
@@ -144,7 +163,29 @@ export default function CallControls({
     peer.onconnectionstatechange = () => {
       if (peer.connectionState === 'connected') setCallStatus('connected');
       else if (peer.connectionState === 'disconnected') setCallStatus('reconnecting');
-      else if (peer.connectionState === 'failed') setError('تعذر إنشاء اتصال مباشر. قد يحتاج الاتصال إلى خادم TURN.');
+      else if (peer.connectionState === 'failed') {
+        setCallStatus('reconnecting');
+        if (role !== 'caller' || retryCountRef.current >= 2) {
+          setError('تعذّر الاتصال، جرّب شبكة أخرى');
+        }
+      }
+    };
+    peer.oniceconnectionstatechange = () => {
+      if (peer.iceConnectionState === 'failed' && role === 'caller' && retryCountRef.current < 2) {
+        retryCountRef.current += 1;
+        setCallStatus('reconnecting');
+        void (async () => {
+          peer.restartIce();
+          const retryOffer = await peer.createOffer({ iceRestart: true });
+          await peer.setLocalDescription(retryOffer);
+          lastOfferSdpRef.current = retryOffer.sdp ?? '';
+          await updateDoc(doc(db, 'calls', callId), {
+            offer: { type: retryOffer.type, sdp: retryOffer.sdp }
+          });
+        })().catch(() => setError('تعذّر الاتصال، جرّب شبكة أخرى'));
+      } else if (peer.iceConnectionState === 'failed') {
+        setError('تعذّر الاتصال، جرّب شبكة أخرى');
+      }
     };
     peer.onicecandidate = event => {
       if (!event.candidate) return;
@@ -192,18 +233,21 @@ export default function CallControls({
         cleanupSession();
         return;
       }
-      if (role === 'caller' && data.answer && !peer.remoteDescription) {
+      if (role === 'caller' && data.answer && data.answer.sdp !== lastAnswerSdpRef.current) {
+        lastAnswerSdpRef.current = data.answer.sdp ?? '';
         void peer.setRemoteDescription(new RTCSessionDescription(data.answer))
           .then(() => flushPendingCandidates(peer))
           .catch(reason => setError(reason instanceof Error ? reason.message : 'تعذر استقبال إجابة المكالمة.'));
       }
-      if (role === 'callee' && data.offer && !answerStartedRef.current) {
+      if (role === 'callee' && data.offer && data.offer.sdp !== lastOfferSdpRef.current) {
+        lastOfferSdpRef.current = data.offer.sdp ?? '';
         answerStartedRef.current = true;
         void (async () => {
           await peer.setRemoteDescription(new RTCSessionDescription(data.offer));
           await flushPendingCandidates(peer);
           const answer = await peer.createAnswer();
           await peer.setLocalDescription(answer);
+          lastAnswerSdpRef.current = answer.sdp ?? '';
           await updateDoc(doc(db, 'calls', callId), {
             answer: { type: answer.type, sdp: answer.sdp }
           });
@@ -233,6 +277,7 @@ export default function CallControls({
       if (!peer) throw new Error('تعذر إنشاء اتصال WebRTC.');
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
+      lastOfferSdpRef.current = offer.sdp ?? '';
       await updateDoc(doc(db, 'calls', callId), {
         offer: { type: offer.type, sdp: offer.sdp }
       });
@@ -290,6 +335,41 @@ export default function CallControls({
     setCameraOff(next);
   }
 
+  useEffect(() => {
+    if (!activeCallId || !peerRef.current) return;
+    let stopped = false;
+    const inspect = async () => {
+      const peer = peerRef.current;
+      if (!peer || stopped) return;
+      try {
+        const stats = await peer.getStats();
+        let selected: RTCIceCandidatePairStats | undefined;
+        stats.forEach(report => {
+          const pair = report as RTCIceCandidatePairStats;
+          if (report.type === 'candidate-pair' && pair.state === 'succeeded' && pair.nominated) selected = pair;
+        });
+        if (!selected) return;
+        const local = stats.get(selected.localCandidateId) as RTCIceCandidateStats | undefined;
+        const remote = stats.get(selected.remoteCandidateId) as RTCIceCandidateStats | undefined;
+        const rttMs = (selected.currentRoundTripTime ?? 0) * 1000;
+        const quality = rttMs <= 150 ? 'جيد' : rttMs <= 300 ? 'متوسط' : 'ضعيف';
+        const path = local?.candidateType === 'relay' || remote?.candidateType === 'relay' ? 'relay' : 'direct';
+        if (!stopped) {
+          setConnectionQuality(quality);
+          setConnectionPath(path);
+        }
+      } catch {
+        if (!stopped) setConnectionQuality('غير متاح');
+      }
+    };
+    void inspect();
+    const timer = window.setInterval(() => void inspect(), 2500);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [activeCallId, callStatus]);
+
   useEffect(() => () => cleanupSession(), []);
 
   return <>
@@ -308,7 +388,7 @@ export default function CallControls({
     </div>}
 
     {activeCallId && <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 p-4" dir="rtl">
-      <header className="flex items-center justify-between"><div><h2 className="font-bold">{activeKind === 'video' ? 'مكالمة فيديو' : 'مكالمة صوتية'}</h2><p className="text-xs text-slate-400">{callStatus === 'connected' ? 'تم الاتصال' : callStatus === 'reconnecting' ? 'محاولة إعادة الاتصال' : 'جارٍ إنشاء الاتصال'}</p></div><button type="button" onClick={endCall} className="rounded-lg bg-rose-700 px-4 py-2 text-sm font-bold">إنهاء</button></header>
+      <header className="flex items-center justify-between"><div><h2 className="font-bold">{activeKind === 'video' ? 'مكالمة فيديو' : 'مكالمة صوتية'}</h2><p className="text-xs text-slate-400">{callStatus === 'connected' ? 'تم الاتصال' : callStatus === 'reconnecting' ? 'محاولة إعادة الاتصال' : 'جارٍ إنشاء الاتصال'} · جودة الاتصال: {connectionQuality}</p><p className="text-[10px] text-slate-500">{process.env.NODE_ENV !== 'production' ? `مسار ICE: ${connectionPath}` : ''}</p></div><button type="button" onClick={endCall} className="rounded-lg bg-rose-700 px-4 py-2 text-sm font-bold">إنهاء</button></header>
       <div className="relative mt-4 flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl bg-black">
         <video ref={remoteVideoRef} autoPlay playsInline className="h-full max-h-full w-full object-contain" />
         {activeKind === 'video' && <video ref={localVideoRef} autoPlay muted playsInline className="absolute bottom-4 left-4 max-h-36 w-28 rounded-xl border border-white/20 object-cover" />}

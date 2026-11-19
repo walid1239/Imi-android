@@ -12,6 +12,7 @@ Required values:
 - `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
+- `NEXT_PUBLIC_FIREBASE_VAPID_KEY` (public Web Push certificate key from Firebase Console > Project settings > Cloud Messaging > Web Push certificates; required only to enable browser push)
 
 The checked-in example defaults the project ID, bucket, and sender ID to the documented `imi-indroid` project; verify them against the intended Firebase web app before use.
 
@@ -49,3 +50,6 @@ CI runs the Firestore and Storage rules tests against the emulators. No command 
 ## Health endpoint
 
 `GET /api/v1/health` reports that the Next.js process is responding and whether required Firebase web configuration variables are present. It is a configuration/liveness endpoint only; it does not authenticate with Firebase or prove production Firestore, Storage, or Functions connectivity.
+## Browser push notifications
+
+To enable web push, configure `NEXT_PUBLIC_FIREBASE_VAPID_KEY` with the public Web Push certificate key from Firebase Console. It is a public client key, not a service-account secret. The application serves `/firebase-messaging-sw.js` dynamically from the existing public Firebase web configuration, registers the browser token under the authenticated user's private `fcmTokens` collection, and sends push notifications from Cloud Functions using the Admin SDK. Browser permission and HTTPS are required (localhost is permitted for local development). No push token or VAPID key is committed to the repository.

@@ -2,7 +2,7 @@
 
 ## Current implementation (not production-verified)
 - واجهة المكالمة داخل IMI وبالعربية؛ لا توجد صفحات مزود TURN خارجية.
-- Web client uses `RTCPeerConnection`, authenticated callable `getIceServers`, public STUN fallback, configurable `iceTransportPolicy`, and up to two caller-side ICE restart attempts.
+- Web client uses `RTCPeerConnection`, authenticated callable `getIceServers`, public STUN fallback, configurable `iceTransportPolicy`, and up to two caller-side ICE restart attempts. Restart SDP is submitted through the server-authorized `restartCallIce` callable; the server enforces the two-restart cap and increments an SDP revision.
 - Connection quality is estimated from selected-pair RTT. Direct/relay path is displayed only outside production builds.
 - Audio/video permissions are requested after the user action and local tracks are stopped during cleanup.
 - No Android call UI is present in this branch; the WebRTC call UI currently exists only in the web client.
@@ -12,6 +12,7 @@
 - `getIceServers` requires Firebase Auth. Anonymous sign-in is denied unless `TURN_ALLOW_ANONYMOUS=true`.
 - TURN REST username is `unixExpiry:uid`; credential is Base64(HMAC-SHA1(TURN_SECRET, username)).
 - Credentials expire after at most one hour. A per-UID Firestore transaction rate-limits issuance.
+- ICE restart offers are written by `restartCallIce` only for the authenticated caller, only after acceptance, and at most twice per call. Callee answers must carry the current server-generated SDP revision; Firestore rules reject stale or repeated revisions.
 - The shared secret is a Firebase Secret Manager secret and never returned to clients or logged.
 - When TURN is unavailable, the function returns configured public STUN only. If callable retrieval fails, the client falls back to STUN and shows an Arabic warning.
 

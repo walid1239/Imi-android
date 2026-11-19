@@ -26,7 +26,8 @@ export function createTurnConfiguration(
   if (!uid || !sharedSecret || !urls.length) {
     return {
       configured: false,
-      iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
+      // No public STUN/TURN fallback: IMI uses only operator-owned Coturn.
+      iceServers: [],
       expiresAt: null,
     };
   }
@@ -35,10 +36,7 @@ export function createTurnConfiguration(
   const credential = createHmac("sha1", sharedSecret).update(username).digest("base64");
   return {
     configured: true,
-    iceServers: [
-      { urls: ["stun:stun.l.google.com:19302"] },
-      { urls, username, credential },
-    ],
+    iceServers: [{ urls, username, credential }],
     expiresAt,
   };
 }

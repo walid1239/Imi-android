@@ -19,7 +19,9 @@ service cloud.firestore {
     function areFriends(ownerUid, viewerUid) {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(ownerUid)/friends/$(viewerUid))
-        && get(/databases/$(database)/documents/users/$(ownerUid)/friends/$(viewerUid)).data.status == 'accepted';
+        && exists(/databases/$(database)/documents/users/$(viewerUid)/friends/$(ownerUid))
+        && get(/databases/$(database)/documents/users/$(ownerUid)/friends/$(viewerUid)).data.status == 'accepted'
+        && get(/databases/$(database)/documents/users/$(viewerUid)/friends/$(ownerUid)).data.status == 'accepted';
     }
 
     // Private account data: only the account owner can access it.
@@ -41,6 +43,13 @@ service cloud.firestore {
         allow update: if false;
         allow delete: if isSelf(uid);
       }
+    }
+
+    // Friend requests are readable by their two participants only; all writes go through callables.
+    match /friendRequests/{requestId} {
+      allow read: if signedIn()
+        && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
+      allow create, update, delete: if false;
     }
 
     // Authenticated users can see only the minimal public profile projection.

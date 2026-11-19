@@ -1,7 +1,9 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { User } from 'firebase/auth';
+import { EmailAuthProvider, User, linkWithCredential, signOut } from 'firebase/auth';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { useRouter } from 'next/navigation';
 import { doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase/client';
@@ -13,6 +15,7 @@ type ProfileData = {
 };
 
 export default function ProfilePanel({ user }: { user: User }) {
+  const router = useRouter();
   const [displayName, setDisplayName] = useState(user.displayName || '');
   const [city, setCity] = useState('');
   const [photoPath, setPhotoPath] = useState('');
@@ -22,6 +25,10 @@ export default function ProfilePanel({ user }: { user: User }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [linkEmail, setLinkEmail] = useState('');
+  const [linkPassword, setLinkPassword] = useState('');
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [accountBusy, setAccountBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -117,6 +124,35 @@ export default function ProfilePanel({ user }: { user: User }) {
     }
   }
 
+  async function linkGuestAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!user.isAnonymous) return;
+    setAccountBusy(true); setError(''); setNotice('');
+    try {
+      await linkWithCredential(user, EmailAuthProvider.credential(linkEmail.trim(), linkPassword));
+      setLinkPassword('');
+      setNotice('تم ربط بريدك بالحساب الحالي مع الاحتفاظ بمعرّفك وبياناتك.');
+    } catch (reason) {
+      const code = typeof reason === 'object' && reason && 'code' in reason ? String((reason as {code:string}).code) : '';
+      setError(code === 'auth/credential-already-in-use' || code === 'auth/email-already-in-use'
+        ? 'هذا البريد مرتبط بحساب آخر. سجّل الدخول إلى ذلك الحساب بدلاً من ربطه بالضيف.'
+        : 'تعذر تحويل حساب الضيف. تحقق من تفعيل Email/Password وكلمة المرور.');
+    } finally { setAccountBusy(false); }
+  }
+
+  async function deleteAccount() {
+    if (deleteConfirmation !== 'DELETE') { setError('اكتب DELETE حرفياً لتأكيد الحذف.'); return; }
+    if (!window.confirm('سيُحذف الحساب والملف الشخصي والبيانات والملفات المرتبطة به. هل تريد المتابعة؟')) return;
+    setAccountBusy(true); setError(''); setNotice('');
+    try {
+      await httpsCallable(getFunctions(), 'deleteMyAccount')({ confirmation: 'DELETE' });
+      await signOut(user.auth);
+      router.replace('/login');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'تعذر حذف الحساب. قد تحتاج إلى تسجيل الدخول من جديد.');
+    } finally { setAccountBusy(false); }
+  }
+
   return <section dir="rtl" className="mx-auto max-w-2xl space-y-5">
     <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5">
       <div className="flex items-center gap-4">
@@ -147,5 +183,22 @@ export default function ProfilePanel({ user }: { user: User }) {
       <button disabled={loading || saving} className="w-full rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold disabled:opacity-40">{loading ? 'جارٍ تحميل الحساب…' : saving ? 'جارٍ الحفظ…' : 'حفظ الملف الشخصي'}</button>
       <p className="text-xs leading-6 text-slate-500">الاسم والمدينة ومسار الصورة فقط تظهر في دليل المستخدمين للمسجلين. رقم الهاتف والبريد لا يُنشران في الملف العام.</p>
     </form>
+
+    <section className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/60 p-5">
+      <h3 className="font-bold">أمان الحساب والبيانات</h3>
+      {user.isAnonymous ? <form onSubmit={linkGuestAccount} className="space-y-3 rounded-xl border border-blue-400/15 p-4">
+        <p className="text-sm font-semibold text-blue-200">تحويل حساب الضيف إلى حساب دائم</p>
+        <p className="text-xs leading-6 text-slate-500">يربط البريد بالحساب الحالي ويحافظ على UID والبيانات، ولا ينشئ حساباً منفصلاً.</p>
+        <label className="block text-sm">البريد الإلكتروني<input required type="email" value={linkEmail} onChange={e=>setLinkEmail(e.target.value)} className="mt-2 w-full rounded-xl bg-slate-900 p-3"/></label>
+        <label className="block text-sm">كلمة المرور<input required minLength={6} type="password" value={linkPassword} onChange={e=>setLinkPassword(e.target.value)} className="mt-2 w-full rounded-xl bg-slate-900 p-3"/></label>
+        <button disabled={accountBusy} className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold disabled:opacity-50">ربط البريد بالحساب الحالي</button>
+      </form> : <p className="text-xs leading-6 text-slate-500">حسابك مرتبط بطريقة دخول دائمة. استخدم «نسيت كلمة المرور؟» من شاشة الدخول لاستعادتها.</p>}
+      <div className="space-y-3 rounded-xl border border-red-400/20 p-4">
+        <p className="text-sm font-bold text-red-200">حذف الحساب والبيانات</p>
+        <p className="text-xs leading-6 text-slate-500">يتطلب تأكيداً صريحاً وتسجيل دخول حديثاً. يحذف الملف الشخصي وملفات الحساب ومحتوى الأستاذ والعضويات. قد تبقى سجلات إشراف مجمّعة إذا كان الاحتفاظ بها مطلوباً قانونياً.</p>
+        <label className="block text-sm">اكتب DELETE للتأكيد<input value={deleteConfirmation} onChange={e=>setDeleteConfirmation(e.target.value)} className="mt-2 w-full rounded-xl bg-slate-900 p-3" /></label>
+        <button type="button" onClick={deleteAccount} disabled={accountBusy||deleteConfirmation!=='DELETE'} className="rounded-xl border border-red-400/30 px-4 py-3 text-sm font-bold text-red-200 disabled:opacity-40">{accountBusy?'جارٍ التنفيذ…':'حذف الحساب نهائياً'}</button>
+      </div>
+    </section>
   </section>;
 }

@@ -1,73 +1,32 @@
-# IMI WebRTC Calling — implementation contract
+# IMI WebRTC Calling — implementation and release contract
 
-## Current verified state
+## Current implementation (not production-verified)
+- واجهة المكالمة داخل IMI وبالعربية؛ لا توجد صفحات مزود TURN خارجية.
+- Web client uses `RTCPeerConnection`, authenticated callable `getIceServers`, public STUN fallback, configurable `iceTransportPolicy`, and up to two caller-side ICE restart attempts.
+- Connection quality is estimated from selected-pair RTT. Direct/relay path is displayed only outside production builds.
+- Audio/video permissions are requested after the user action and local tracks are stopped during cleanup.
+- No Android call UI is present in this branch; the WebRTC call UI currently exists only in the web client.
+- Coturn is owner-operated; Firebase Hosting/Functions are not used as TURN relays.
 
-The current `feature/imi-web-foundation` tree contains no WebRTC peer-connection implementation, call-signaling collections, or call UI. The chat UI currently supports text messages only. Do not describe voice/video calling as operational until the acceptance checks below pass on two real devices.
+## Server ICE credentials
+- `getIceServers` requires Firebase Auth. Anonymous sign-in is denied unless `TURN_ALLOW_ANONYMOUS=true`.
+- TURN REST username is `unixExpiry:uid`; credential is Base64(HMAC-SHA1(TURN_SECRET, username)).
+- Credentials expire after at most one hour. A per-UID Firestore transaction rate-limits issuance.
+- The shared secret is a Firebase Secret Manager secret and never returned to clients or logged.
+- When TURN is unavailable, the function returns configured public STUN only. If callable retrieval fails, the client falls back to STUN and shows an Arabic warning.
 
-## Scope
+## Client environment
+- `NEXT_PUBLIC_STUN_URLS`: comma-separated STUN URLs, defaulting to `stun:stun.l.google.com:19302`.
+- `NEXT_PUBLIC_ICE_TRANSPORT_POLICY`: `all` by default, or `relay` for controlled relay testing. Do not set relay-only for normal use before TURN is verified.
+- These are public ICE settings, not secrets. Never place TURN_SECRET in a `NEXT_PUBLIC_*` variable.
 
-Implement one-to-one audio and video calls between authenticated IMI users. Group calls are out of scope for this first release. Calls must be initiated from an existing conversation whose two participants have an accepted friendship.
+## Required acceptance
+1. Functions unit tests, Firestore Emulator rules tests, web typecheck and production build pass.
+2. Two physical devices complete audio and video calls; both directions of audio/video work.
+3. Hang-up releases tracks; a second call succeeds after the first.
+4. Network changes and at least one ICE restart recover where supported.
+5. Trickle ICE and real-device tests demonstrate relay candidates on restrictive networks.
+6. Fill `docs/call-test-plan.md` with outcome, direct/relay, RTT and media quality for each scenario.
 
-## Firestore model
-
-`calls/{callId}`:
-- `callerUid`, `calleeUid`: immutable authenticated user IDs
-- `conversationId`: conversation containing exactly those two participants
-- `kind`: `audio` or `video`
-- `status`: `ringing`, `accepted`, `rejected`, `ended`, or `missed`
-- `createdAt`, `updatedAt`, `expiresAt`: server timestamps
-- `offer`, `answer`: WebRTC session descriptions; write-once by the appropriate participant
-
-Subcollections:
-- `callerCandidates/{candidateId}`
-- `calleeCandidates/{candidateId}`
-
-Candidate documents contain only ICE candidate fields and are writable/readable only by the two call participants. Clients must never be able to change caller/callee/conversation identity or move a terminal call back to a live state.
-
-## Server responsibilities
-
-Use callable Cloud Functions for call creation and terminal transitions:
-1. `createCall` authenticates the caller, validates the conversation and accepted friendship, verifies the callee is the other participant, and creates a short-lived `ringing` call with server timestamps.
-2. `respondToCall` allows only the callee to accept or reject a ringing call.
-3. `endCall` allows either participant to end an active/ringing call.
-4. Expiry handling marks unanswered calls missed. A client clock must not decide authoritative expiry.
-
-Validate IDs, call status transitions, and rate limits on the server. Do not trust a client-provided UID.
-
-## Web client responsibilities
-
-- Use `RTCPeerConnection`, request microphone/camera permission only after a user gesture, and stop all local media tracks when a call ends or the component unmounts.
-- Exchange offer/answer and ICE candidates through the call document and the two candidate subcollections.
-- Handle permission denial, unsupported browsers, network failure, callee busy/unavailable, timeout, and remote hang-up.
-- Audio-only calls must not request camera access.
-- Do not silently fall back to demo media or fake connected states.
-
-## Network requirements
-
-IMI intentionally does not use public STUN/TURN endpoints or third-party relay services. Until the project-owned Coturn server is configured, the client supplies no external ICE servers and can connect only when direct host connectivity is possible; calls across restrictive NATs, carrier-grade NATs, or separate networks may fail. Production reliability requires the owner-operated Coturn service with authenticated, short-lived credentials delivered securely. Never commit TURN shared secrets or static credentials to the repository or browser bundle. Validate relay connectivity before claiming production readiness.
-
-## Security rules
-
-Firestore rules must:
-- Require authentication and membership in the call's immutable caller/callee pair.
-- Permit only the designated caller to create the offer and only the callee to create the answer.
-- Restrict candidate access to call participants.
-- Prevent clients from changing immutable identity fields or writing arbitrary status transitions.
-- Deny all access to nonparticipants, including reads of call metadata.
-- Keep all authoritative transitions in trusted Cloud Functions.
-
-Add emulator tests for caller/callee access, nonparticipant denial, offer/answer ownership, candidate isolation, immutable fields, and invalid status transitions.
-
-## Release acceptance
-
-Do not mark calling complete until:
-- Functions unit tests and Firestore emulator rules tests pass.
-- Web typecheck and production build pass.
-- Two separate physical devices can complete audio and video calls.
-- Both directions of audio/video are verified, hang-up cleans up tracks, and a second call succeeds after the first ends.
-- A TURN-relayed call is demonstrated on networks where direct ICE fails.
-- No secrets are present in Git history or client bundles.
-
-## Current release gate
-
-Calling is **not implemented or verified** in the current branch. The next implementation change must add the server call lifecycle and restrictive rules before exposing call controls in the UI. Firebase deployment and PR merge remain separate, explicit release decisions.
+## Release gate
+No call feature is declared production-ready until the owner completes the real-device test plan. CI and unit tests do not prove connectivity, audio/video quality, NAT traversal, or Coturn reachability. Firebase deployment and PR merge remain separate explicit approvals.

@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { User } from 'firebase/auth';
-import { collection, doc, limit, onSnapshot, orderBy, query, where, Timestamp } from 'firebase/firestore';
+import { collection, doc, limit, onSnapshot, query, where, Timestamp } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions, storage } from '@/lib/firebase/client';
@@ -22,7 +22,7 @@ export default function ReelsPanel({ user }: { user: User }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const q = query(collection(db, 'reels'), where('status', '==', 'approved'), orderBy('createdAt', 'desc'), limit(50));
+    const q = query(collection(db, 'reels'), where('status', '==', 'approved'), limit(50));
     return onSnapshot(q, snapshot => {
       void Promise.all(snapshot.docs.map(async item => {
         const ownerUid = item.get('ownerUid');
@@ -34,7 +34,7 @@ export default function ReelsPanel({ user }: { user: User }) {
         } catch {
           return null;
         }
-      })).then(items => setReels(items.filter((item): item is Reel => item !== null)));
+      })).then(items => setReels(items.filter((item): item is Reel => item !== null).sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0))));
       setError('');
     }, reason => setError(reason.message));
   }, []);

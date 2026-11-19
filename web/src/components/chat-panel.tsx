@@ -42,6 +42,8 @@ export default function ChatPanel({ user }: { user: User }) {
   const [otherReadAt, setOtherReadAt] = useState<Timestamp | null>(null);
   const [otherDeliveredAt, setOtherDeliveredAt] = useState<Timestamp | null>(null);
   const [otherTyping, setOtherTyping] = useState(false);
+  const [otherPresenceAt, setOtherPresenceAt] = useState<Timestamp | null>(null);
+  const [presenceNow, setPresenceNow] = useState(Date.now());
   const lastReadMessageRef = useRef('');
   const lastDeliveredMessageRef = useRef('');
   const lastTypingSentAtRef = useRef(0);
@@ -150,16 +152,21 @@ export default function ChatPanel({ user }: { user: User }) {
       setOtherReadAt(null);
       setOtherDeliveredAt(null);
       setOtherTyping(false);
+      setOtherPresenceAt(null);
       return;
     }
     const receiptRef = doc(db, 'conversations', selectedId, 'readReceipts', otherUid);
     const deliveryRef = doc(db, 'conversations', selectedId, 'deliveryReceipts', otherUid);
     const typingRef = doc(db, 'conversations', selectedId, 'typing', otherUid);
+    const presenceRef = doc(db, 'conversations', selectedId, 'presence', otherUid);
     const stopReceipt = onSnapshot(receiptRef, snapshot => {
       setOtherReadAt(snapshot.exists() ? snapshot.get('lastReadAt') ?? null : null);
     });
     const stopDelivery = onSnapshot(deliveryRef, snapshot => {
       setOtherDeliveredAt(snapshot.exists() ? snapshot.get('lastDeliveredAt') ?? null : null);
+    });
+    const stopPresence = onSnapshot(presenceRef, snapshot => {
+      setOtherPresenceAt(snapshot.exists() ? snapshot.get('lastSeenAt') ?? null : null);
     });
     const stopTyping = onSnapshot(typingRef, snapshot => {
       const active = snapshot.exists() && snapshot.get('isTyping') === true;
@@ -172,6 +179,7 @@ export default function ChatPanel({ user }: { user: User }) {
     return () => {
       stopReceipt();
       stopDelivery();
+      stopPresence();
       stopTyping();
       if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current);
     };
@@ -189,6 +197,24 @@ export default function ChatPanel({ user }: { user: User }) {
       lastDeliveredMessageRef.current = '';
     });
   }, [messages, selectedId, user.uid]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const ownPresenceRef = doc(db, 'conversations', selectedId, 'presence', user.uid);
+    const heartbeat = () => setDoc(ownPresenceRef, {
+      uid: user.uid,
+      isOnline: true,
+      lastSeenAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }, { merge: true }).catch(() => {});
+    heartbeat();
+    const heartbeatTimer = setInterval(heartbeat, 45_000);
+    const displayTimer = setInterval(() => setPresenceNow(Date.now()), 15_000);
+    return () => {
+      clearInterval(heartbeatTimer);
+      clearInterval(displayTimer);
+    };
+  }, [selectedId, user.uid]);
 
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
@@ -508,7 +534,7 @@ export default function ChatPanel({ user }: { user: User }) {
         })}</div>}
     </aside>
     <div className="flex min-h-[420px] flex-col">
-      <header className="border-b border-white/10 px-4 py-3"><h3 className="font-bold">{selected ? 'المحادثة' : 'الرسائل'}</h3><p className="mt-1 text-xs text-slate-500">{selected ? selected.id : 'اختر محادثة من القائمة'}</p>{otherTyping && <p className="mt-1 text-xs text-emerald-300" aria-live="polite">يكتب الآن…</p>}</header>
+      <header className="border-b border-white/10 px-4 py-3"><h3 className="font-bold">{selected ? 'المحادثة' : 'الرسائل'}</h3><p className="mt-1 text-xs text-slate-500">{selected ? selected.id : 'اختر محادثة من القائمة'}</p>{otherTyping && <p className="mt-1 text-xs text-emerald-300" aria-live="polite">يكتب الآن…</p>}{otherPresenceAt && <p className="mt-1 text-[11px] text-slate-400">{presenceNow - otherPresenceAt.toMillis() < 90_000 ? 'نشط الآن في هذه المحادثة' : `آخر نشاط في المحادثة: ${timeLabel(otherPresenceAt)}`}</p>}</header>
       <div className="flex-1 space-y-3 overflow-y-auto p-4">
         {selectedId && hasMoreMessages && <button type="button" onClick={loadOlderMessages} disabled={loadingOlder || loadingMessages} className="mx-auto block rounded-lg border border-white/10 px-4 py-2 text-xs text-slate-300 disabled:opacity-50">{loadingOlder ? 'جارٍ تحميل الأقدم…' : 'تحميل رسائل أقدم'}</button>}
         {!selectedId && <p className="py-16 text-center text-sm text-slate-500">لا توجد محادثة محددة.</p>}

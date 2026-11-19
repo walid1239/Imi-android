@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { PwaRegister } from '@/components/pwa-register';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -6,6 +7,7 @@ export const metadata: Metadata = {
   description: 'IMI منصة اجتماعية وتعليمية عربية.',
   applicationName: 'IMI',
   manifest: '/manifest.webmanifest',
+  icons: { icon: '/icons/imi.svg' },
 };
 
 export const viewport: Viewport = {
@@ -17,7 +19,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ar" dir="rtl">
-      <body>{children}</body>
+      <body>
+        <PwaRegister />
+        {children}
+      </body>
     </html>
   );
 }

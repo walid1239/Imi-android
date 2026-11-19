@@ -2,9 +2,10 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { User } from 'firebase/auth';
-import { collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, Timestamp } from 'firebase/firestore';
+import { collection, doc, limit, onSnapshot, orderBy, query, where, Timestamp } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase/client';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions, storage } from '@/lib/firebase/client';
 
 type Reel = { id: string; ownerUid: string; caption: string; videoUrl: string; createdAt: Timestamp | null };
 
@@ -21,15 +22,19 @@ export default function ReelsPanel({ user }: { user: User }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const q = query(collection(db, 'reels'), orderBy('createdAt', 'desc'), limit(50));
+    const q = query(collection(db, 'reels'), where('status', '==', 'approved'), orderBy('createdAt', 'desc'), limit(50));
     return onSnapshot(q, snapshot => {
-      setReels(snapshot.docs.flatMap(item => {
+      void Promise.all(snapshot.docs.map(async item => {
         const ownerUid = item.get('ownerUid');
-        const videoUrl = item.get('videoUrl');
         const storagePath = item.get('storagePath');
-        if (typeof ownerUid !== 'string' || typeof videoUrl !== 'string' || typeof storagePath !== 'string') return [];
-        return [{ id: item.id, ownerUid, videoUrl, caption: item.get('caption') || '', createdAt: item.get('createdAt') || null }];
-      }));
+        if (typeof ownerUid !== 'string' || typeof storagePath !== 'string') return null;
+        try {
+          const videoUrl = await getDownloadURL(ref(storage, storagePath));
+          return { id: item.id, ownerUid, videoUrl, caption: item.get('caption') || '', createdAt: item.get('createdAt') || null };
+        } catch {
+          return null;
+        }
+      })).then(items => setReels(items.filter((item): item is Reel => item !== null)));
       setError('');
     }, reason => setError(reason.message));
   }, []);
@@ -40,32 +45,27 @@ export default function ReelsPanel({ user }: { user: User }) {
     if (!['video/mp4', 'video/webm'].includes(file.type)) { setError('الصيغ المدعومة حالياً MP4 وWebM فقط.'); return; }
     if (file.size > 100 * 1024 * 1024) { setError('حجم الفيديو يتجاوز الحد الأقصى 100 ميغابايت.'); return; }
     setBusy(true); setProgress(0); setError('');
-    const reelRef = collection(db, 'reels');
     try {
-      const reelDocument = doc(reelRef);
-      const id = reelDocument.id;
+      const id = doc(collection(db, 'reels')).id;
       const extension = file.type === 'video/webm' ? 'webm' : 'mp4';
-      const path = `reels/${user.uid}/${id}.${extension}`;
+      const path = `reels/${user.uid}/${id}/video.${extension}`;
       const task = uploadBytesResumable(ref(storage, path), file, { contentType: file.type });
-      const url = await new Promise<string>((resolve, reject) => {
+      await new Promise<void>((resolve, reject) => {
         task.on('state_changed',
           snapshot => setProgress(Math.round(snapshot.bytesTransferred / snapshot.totalBytes * 100)),
           reject,
-          async () => {
-            try { resolve(await getDownloadURL(task.snapshot.ref)); }
-            catch (reason) { reject(reason); }
-          }
+          () => resolve()
         );
       });
-      await setDoc(reelDocument, {
-        ownerUid: user.uid,
+      const submit = httpsCallable(functions, 'submitReel');
+      await submit({
+        reelId: id,
         caption: caption.trim().slice(0, 300),
-        videoUrl: url,
         storagePath: path,
-        contentType: file.type,
-        createdAt: serverTimestamp()
+        contentType: file.type
       });
       setCaption(''); setFile(null); setProgress(100);
+      setError('تم استلام المقطع للمراجعة. لن يظهر للآخرين إلا بعد الموافقة.');
       const input = document.getElementById('imi-reel-file') as HTMLInputElement | null;
       if (input) input.value = '';
     } catch (reason) {
@@ -78,10 +78,10 @@ export default function ReelsPanel({ user }: { user: User }) {
   return <section dir="rtl" className="space-y-5">
     <form onSubmit={publish} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
       <h3 className="font-bold">انشر مقطعاً حقيقياً</h3>
-      <p className="mt-1 text-xs leading-6 text-slate-400">يُرفع الفيديو إلى Firebase Storage ثم تُحفظ بياناته في مجموعة reels نفسها التي يستخدمها Android.</p>
+      <p className="mt-1 text-xs leading-6 text-slate-400">يُرفع الفيديو بشكل خاص، ثم يُرسل للمراجعة. لا يظهر للمستخدمين الآخرين إلا بعد موافقة المشرف.</p>
       <input id="imi-reel-file" type="file" accept="video/mp4,video/webm" onChange={event => setFile(event.target.files?.[0] ?? null)} disabled={busy} className="mt-4 block w-full text-sm text-slate-300 file:ml-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-slate-100" />
       <input value={caption} onChange={event => setCaption(event.target.value)} maxLength={300} placeholder="اكتب وصفاً للمقطع (اختياري)" disabled={busy} className="mt-3 w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-sm outline-none focus:border-blue-500" />
-      <button disabled={!file || busy} className="mt-3 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold disabled:opacity-40">{busy ? `جارٍ الرفع ${progress}%` : 'رفع ونشر الفيديو'}</button>
+      <button disabled={!file || busy} className="mt-3 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold disabled:opacity-40">{busy ? `جارٍ الرفع ${progress}%` : 'رفع وإرسال للمراجعة'}</button>
       {busy && <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full bg-blue-500 transition-all" style={{ width: `${progress}%` }} /></div>}
     </form>
     {error && <p role="alert" className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-6 text-amber-200">{error}</p>}

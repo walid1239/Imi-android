@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { User } from 'firebase/auth';
-import { collection, deleteDoc, doc, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db, storage } from '@/lib/firebase/client';
@@ -14,6 +14,8 @@ type Status = {
   expiresAt: Timestamp;
 };
 
+type FriendStatus = { id: string; ownerUid: string; displayName: string; text: string; expiresAt: Timestamp; mediaUrl?: string };
+
 type CreateStatusResult = {
   statusId: string;
   expiresAtMillis: number;
@@ -22,6 +24,7 @@ type CreateStatusResult = {
 
 export default function StatusPanel({ user }: { user: User }) {
   const [status, setStatus] = useState<Status | null>(null);
+  const [friendStatuses, setFriendStatuses] = useState<FriendStatus[]>([]);
   const [mediaUrl, setMediaUrl] = useState('');
   const [text, setText] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -55,6 +58,57 @@ export default function StatusPanel({ user }: { user: User }) {
       }
       setError('');
     }, reason => setError(reason.message));
+  }, [user.uid]);
+
+  useEffect(() => {
+    let statusUnsubs: Array<() => void> = [];
+    const stopFriends = onSnapshot(collection(db, 'users', user.uid, 'friends'), snapshot => {
+      statusUnsubs.forEach(stop => stop());
+      statusUnsubs = [];
+      const friendIds = snapshot.docs
+        .filter(item => item.get('status') === 'accepted')
+        .map(item => item.id);
+      setFriendStatuses(current => current.filter(item => friendIds.includes(item.ownerUid)));
+      if (friendIds.length === 0) setFriendStatuses([]);
+
+      friendIds.forEach(friendUid => {
+        const activeQuery = query(
+          collection(db, 'users', friendUid, 'statuses'),
+          where('expiresAt', '>', Timestamp.now()),
+          orderBy('expiresAt', 'desc')
+        );
+        const stop = onSnapshot(activeQuery, async statusesSnapshot => {
+          const profileSnapshot = await getDoc(doc(db, 'publicProfiles', friendUid));
+          const displayName = profileSnapshot.exists()
+            ? profileSnapshot.get('displayName') || 'صديق'
+            : 'صديق';
+          const items = await Promise.all(statusesSnapshot.docs.map(async item => {
+            const mediaPath = item.get('mediaPath');
+            let mediaUrl = '';
+            if (typeof mediaPath === 'string') {
+              try { mediaUrl = await getDownloadURL(ref(storage, mediaPath)); } catch { mediaUrl = ''; }
+            }
+            return {
+              id: item.id,
+              ownerUid: friendUid,
+              displayName,
+              text: item.get('text') || '',
+              expiresAt: item.get('expiresAt') as Timestamp,
+              ...(mediaUrl ? { mediaUrl } : {}),
+            };
+          }));
+          setFriendStatuses(current => [
+            ...current.filter(item => item.ownerUid !== friendUid),
+            ...items,
+          ]);
+        }, reason => setError(reason.message));
+        statusUnsubs.push(stop);
+      });
+    }, reason => setError(reason.message));
+    return () => {
+      stopFriends();
+      statusUnsubs.forEach(stop => stop());
+    };
   }, [user.uid]);
 
   async function publish(event: FormEvent<HTMLFormElement>) {
@@ -132,6 +186,16 @@ export default function StatusPanel({ user }: { user: User }) {
       {status.mediaPath && (mediaUrl ? <img src={mediaUrl} alt="صورة الحالة" className="mt-4 max-h-[520px] w-full rounded-xl object-contain" /> : <p className="mt-3 text-xs text-slate-400">جارٍ تحميل صورة الحالة…</p>)}
       <button onClick={removeStatus} disabled={busy} className="mt-4 rounded-lg border border-rose-500/30 px-4 py-2 text-xs font-semibold text-rose-300 disabled:opacity-40">حذف حالتي</button>
     </article> : <p className="rounded-2xl border border-dashed border-white/15 p-8 text-center text-sm text-slate-400">لا توجد حالة نشطة لك حالياً.</p>}
-    <p className="text-xs leading-6 text-slate-500">ملاحظة: هذه المرحلة تعرض حالتك أنت فقط. حالات الأصدقاء تحتاج استعلاماً آمناً لعلاقات الصداقة الموثقة، ولن نفتح قراءة الحالات للجميع.</p>
+    <section className="space-y-3">
+      <div className="flex items-center justify-between"><h3 className="font-bold">حالات أصدقائك</h3><span className="text-xs text-slate-500">{friendStatuses.length}</span></div>
+      {friendStatuses.length === 0
+        ? <p className="rounded-2xl border border-dashed border-white/15 p-6 text-center text-sm text-slate-500">لا توجد حالات نشطة من أصدقائك حالياً.</p>
+        : friendStatuses.map(item => <article key={item.ownerUid + item.id} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+          <div className="flex items-center justify-between gap-3"><h4 className="font-semibold">{item.displayName}</h4><span className="text-xs text-slate-500">تنتهي {new Intl.DateTimeFormat('ar', { dateStyle: 'short', timeStyle: 'short' }).format(item.expiresAt.toDate())}</span></div>
+          {item.text && <p className="mt-3 whitespace-pre-wrap text-sm leading-7">{item.text}</p>}
+          {item.mediaUrl && <img src={item.mediaUrl} alt="حالة صديق" className="mt-3 max-h-[520px] w-full rounded-xl object-contain" />}
+        </article>)}
+    </section>
+    <p className="text-xs leading-6 text-slate-500">تُعرض حالات الأصدقاء فقط عندما تكون علاقة الصداقة مؤكدة من الطرفين، وتظل صلاحية الحالة محسوبة من توقيت الخادم.</p>
   </section>;
 }

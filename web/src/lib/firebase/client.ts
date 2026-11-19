@@ -21,8 +21,8 @@ export const firebaseConfigured = Object.values(requiredEnv).every(Boolean);
 const buildFallback = {
   apiKey: 'build-only-not-a-real-firebase-api-key',
   authDomain: 'localhost',
-  projectId: 'imi-indroid',
-  storageBucket: 'imi-indroid.firebasestorage.app',
+  projectId: 'demo-imi-build',
+  storageBucket: 'demo-imi-build.firebasestorage.app',
   messagingSenderId: '000000000000',
   appId: '1:000000000000:web:0000000000000000000000',
 };

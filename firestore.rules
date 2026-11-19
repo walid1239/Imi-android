@@ -432,13 +432,13 @@ service cloud.firestore {
 
     // A teacher profile becomes public only after the verified-teacher callable completes it.
     match /teacherProfiles/{uid} {
-      allow read: if signedIn() && (resource.data.published == true || isSelf(uid) || isAdmin());
+      allow read: if signedIn() && (resource.data.get('published', false) == true || isSelf(uid) || isAdmin());
       allow create, update, delete: if false;
     }
 
     // Mock sessions are private to their teacher/admin; real scheduled/live sessions can be public.
     match /teacherContent/{contentId} {
-      allow read: if signedIn() && (resource.data.published == true
+      allow read: if signedIn() && (resource.data.get('published', false) == true
         || isAdmin()
         || resource.data.ownerUid == request.auth.uid);
       allow create, update, delete: if false;

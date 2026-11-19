@@ -87,7 +87,41 @@ service cloud.firestore {
 
     // Published Academy content is read-only for clients; publishing is an admin workflow.
     match /courses/{courseId} {
-      // Published course catalog is public and read-only; drafts remain admin-only.
+      // Curriculum tree nodes are public when published; only trusted admins may change them.
+    match /curriculumNodes/{nodeId} {
+      allow read: if resource.data.status == 'published' || isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['id', 'parentId', 'type', 'nameAr', 'nameFr', 'language', 'order', 'semester', 'officialSource', 'needsReview', 'status', 'createdAt', 'updatedAt'])
+        && request.resource.data.id == nodeId
+        && request.resource.data.type in ['level', 'track', 'subject', 'unit']
+        && request.resource.data.nameAr is string
+        && request.resource.data.nameAr.size() > 0
+        && request.resource.data.nameAr.size() <= 120
+        && request.resource.data.nameFr is string
+        && request.resource.data.nameFr.size() <= 120
+        && request.resource.data.language in ['ar', 'fr', 'mixed', 'unknown']
+        && request.resource.data.order is int
+        && request.resource.data.needsReview is bool
+        && request.resource.data.status in ['hidden', 'published']
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['id', 'parentId', 'type', 'nameAr', 'nameFr', 'language', 'order', 'semester', 'officialSource', 'needsReview', 'status', 'createdAt', 'updatedAt', 'mergedInto'])
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.type in ['level', 'track', 'subject', 'unit']
+        && request.resource.data.nameAr is string
+        && request.resource.data.nameAr.size() > 0
+        && request.resource.data.nameAr.size() <= 120
+        && request.resource.data.language in ['ar', 'fr', 'mixed', 'unknown']
+        && request.resource.data.order is int
+        && request.resource.data.needsReview is bool
+        && request.resource.data.status in ['hidden', 'published'];
+      allow delete: if isAdmin();
+    }
+
+    // Published course catalog is public and read-only; drafts remain admin-only.
       allow read: if resource.data.published == true || (signedIn() && isAdmin());
       allow create, update, delete: if false;
 

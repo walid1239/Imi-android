@@ -165,6 +165,41 @@ test('content reports and moderation logs are admin-readable but never client-wr
   await assertFails(getDoc(doc(aliceDb, 'reportRateLimits/alice')));
 });
 
+test('curriculum nodes expose published structure only and block client self-promotion', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'curriculumNodes/primary'), {
+      id: 'primary', parentId: null, type: 'level', nameAr: 'التعليم الابتدائي',
+      nameFr: 'Enseignement primaire', language: 'ar', order: 1,
+      semester: null, officialSource: 'https://pw.men.gov.ma/', needsReview: false,
+      status: 'published', createdAt: new Date(), updatedAt: new Date()
+    });
+    await setDoc(doc(db, 'curriculumNodes/hidden-unit'), {
+      id: 'hidden-unit', parentId: 'primary', type: 'unit', nameAr: 'محاور قيد التوثيق',
+      nameFr: 'Axes à documenter', language: 'unknown', order: 1,
+      semester: null, officialSource: null, needsReview: true,
+      status: 'hidden', createdAt: new Date(), updatedAt: new Date()
+    });
+  });
+  const guestDb = env.unauthenticatedContext().firestore();
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const adminDb = env.authenticatedContext('admin', { admin: true }).firestore();
+  await assertSucceeds(getDoc(doc(guestDb, 'curriculumNodes/primary')));
+  await assertFails(getDoc(doc(guestDb, 'curriculumNodes/hidden-unit')));
+  await assertSucceeds(getDoc(doc(adminDb, 'curriculumNodes/hidden-unit')));
+  await assertFails(setDoc(doc(aliceDb, 'curriculumNodes/forged'), {
+    id: 'forged', parentId: null, type: 'level', nameAr: 'مزيف', nameFr: 'Fake',
+    language: 'ar', order: 1, semester: null, officialSource: null,
+    needsReview: false, status: 'published', createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+  }));
+  await assertFails((await import('firebase/firestore')).updateDoc(doc(aliceDb, 'curriculumNodes/hidden-unit'), {
+    status: 'published', updatedAt: serverTimestamp()
+  }));
+  await assertSucceeds((await import('firebase/firestore')).updateDoc(doc(adminDb, 'curriculumNodes/hidden-unit'), {
+    status: 'published', updatedAt: serverTimestamp()
+  }));
+});
+
 test('learners can read published Academy content but cannot publish or modify it', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();

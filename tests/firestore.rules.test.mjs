@@ -560,4 +560,12 @@ test('WebRTC signaling is limited to call participants and each side owns its SD
   await assertFails((await import('firebase/firestore')).updateDoc(call, {
     status: 'ended'
   }));
+  await env.withSecurityRulesDisabled(async context => {
+    await (await import('firebase/firestore')).updateDoc(doc(context.firestore(), 'calls/call-1'), {
+      status: 'ended'
+    });
+  });
+  await assertFails(setDoc(doc(alice, 'calls/call-1/callerCandidates/late'), {
+    candidate: 'candidate:late', sdpMid: '0', sdpMLineIndex: 0
+  }));
 });

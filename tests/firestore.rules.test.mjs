@@ -51,6 +51,12 @@ before(async () => {
       text: 'رسالة اختبار موجودة',
       createdAt: new Date()
     });
+    await setDoc(doc(db, 'conversations/chat-1/messages/own-message'), {
+      senderUid: 'alice',
+      type: 'text',
+      text: 'رسالة أرسلها صاحب الإيصال',
+      createdAt: new Date()
+    });
   });
 });
 
@@ -254,6 +260,9 @@ test('conversation read receipts and typing state are private to members and sel
   }));
   await assertFails(setDoc(aliceDelivery, {
     uid: 'alice', lastDeliveredAt: serverTimestamp(), lastDeliveredMessageId: 'missing-message'
+  }));
+  await assertFails(setDoc(aliceDelivery, {
+    uid: 'alice', lastDeliveredAt: serverTimestamp(), lastDeliveredMessageId: 'own-message'
   }));
   await assertFails(setDoc(doc(aliceDb, 'conversations/chat-1/deliveryReceipts/bob'), {
     uid: 'bob', lastDeliveredAt: serverTimestamp(), lastDeliveredMessageId: 'receipt-target'

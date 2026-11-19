@@ -2,6 +2,7 @@ import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
+import { getStorage } from "firebase-admin/storage";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -359,6 +360,74 @@ export const completeCourseLesson = onCall<CourseEnrollmentInput>(async (request
   return { status: "completed", courseId, lessonId };
 });
 
+
+// Reels are uploaded into a private owner path, then registered as pending.
+// Only an administrator can approve them; clients cannot forge publication metadata.
+type SubmitReelInput = { reelId?: unknown; caption?: unknown; storagePath?: unknown; contentType?: unknown };
+type ReviewReelInput = { reelId?: unknown; decision?: unknown; note?: unknown };
+
+export const submitReel = onCall<SubmitReelInput>(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  const reelId = typeof request.data?.reelId === "string" ? request.data.reelId.trim() : "";
+  const caption = typeof request.data?.caption === "string" ? request.data.caption.trim() : "";
+  const contentType = request.data?.contentType;
+  const storagePath = request.data?.storagePath;
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(reelId)) throw new HttpsError("invalid-argument", "معرّف المقطع غير صالح.");
+  if (caption.length > 300) throw new HttpsError("invalid-argument", "الوصف يتجاوز 300 حرف.");
+  if (contentType !== "video/mp4" && contentType !== "video/webm") throw new HttpsError("invalid-argument", "صيغة الفيديو غير مدعومة.");
+  const extension = contentType === "video/webm" ? "webm" : "mp4";
+  const expectedPath = `reels/${uid}/${reelId}/video.${extension}`;
+  if (storagePath !== expectedPath) throw new HttpsError("invalid-argument", "مسار الفيديو لا يطابق حسابك أو معرّف المقطع.");
+  const file = getStorage().bucket().file(expectedPath);
+  let metadata: Record<string, unknown>;
+  try {
+    const [actual] = await file.getMetadata();
+    metadata = actual as Record<string, unknown>;
+  } catch {
+    throw new HttpsError("not-found", "لم يتم العثور على الفيديو المرفوع.");
+  }
+  const size = Number(metadata.size ?? 0);
+  if (metadata.contentType !== contentType || !Number.isFinite(size) || size <= 0 || size > 100 * 1024 * 1024) {
+    throw new HttpsError("failed-precondition", "بيانات الفيديو أو حجمه لا تطابق الشروط.");
+  }
+  const reelRef = db.collection("reels").doc(reelId);
+  await db.runTransaction(async transaction => {
+    const existing = await transaction.get(reelRef);
+    if (existing.exists) throw new HttpsError("already-exists", "هذا المقطع مسجل مسبقاً.");
+    transaction.create(reelRef, {
+      ownerUid: uid, caption, storagePath: expectedPath, contentType,
+      status: "pending", createdAt: FieldValue.serverTimestamp(),
+      reviewedAt: null, reviewedBy: null,
+    });
+  });
+  return { reelId, status: "pending" };
+});
+
+export const reviewReel = onCall<ReviewReelInput>(async (request) => {
+  const adminUid = requireAdmin(request);
+  const reelId = typeof request.data?.reelId === "string" ? request.data.reelId.trim() : "";
+  const decision = request.data?.decision;
+  const note = typeof request.data?.note === "string" ? request.data.note.trim().slice(0, 500) : "";
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(reelId) || !["approved", "rejected"].includes(String(decision))) {
+    throw new HttpsError("invalid-argument", "طلب المراجعة غير صالح.");
+  }
+  const reelRef = db.collection("reels").doc(reelId);
+  await db.runTransaction(async transaction => {
+    const reel = await transaction.get(reelRef);
+    if (!reel.exists) throw new HttpsError("not-found", "المقطع غير موجود.");
+    if (reel.get("status") !== "pending") throw new HttpsError("failed-precondition", "تمت مراجعة هذا المقطع مسبقاً.");
+    transaction.update(reelRef, {
+      status: decision, reviewedBy: adminUid, reviewedAt: FieldValue.serverTimestamp(),
+      reviewNote: note,
+    });
+    transaction.create(db.collection("moderationLogs").doc(), {
+      actorUid: adminUid, action: decision === "approved" ? "reel_approved" : "reel_rejected",
+      targetId: reelId, createdAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return { reelId, status: decision };
+});
 
 // Academy authoring is deliberately server-only. Never trust a client-supplied role.
 type CreateCourseInput = { title?: unknown; description?: unknown; category?: unknown };

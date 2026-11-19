@@ -195,6 +195,7 @@ test('status media uploads require owner, are visible to accepted friends, and c
   await assertSucceeds(uploadBytes(aliceFile, new Blob(['image-data'], { type: 'image/jpeg' })));
   await assertSucceeds(getBytes(bobFile));
   await assertFails(uploadBytes(ref(bobStorage, 'users/alice/statuses/status-storage/attacker.jpg'), new Blob(['bad'], { type: 'image/jpeg' })));
+  await assertFails(uploadBytes(ref(aliceStorage, 'users/alice/statuses/status-storage/status.mp4'), new Blob(['video-data'], { type: 'video/mp4' })));
   await assertSucceeds(deleteObject(aliceFile));
 
   await env.withSecurityRulesDisabled(async (context) => {

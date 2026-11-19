@@ -484,6 +484,23 @@ test('expired statuses cannot be read even by their owner', async () => {
 });
 
 
+test('incoming call queries return only calls addressed to the authenticated recipient', async () => {
+  const bobDb = env.authenticatedContext('bob').firestore();
+  const malloryDb = env.authenticatedContext('mallory').firestore();
+  const { collection, getDocs, query, where } = await import('firebase/firestore');
+  const incoming = await getDocs(query(
+    collection(bobDb, 'calls'),
+    where('calleeUid', '==', 'bob'),
+    where('status', '==', 'ringing')
+  ));
+  assert.equal(incoming.size, 1);
+  await assertFails(getDocs(query(
+    collection(malloryDb, 'calls'),
+    where('calleeUid', '==', 'bob'),
+    where('status', '==', 'ringing')
+  )));
+});
+
 test('WebRTC signaling is limited to call participants and each side owns its SDP and ICE candidates', async () => {
   const alice = env.authenticatedContext('alice').firestore();
   const bob = env.authenticatedContext('bob').firestore();

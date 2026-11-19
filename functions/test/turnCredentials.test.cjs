@@ -9,9 +9,11 @@ test("TURN credentials are short-lived, user-bound HMAC credentials", () => {
   const expectedUsername = `${Math.floor(now / 1000) + 3600}:user-123`;
   assert.equal(result.configured, true);
   assert.equal(result.expiresAt, Math.floor(now / 1000) + 3600);
-  assert.equal(result.iceServers[1].username, expectedUsername);
-  assert.equal(result.iceServers[1].credential, createHmac("sha1", "local-secret").update(expectedUsername).digest("base64"));
-  assert.deepEqual(result.iceServers[1].urls, ["turn:turn.example.test:3478", "turns:turn.example.test:5349"]);
+  assert.equal(result.iceServers[0].username, expectedUsername);
+  assert.equal(result.iceServers[0].credential, createHmac("sha1", "local-secret").update(expectedUsername).digest("base64"));
+  assert.deepEqual(result.iceServers[0].urls, ["turn:turn.example.test:3478", "turns:turn.example.test:5349"]);
+  assert.equal(result.iceServers.length, 1);
+  assert.ok(!result.iceServers.some(server => server.urls.some(url => url.startsWith("stun:"))));
 });
 
 test("TURN is safely disabled when the secret or TURN URLs are absent", () => {
@@ -26,6 +28,6 @@ test("TURN is safely disabled when the secret or TURN URLs are absent", () => {
 
 test("TURN URLs reject non-TURN schemes and credentials have a bounded lifetime", () => {
   const result = createTurnConfiguration("user-123", "local-secret", "https://example.test,turn:turn.example.test:3478", 1_800_000_000_000, 999999);
-  assert.deepEqual(result.iceServers[1].urls, ["turn:turn.example.test:3478"]);
+  assert.deepEqual(result.iceServers[0].urls, ["turn:turn.example.test:3478"]);
   assert.equal(result.expiresAt, Math.floor(1_800_000_000_000 / 1000) + 6 * 60 * 60);
 });

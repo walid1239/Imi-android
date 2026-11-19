@@ -1,5 +1,6 @@
 package com.walid.chat.data.repository
 
+import android.net.Uri
 import com.walid.chat.data.model.Chat
 import com.walid.chat.data.model.ChatMessage
 import kotlinx.coroutines.flow.Flow
@@ -15,6 +16,15 @@ class UnconfiguredChatRepository : ChatRepository {
 
     override suspend fun loadOlderMessages(chatId: String, before: ChatMessage): Result<List<ChatMessage>> =
         Result.failure(IllegalStateException("تحميل الرسائل الأقدم غير مفعّل قبل ربط Firebase"))
+
+    override suspend fun sendMediaMessage(
+        chatId: String,
+        uri: Uri,
+        contentType: String,
+        fileName: String,
+        sizeBytes: Long,
+        caption: String
+    ): Result<Unit> = Result.failure(IllegalStateException("إرسال المرفقات غير مفعّل قبل ربط Firebase"))
 
     override suspend fun sendMessage(chatId: String, text: String): Result<Unit> =
         Result.failure(IllegalStateException("إرسال الرسائل غير مفعّل قبل ربط Firebase"))

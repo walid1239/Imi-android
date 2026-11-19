@@ -522,6 +522,24 @@ test('non-members cannot write messages into another conversation', async () => 
 });
 
 
+test('block records are owner-readable, server-managed, and block direct conversations', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'users/carol/blockedUsers/dave'), { uid: 'dave', blockedAt: new Date() });
+    await setDoc(doc(db, 'conversations/blocked-direct'), { participants: ['carol', 'dave'], createdBy: 'carol' });
+    await setDoc(doc(db, 'conversations/blocked-group'), { type: 'group', participants: ['carol', 'dave', 'alice'], createdBy: 'carol' });
+  });
+  const carol = env.authenticatedContext('carol').firestore();
+  const dave = env.authenticatedContext('dave').firestore();
+  await assertSucceeds(getDoc(doc(carol, 'users/carol/blockedUsers/dave')));
+  await assertFails(getDoc(doc(dave, 'users/carol/blockedUsers/dave')));
+  await assertFails(setDoc(doc(carol, 'users/carol/blockedUsers/mallory'), { uid: 'mallory' }));
+  await assertFails(getDoc(doc(carol, 'conversations/blocked-direct')));
+  await assertFails(getDoc(doc(dave, 'conversations/blocked-direct')));
+  await assertSucceeds(getDoc(doc(carol, 'conversations/blocked-group')));
+  await assertSucceeds(getDoc(doc(dave, 'conversations/blocked-group')));
+});
+
 test('teacher applications and profiles are private and client writes cannot grant roles', async () => {
   await env.withSecurityRulesDisabled(async context => {
     const db = context.firestore();

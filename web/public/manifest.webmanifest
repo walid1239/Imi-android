@@ -8,5 +8,12 @@
   "display": "standalone",
   "background_color": "#080b14",
   "theme_color": "#080b14",
-  "icons": []
+  "icons": [
+    {
+      "src": "/icons/imi.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
 }

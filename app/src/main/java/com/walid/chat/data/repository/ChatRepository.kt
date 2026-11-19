@@ -11,5 +11,6 @@ import kotlinx.coroutines.flow.Flow
 interface ChatRepository {
     suspend fun getChats(): Result<List<Chat>>
     fun observeMessages(chatId: String): Flow<Result<List<ChatMessage>>>
+    suspend fun loadOlderMessages(chatId: String, before: ChatMessage): Result<List<ChatMessage>>
     suspend fun sendMessage(chatId: String, text: String): Result<Unit>
 }

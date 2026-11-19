@@ -266,6 +266,29 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // Per-conversation presence avoids exposing global activity to strangers.
+      // A stale heartbeat is interpreted by clients as offline; abrupt closes do not
+      // require an unreliable browser unload write.
+      match /presence/{uid} {
+        allow read: if isConversationMember(conversationId);
+        allow create: if isConversationMember(conversationId)
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['uid', 'isOnline', 'lastSeenAt', 'updatedAt'])
+          && request.resource.data.uid == uid
+          && request.resource.data.isOnline == true
+          && request.resource.data.lastSeenAt == request.time
+          && request.resource.data.updatedAt == request.time;
+        allow update: if isConversationMember(conversationId)
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['uid', 'isOnline', 'lastSeenAt', 'updatedAt'])
+          && request.resource.data.uid == uid
+          && request.resource.data.isOnline is bool
+          && request.resource.data.lastSeenAt == request.time
+          && request.resource.data.updatedAt == request.time
+          && request.time > resource.data.updatedAt + duration.value(30, 's');
+        allow delete: if false;
+      }
+
       // Typing presence is intentionally scoped to one conversation and is short-lived.
       match /typing/{uid} {
         allow read: if isConversationMember(conversationId);

@@ -117,7 +117,7 @@ service firebase.storage {
       function contentIsPublished() {
         return firestore.exists(/databases/(default)/documents/teacherContent/$(contentId))
           && firestore.get(/databases/(default)/documents/teacherContent/$(contentId)).data.ownerUid == uid
-          && firestore.get(/databases/(default)/documents/teacherContent/$(contentId)).data.published == true;
+          && firestore.get(/databases/(default)/documents/teacherContent/$(contentId)).data.get('published', false) == true;
       }
       function teacherProfileIsComplete() {
         return firestore.exists(/databases/(default)/documents/teacherProfiles/$(uid))
@@ -159,7 +159,7 @@ service firebase.storage {
           && firestore.get(/databases/(default)/documents/teacherProfiles/$(uid)).data.published == true);
       allow create: if signedIn()
         && request.auth.uid == uid
-        && request.auth.token.teacherVerified == true
+        && request.auth.token.get('teacherVerified', false) == true
         && request.resource != null
         && request.resource.size > 0
         && request.resource.size <= 5 * 1024 * 1024

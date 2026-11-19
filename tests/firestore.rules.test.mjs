@@ -407,6 +407,10 @@ test('Reels storage accepts owner video uploads and rejects foreign or non-video
     aliceVideo,
     new Blob(['video-data'], { type: 'video/mp4' })
   ));
+  await assertFails(uploadBytes(
+    aliceVideo,
+    new Blob(['replacement-video'], { type: 'video/mp4' })
+  ));
   await assertSucceeds(getBytes(ref(bobStorage, 'reels/alice/test.mp4')));
   await assertFails(uploadBytes(
     ref(bobStorage, 'reels/alice/attacker.mp4'),
@@ -463,6 +467,7 @@ test('status media uploads require owner, are visible to accepted friends, and c
   const aliceFile = ref(aliceStorage, path);
   const bobFile = ref(bobStorage, path);
   await assertSucceeds(uploadBytes(aliceFile, new Blob(['image-data'], { type: 'image/jpeg' })));
+  await assertFails(uploadBytes(aliceFile, new Blob(['replacement-image'], { type: 'image/jpeg' })));
   await assertSucceeds(getBytes(bobFile));
   await assertFails(uploadBytes(ref(bobStorage, 'users/alice/statuses/status-storage/attacker.jpg'), new Blob(['bad'], { type: 'image/jpeg' })));
   await assertFails(uploadBytes(ref(aliceStorage, 'users/alice/statuses/status-storage/status.mp4'), new Blob(['video-data'], { type: 'video/mp4' })));

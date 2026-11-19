@@ -267,3 +267,118 @@ export const completeCourseLesson = onCall<CourseEnrollmentInput>(async (request
   });
   return { status: "completed", courseId, lessonId };
 });
+
+
+// Academy authoring is deliberately server-only. Never trust a client-supplied role.
+type CreateCourseInput = { title?: unknown; description?: unknown; category?: unknown };
+type CreateLessonInput = { courseId?: unknown; title?: unknown; content?: unknown; videoUrl?: unknown; order?: unknown };
+
+function requireAdmin(request: { auth?: { uid: string; token: Record<string, unknown> } | null }): string {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  if (request.auth?.token.admin !== true) {
+    throw new HttpsError("permission-denied", "هذه العملية متاحة لمشرف IMI موثّق فقط.");
+  }
+  return uid;
+}
+
+function academyText(value: unknown, field: string, maxLength: number, optional = false): string {
+  if (optional && (value === undefined || value === null || value === "")) return "";
+  if (typeof value !== "string") throw new HttpsError("invalid-argument", `حقل ${field} يجب أن يكون نصاً.`);
+  const normalized = value.trim();
+  if ((!optional && normalized.length === 0) || normalized.length > maxLength) {
+    throw new HttpsError("invalid-argument", `حقل ${field} فارغ أو يتجاوز الحد المسموح.`);
+  }
+  return normalized;
+}
+
+export const createCourse = onCall<CreateCourseInput>(async (request) => {
+  const adminUid = requireAdmin(request);
+  const title = academyText(request.data?.title, "العنوان", 120);
+  const description = academyText(request.data?.description, "الوصف", 4000, true);
+  const category = academyText(request.data?.category, "التصنيف", 60);
+  const courseRef = db.collection("courses").doc();
+  await courseRef.create({
+    title, description, category, published: false,
+    createdAt: FieldValue.serverTimestamp(), createdBy: adminUid,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  return { courseId: courseRef.id, published: false };
+});
+
+export const createCourseLesson = onCall<CreateLessonInput>(async (request) => {
+  const adminUid = requireAdmin(request);
+  const courseId = requireUid(request.data?.courseId, "معرّف الدورة غير صالح.");
+  const title = academyText(request.data?.title, "عنوان الدرس", 120);
+  const content = academyText(request.data?.content, "محتوى الدرس", 20000, true);
+  const videoUrl = academyText(request.data?.videoUrl, "رابط الفيديو", 2048, true);
+  if (videoUrl && !/^https:\/\//i.test(videoUrl)) {
+    throw new HttpsError("invalid-argument", "رابط الفيديو يجب أن يبدأ بـ https://.");
+  }
+  const order = request.data?.order === undefined ? 0 : request.data.order;
+  if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0 || order > 100000) {
+    throw new HttpsError("invalid-argument", "ترتيب الدرس غير صالح.");
+  }
+  const courseRef = db.collection("courses").doc(courseId);
+  const lessonRef = courseRef.collection("lessons").doc();
+  await db.runTransaction(async (transaction) => {
+    const course = await transaction.get(courseRef);
+    if (!course.exists) throw new HttpsError("not-found", "الدورة غير موجودة.");
+    if (course.get("published") === true) {
+      throw new HttpsError("failed-precondition", "أوقف نشر الدورة قبل تعديل محتواها.");
+    }
+    transaction.create(lessonRef, {
+      title, content, ...(videoUrl ? { videoUrl } : {}), order,
+      published: false, createdAt: FieldValue.serverTimestamp(),
+      createdBy: adminUid, updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return { lessonId: lessonRef.id, published: false };
+});
+
+export const publishCourse = onCall<{ courseId?: unknown; published?: unknown }>(async (request) => {
+  requireAdmin(request);
+  const courseId = requireUid(request.data?.courseId, "معرّف الدورة غير صالح.");
+  if (typeof request.data?.published !== "boolean") {
+    throw new HttpsError("invalid-argument", "حدد حالة نشر صحيحة.");
+  }
+  const courseRef = db.collection("courses").doc(courseId);
+  await db.runTransaction(async (transaction) => {
+    const course = await transaction.get(courseRef);
+    if (!course.exists) throw new HttpsError("not-found", "الدورة غير موجودة.");
+    if (request.data?.published === true) {
+      const lessons = await transaction.get(courseRef.collection("lessons"));
+      if (lessons.empty) throw new HttpsError("failed-precondition", "أضف درساً واحداً على الأقل قبل نشر الدورة.");
+    }
+    transaction.update(courseRef, {
+      published: request.data?.published,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return { published: request.data.published };
+});
+
+export const publishCourseLesson = onCall<{ courseId?: unknown; lessonId?: unknown; published?: unknown }>(async (request) => {
+  requireAdmin(request);
+  const courseId = requireUid(request.data?.courseId, "معرّف الدورة غير صالح.");
+  const lessonId = requireUid(request.data?.lessonId, "معرّف الدرس غير صالح.");
+  if (typeof request.data?.published !== "boolean") {
+    throw new HttpsError("invalid-argument", "حدد حالة نشر صحيحة.");
+  }
+  const courseRef = db.collection("courses").doc(courseId);
+  const lessonRef = courseRef.collection("lessons").doc(lessonId);
+  await db.runTransaction(async (transaction) => {
+    const [course, lesson] = await Promise.all([
+      transaction.get(courseRef), transaction.get(lessonRef),
+    ]);
+    if (!course.exists || !lesson.exists) throw new HttpsError("not-found", "الدورة أو الدرس غير موجود.");
+    if (request.data?.published === true && course.get("published") !== true) {
+      throw new HttpsError("failed-precondition", "انشر الدورة أولاً ثم انشر الدرس.");
+    }
+    transaction.update(lessonRef, {
+      published: request.data?.published,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return { published: request.data.published };
+});

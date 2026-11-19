@@ -2,6 +2,9 @@ import { getAuth } from "firebase-admin/auth";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import { applyTeacherClaimsOutboxOperation } from "./teacherClaimsOutbox";
 import { mockLiveProvider } from "./liveProvider";
 import { createTeacherAgreementAcceptances } from "./teacherAgreements";
 
@@ -74,30 +77,43 @@ export const submitTeacherApplication = onCall<AppInput>(async request => {
 
 export const reviewTeacherApplication = onCall<ReviewInput>(async request => {
   if (request.auth?.token.admin !== true) throw new HttpsError("permission-denied", "المشرف الموثق فقط يمكنه مراجعة الطلبات.");
+  const actorUid = request.auth.uid;
   const targetUid = uid(request.data?.uid);
   if (typeof request.data?.approved !== "boolean") throw new HttpsError("invalid-argument", "قرار المراجعة غير صالح.");
   const approved = request.data.approved;
+  const desiredStatus = approved ? "approved" : "rejected";
   const note = typeof request.data.note === "string" ? request.data.note.trim().slice(0, 500) : "";
   const db = getFirestore(), ref = db.collection("teacherApplications").doc(targetUid);
-  const application = await ref.get();
-  if (!application.exists || application.get("status") !== "pending") {
-    throw new HttpsError("failed-precondition", "لا يوجد طلب توثيق قيد المراجعة.");
-  }
-  const user = await getAuth().getUser(targetUid);
-  const claims: Record<string, unknown> = { ...(user.customClaims ?? {}) };
-  if (approved) { claims.teacher = true; claims.teacherVerified = true; }
-  else { delete claims.teacher; delete claims.teacherVerified; }
-  await getAuth().setCustomUserClaims(targetUid, claims);
-  await ref.update({
-    status: approved ? "approved" : "rejected", reviewedBy: request.auth.uid,
-    reviewedAt: FieldValue.serverTimestamp(), reviewNote: note,
+
+  const result = await db.runTransaction(async transaction => {
+    const application = await transaction.get(ref);
+    if (!application.exists) throw new HttpsError("not-found", "طلب الأستاذ غير موجود.");
+    if (application.get("status") === desiredStatus) {
+      return { status: desiredStatus, operationId: String(application.get("reviewOperationId") ?? ""), idempotent: true };
+    }
+    if (application.get("status") !== "pending") {
+      throw new HttpsError("failed-precondition", "تمت مراجعة هذا الطلب بقرار مختلف أو لم يعد قيد الانتظار.");
+    }
+    const operationId = `teacher-${targetUid}-${application.updateTime?.toMillis() ?? Date.now()}`;
+    const auditRef = db.collection("moderationAudit").doc(operationId);
+    const outboxRef = db.collection("teacherClaimsOutbox").doc(operationId);
+    const now = FieldValue.serverTimestamp();
+    transaction.update(ref, {
+      status: desiredStatus, reviewedBy: actorUid, reviewedAt: now,
+      reviewNote: note, reviewOperationId: operationId,
+    });
+    transaction.create(auditRef, {
+      actorUid, targetUid,
+      action: approved ? "teacher_application_approved" : "teacher_application_rejected",
+      note, operationId, createdAt: now,
+    });
+    transaction.create(outboxRef, {
+      operationId, targetUid, desiredTeacher: approved, status: "pending",
+      attempts: 0, actorUid, createdAt: now, updatedAt: now,
+    });
+    return { status: desiredStatus, operationId, idempotent: false };
   });
-  await db.collection("moderationAudit").add({
-    actorUid: request.auth.uid, targetUid,
-    action: approved ? "teacher_application_approved" : "teacher_application_rejected",
-    note, createdAt: FieldValue.serverTimestamp(),
-  });
-  return { status: approved ? "approved" : "rejected" };
+  return { ...result, claimsSync: result.operationId ? "queued" : "reconciliation_required" };
 });
 
 export const saveTeacherProfile = onCall<ProfileInput>(async request => {
@@ -271,28 +287,130 @@ export const createTeacherContent = onCall<TeacherContentInput>(async request =>
 
 export const reviewTeacherContent = onCall<ReviewTeacherContentInput>(async request => {
   if (request.auth?.token.admin !== true) throw new HttpsError("permission-denied", "المشرف الموثق فقط يمكنه مراجعة المحتوى.");
+  const actorUid = request.auth.uid;
   const contentId = clean(request.data?.contentId, 8, 128);
   if (!contentId || !/^[A-Za-z0-9_-]+$/.test(contentId) || typeof request.data?.approved !== "boolean") {
     throw new HttpsError("invalid-argument", "بيانات المراجعة غير صالحة.");
   }
-  const ref = getFirestore().collection("teacherContent").doc(contentId);
-  const content = await ref.get();
-  if (!content.exists || content.get("status") !== "draft") throw new HttpsError("failed-precondition", "المحتوى غير موجود أو ليس مسودة.");
   const approved = request.data.approved;
-  await ref.update({
-    status: approved ? "published" : "rejected",
-    published: approved,
-    reviewStatus: approved ? "approved" : "rejected",
-    needsHumanReview: !approved,
-    reviewedBy: request.auth.uid,
-    reviewedAt: FieldValue.serverTimestamp(),
-    reviewNote: typeof request.data.note === "string" ? request.data.note.trim().slice(0, 500) : "",
-    updatedAt: FieldValue.serverTimestamp(),
+  const desiredStatus = approved ? "published" : "rejected";
+  const db = getFirestore(), ref = db.collection("teacherContent").doc(contentId);
+  return db.runTransaction(async transaction => {
+    const content = await transaction.get(ref);
+    if (!content.exists) throw new HttpsError("not-found", "المحتوى غير موجود.");
+    if (content.get("status") === desiredStatus) return { status: desiredStatus, idempotent: true };
+    if (content.get("status") !== "draft") throw new HttpsError("failed-precondition", "المحتوى ليس مسودة قابلة للمراجعة.");
+    const operationId = `teacher-content-${contentId}-${content.updateTime?.toMillis() ?? Date.now()}`;
+    const auditRef = db.collection("moderationAudit").doc(operationId);
+    const now = FieldValue.serverTimestamp();
+    transaction.update(ref, {
+      status: desiredStatus, published: approved,
+      reviewStatus: approved ? "approved" : "rejected",
+      needsHumanReview: !approved,
+      reviewedBy: actorUid, reviewedAt: now,
+      reviewNote: typeof request.data.note === "string" ? request.data.note.trim().slice(0, 500) : "",
+      updatedAt: now, reviewOperationId: operationId,
+    });
+    transaction.create(auditRef, {
+      actorUid, targetUid: content.get("ownerUid"),
+      contentId, action: approved ? "teacher_content_published" : "teacher_content_rejected",
+      operationId, createdAt: now,
+    });
+    return { status: desiredStatus, idempotent: false };
   });
-  await getFirestore().collection("moderationAudit").add({
-    actorUid: request.auth.uid, targetUid: content.get("ownerUid"),
-    contentId, action: approved ? "teacher_content_published" : "teacher_content_rejected",
-    createdAt: FieldValue.serverTimestamp(),
+});
+
+async function applyTeacherClaimsOperation(operationId: string, operation: { targetUid: string; desiredTeacher: boolean }) {
+  const db = getFirestore();
+  const outboxRef = db.collection("teacherClaimsOutbox").doc(operationId);
+  await applyTeacherClaimsOutboxOperation(operation, {
+    getUser: async targetUid => {
+      const user = await getAuth().getUser(targetUid);
+      return { customClaims: user.customClaims ?? {} };
+    },
+    setCustomClaims: async (targetUid, claims) => getAuth().setCustomUserClaims(targetUid, claims),
+    markApplied: async () => {
+      await db.runTransaction(async transaction => {
+        const current = await transaction.get(outboxRef);
+        if (!current.exists || current.get("status") === "applied") return;
+        transaction.update(outboxRef, {
+          status: "applied", appliedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(), lastError: FieldValue.delete(),
+          attempts: FieldValue.increment(1),
+        });
+      });
+    },
+    markPending: async error => {
+      await outboxRef.set({
+        status: "pending", updatedAt: FieldValue.serverTimestamp(),
+        attempts: FieldValue.increment(1),
+        lastError: error instanceof Error ? error.message.slice(0, 500) : "Unknown Auth claim synchronization error",
+      }, { merge: true });
+    },
   });
-  return { status: approved ? "published" : "rejected" };
+}
+
+export const applyTeacherClaimsOutbox = onDocumentCreated(
+  { document: "teacherClaimsOutbox/{operationId}", retry: true },
+  async event => {
+    const snapshot = event.data;
+    if (!snapshot) return;
+    const data = snapshot.data();
+    if (typeof data.targetUid !== "string" || typeof data.desiredTeacher !== "boolean") {
+      throw new Error("Invalid teacher claims outbox record.");
+    }
+    await applyTeacherClaimsOperation(event.params.operationId, {
+      targetUid: data.targetUid, desiredTeacher: data.desiredTeacher,
+    });
+  },
+);
+
+export const reconcileTeacherClaims = onSchedule("every 15 minutes", async () => {
+  const db = getFirestore();
+  const pending = await db.collection("teacherClaimsOutbox").where("status", "==", "pending").limit(100).get();
+  for (const operation of pending.docs) {
+    const data = operation.data();
+    if (typeof data.targetUid !== "string" || typeof data.desiredTeacher !== "boolean") continue;
+    try {
+      await applyTeacherClaimsOperation(operation.id, {
+        targetUid: data.targetUid, desiredTeacher: data.desiredTeacher,
+      });
+    } catch {
+      // Keep processing other outbox entries; the next scheduled pass retries failures.
+    }
+  }
+
+  const reviewed = await db.collection("teacherApplications")
+    .where("status", "in", ["approved", "rejected"])
+    .orderBy("reviewedAt", "desc")
+    .limit(100)
+    .get();
+  for (const application of reviewed.docs) {
+    const targetUid = application.id;
+    const desiredTeacher = application.get("status") === "approved";
+    try {
+      const user = await getAuth().getUser(targetUid);
+      const current = user.customClaims ?? {};
+      const matches = desiredTeacher
+        ? current.teacher === true && current.teacherVerified === true
+        : current.teacher !== true && current.teacherVerified !== true;
+      if (matches) continue;
+      const operationId = String(application.get("reviewOperationId") ?? `legacy-${targetUid}-${application.updateTime?.toMillis() ?? 0}`);
+      await applyTeacherClaimsOutboxOperation({ targetUid, desiredTeacher }, {
+        getUser: async () => ({ customClaims: current }),
+        setCustomClaims: async (_uid, claims) => getAuth().setCustomUserClaims(targetUid, claims),
+        markApplied: async () => db.collection("teacherClaimsReconciliation").doc(operationId).set({
+          targetUid, desiredTeacher, detectedMismatch: true,
+          repairedAt: FieldValue.serverTimestamp(), status: "repaired",
+        }, { merge: true }),
+        markPending: async error => db.collection("teacherClaimsReconciliation").doc(operationId).set({
+          targetUid, desiredTeacher, detectedMismatch: true,
+          lastError: error instanceof Error ? error.message.slice(0, 500) : "Unknown error",
+          checkedAt: FieldValue.serverTimestamp(), status: "pending",
+        }, { merge: true }),
+      });
+    } catch {
+      // Auth or Firestore may be temporarily unavailable; retry on the next scheduled pass.
+    }
+  }
 });

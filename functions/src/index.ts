@@ -869,7 +869,7 @@ export const getIceServers = onCall({ secrets: [TURN_SECRET] }, async (request) 
   };
 });
 
-export { submitTeacherApplication, reviewTeacherApplication, saveTeacherProfile, scheduleTeacherLiveSession, createTeacherContent, reviewTeacherContent } from "./teacher";
+export { submitTeacherApplication, reviewTeacherApplication, saveTeacherProfile, scheduleTeacherLiveSession, createTeacherContent, reviewTeacherContent, applyTeacherClaimsOutbox, reconcileTeacherClaims } from "./teacher";
 
 export { blockUser, unblockUser, createGroupConversation, addGroupParticipants } from "./socialSafety";
 

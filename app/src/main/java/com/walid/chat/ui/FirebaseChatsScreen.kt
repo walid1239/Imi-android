@@ -49,6 +49,23 @@ private val CloudMuted = Color(0xFF929BB0)
 internal fun FirebaseChatsScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var repository by remember { mutableStateOf<FirebaseChatRepository?>(null) }
+    var chats by remember { mutableStateOf<List<Chat>>(emptyList()) }
+    var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
+    var hasOlderMessages by remember { mutableStateOf(false) }
+    var loadingOlder by remember { mutableStateOf(false) }
+    var selectedChat by remember { mutableStateOf<Chat?>(null) }
+    var draft by remember { mutableStateOf("") }
+    var loading by remember { mutableStateOf(true) }
+    var sending by remember { mutableStateOf(false) }
+    var errorText by remember { mutableStateOf<String?>(null) }
+    var showSearch by remember { mutableStateOf(false) }
+    var searchText by remember { mutableStateOf("") }
+    var searchResults by remember { mutableStateOf<List<PublicProfile>>(emptyList()) }
+    var searching by remember { mutableStateOf(false) }
+    var creatingChatUid by remember { mutableStateOf<String?>(null) }
+    var searchError by remember { mutableStateOf<String?>(null) }
+
     val mediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         val chatId = selectedChat?.id
         val repo = repository
@@ -84,22 +101,6 @@ internal fun FirebaseChatsScreen() {
             }
         }
     }
-    var repository by remember { mutableStateOf<FirebaseChatRepository?>(null) }
-    var chats by remember { mutableStateOf<List<Chat>>(emptyList()) }
-    var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
-    var hasOlderMessages by remember { mutableStateOf(false) }
-    var loadingOlder by remember { mutableStateOf(false) }
-    var selectedChat by remember { mutableStateOf<Chat?>(null) }
-    var draft by remember { mutableStateOf("") }
-    var loading by remember { mutableStateOf(true) }
-    var sending by remember { mutableStateOf(false) }
-    var errorText by remember { mutableStateOf<String?>(null) }
-    var showSearch by remember { mutableStateOf(false) }
-    var searchText by remember { mutableStateOf("") }
-    var searchResults by remember { mutableStateOf<List<PublicProfile>>(emptyList()) }
-    var searching by remember { mutableStateOf(false) }
-    var creatingChatUid by remember { mutableStateOf<String?>(null) }
-    var searchError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         try {

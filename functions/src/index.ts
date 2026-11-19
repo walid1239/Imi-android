@@ -69,8 +69,8 @@ type SendFriendRequestInput = { toUid?: unknown };
 type FriendRequestActionInput = { requestId?: unknown };
 type RemoveFriendInput = { friendUid?: unknown };
 
-function requireUid(value: unknown, message: string): string {
-  if (typeof value !== "string" || value.trim().length < 1 || value.length > 128 || value.includes("/")) {
+function requireUid(value: unknown, message: string, maxLength = 128): string {
+  if (typeof value !== "string" || value.trim().length < 1 || value.length > maxLength || value.includes("/")) {
     throw new HttpsError("invalid-argument", message);
   }
   return value.trim();
@@ -125,7 +125,7 @@ export const sendFriendRequest = onCall<SendFriendRequestInput>(async (request) 
 export const acceptFriendRequest = onCall<FriendRequestActionInput>(async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
-  const requestId = requireUid(request.data?.requestId, "معرّف طلب الصداقة غير صالح.");
+  const requestId = requireUid(request.data?.requestId, "معرّف طلب الصداقة غير صالح.", 300);
   const requestRef = db.collection("friendRequests").doc(requestId);
 
   await db.runTransaction(async (transaction) => {
@@ -190,8 +190,13 @@ export const removeFriend = onCall<RemoveFriendInput>(async (request) => {
       transaction.get(forwardRequestRef),
       transaction.get(reverseRequestRef),
     ]);
-    if (ownFriend.exists) transaction.delete(ownFriendRef);
-    if (otherFriend.exists) transaction.delete(otherFriendRef);
+    if (!ownFriend.exists || !otherFriend.exists
+      || ownFriend.get("status") !== "accepted"
+      || otherFriend.get("status") !== "accepted") {
+      throw new HttpsError("not-found", "هذه العلاقة ليست صداقة مؤكدة بين الحسابين.");
+    }
+    transaction.delete(ownFriendRef);
+    transaction.delete(otherFriendRef);
     if (forwardRequest.exists && forwardRequest.get("status") === "accepted") {
       transaction.update(forwardRequestRef, { status: "removed", updatedAt: FieldValue.serverTimestamp() });
     }

@@ -35,6 +35,7 @@ before(async () => {
     await setDoc(doc(db, 'courses/math-basics/lessons/lesson-1'), { title: 'الأعداد', content: 'محتوى اختبار', published: true });
     await setDoc(doc(db, 'courses/draft-course'), { title: 'مسودة', published: false });
     await setDoc(doc(db, 'users/alice/enrollments/math-basics'), { courseId: 'math-basics', completedLessonIds: [] });
+    await setDoc(doc(db, 'calls/call-1'), { callerUid: 'alice', calleeUid: 'bob', conversationId: 'chat-1', kind: 'video', status: 'ringing', createdAt: new Date(), expiresAt: Timestamp.fromDate(new Date(Date.now() + 60000)) });
     await setDoc(doc(db, 'conversations/chat-1'), {
       participants: ['alice', 'bob'],
       createdBy: 'alice',
@@ -297,4 +298,38 @@ test('expired statuses cannot be read even by their owner', async () => {
     });
   });
   await assertFails(getDoc(doc(aliceDb, 'users/alice/statuses/expired-status')));
+});
+
+
+test('WebRTC signaling is limited to call participants and each side owns its SDP and ICE candidates', async () => {
+  const alice = env.authenticatedContext('alice').firestore();
+  const bob = env.authenticatedContext('bob').firestore();
+  const mallory = env.authenticatedContext('mallory').firestore();
+  const call = doc(alice, 'calls/call-1');
+  await assertSucceeds(getDoc(call));
+  await assertFails(getDoc(doc(mallory, 'calls/call-1')));
+  await assertSucceeds(setDoc(doc(alice, 'calls/call-1/callerCandidates/a1'), {
+    candidate: 'candidate:1 1 udp 1 127.0.0.1 1234 typ host', sdpMid: '0', sdpMLineIndex: 0
+  }));
+  await assertFails(setDoc(doc(bob, 'calls/call-1/callerCandidates/bad'), {
+    candidate: 'forged caller candidate', sdpMid: '0', sdpMLineIndex: 0
+  }));
+  await assertSucceeds(setDoc(doc(bob, 'calls/call-1/calleeCandidates/b1'), {
+    candidate: 'candidate:2 1 udp 1 127.0.0.1 1235 typ host', sdpMid: '0', sdpMLineIndex: 0
+  }));
+  await assertFails(setDoc(doc(mallory, 'calls/call-1/calleeCandidates/x'), {
+    candidate: 'unauthorized', sdpMid: '0', sdpMLineIndex: 0
+  }));
+  await assertSucceeds((await import('firebase/firestore')).updateDoc(call, {
+    offer: { type: 'offer', sdp: 'v=0\\r\\n' }
+  }));
+  await assertSucceeds((await import('firebase/firestore')).updateDoc(doc(bob, 'calls/call-1'), {
+    answer: { type: 'answer', sdp: 'v=0\\r\\n' }
+  }));
+  await assertFails((await import('firebase/firestore')).updateDoc(doc(mallory, 'calls/call-1'), {
+    status: 'accepted'
+  }));
+  await assertFails((await import('firebase/firestore')).updateDoc(call, {
+    status: 'ended'
+  }));
 });

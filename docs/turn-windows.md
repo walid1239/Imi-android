@@ -59,12 +59,12 @@ Get-NetIPConfiguration
    ```powershell
    $script = (Resolve-Path .\update-duckdns.ps1).Path
    $action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$script`""
-   $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5)
+   $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650)
    Register-ScheduledTask -TaskName "IMI-DuckDNS-Update" -Action $action -Trigger $trigger -Description "Refresh IMI home TURN public IP"
    ```
    شغّل المهمة بحساب Windows نفسه الذي يملك متغير `DUCKDNS_TOKEN`. راجع سجل Task Scheduler عند الفشل.
 
-> السكربت يحدّث DuckDNS و`TURN_EXTERNAL_IP` في ملف .env بصيغة `PUBLIC_IP/172.30.250.10`. العنوان الثاني هو عنوان Coturn الثابت داخل شبكة Docker المعرفة في Compose، وليس عنوان Windows LAN. عنوان Windows LAN الذي ثبّتّه في الخطوة السابقة هو وجهة Port Forwarding في الراوتر. إذا غيّرت شبكة Docker أو عنوان الحاوية، حدّث `docker-compose.yml` والسكربت معاً. إذا تغيّر IP العام، أعد تشغيل الحاوية.
+> السكربت يحدّث DuckDNS و`TURN_EXTERNAL_IP` في ملف .env بصيغة `PUBLIC_IP/172.30.250.10`. العنوان الثاني هو عنوان Coturn الثابت داخل شبكة Docker المعرفة في Compose، وليس عنوان Windows LAN. عنوان Windows LAN الذي ثبّتّه في الخطوة السابقة هو وجهة Port Forwarding في الراوتر. يستخدم Compose شبكة Docker ثابتة `172.30.250.0/24` وعنوان حاوية `172.30.250.10` كي يكون الجزء الخاص في إعداد Coturn صحيحاً. تحقق أن هذا النطاق لا يتعارض مع VPN أو شبكة محلية أخرى؛ إذا تعارض، غيّر الشبكة وعنوان الحاوية في Compose والسكربت معاً. إذا تغيّر IP العام، أعد تشغيل الحاوية.
 
 ## 5) Port Forwarding في الراوتر
 

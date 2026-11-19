@@ -17,3 +17,7 @@ infra/coturn/.env
 functions/.env
 functions/.env.*
 !functions/.env.example
+
+# Firebase Functions emulator secrets
+.secret.local
+functions/.secret.local

@@ -4,8 +4,8 @@ import { getMessaging } from "firebase-admin/messaging";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { defineSecret } from "firebase-functions/params";
-import { createTurnConfiguration } from "./turnCredentials";
+import { defineSecret, defineString } from "firebase-functions/params";
+import { createIceServerConfiguration, nextRateLimitState, resolveIceUid } from "./turnCredentials";
 import { messageNotificationPreview } from "./notificationLogic";
 import {
   isStatusCooldownActive,
@@ -15,7 +15,13 @@ import {
 
 initializeApp();
 const db = getFirestore();
-const TURN_SHARED_SECRET = defineSecret("TURN_SHARED_SECRET");
+const TURN_SECRET = defineSecret("TURN_SECRET");
+const TURN_HOST = defineString("TURN_HOST", { default: "" });
+const TURN_PORT = defineString("TURN_PORT", { default: "3478" });
+const TURN_TTL_SECONDS = defineString("TURN_TTL_SECONDS", { default: "3600" });
+const STUN_URLS = defineString("STUN_URLS", { default: "stun:stun.l.google.com:19302" });
+const TURN_ALLOW_ANONYMOUS = defineString("TURN_ALLOW_ANONYMOUS", { default: "false" });
+const ICE_RATE_LIMIT_PER_MINUTE = defineString("ICE_RATE_LIMIT_PER_MINUTE", { default: "10" });
 
 type CreateStatusInput = {
   text?: unknown;
@@ -626,15 +632,45 @@ export const endCall = onCall<CallActionInput>(async (request) => {
 });
 
 
-// Issue authenticated, short-lived TURN credentials. The shared secret is only
-// available to this server function and is never returned to the browser.
-export const getTurnIceServers = onCall({ secrets: [TURN_SHARED_SECRET] }, async (request) => {
-  const uid = request.auth?.uid;
-  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
-  const configuration = createTurnConfiguration(
+// Return short-lived WebRTC ICE configuration. The shared secret is server-only.
+export const getIceServers = onCall({ secrets: [TURN_SECRET] }, async (request) => {
+  const allowAnonymous = TURN_ALLOW_ANONYMOUS.value().toLowerCase() === "true";
+  const uid = resolveIceUid(request.auth, allowAnonymous);
+  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول بحساب مسموح لاستخدام إعدادات الاتصال.");
+
+  const rateRef = db.collection("iceServerRateLimits").doc(uid);
+  const nowMs = Date.now();
+  const limit = Math.max(1, Math.min(60, Number.parseInt(ICE_RATE_LIMIT_PER_MINUTE.value(), 10) || 10));
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(rateRef);
+    const state = nextRateLimitState(
+      snapshot.exists ? (snapshot.get("windowStartedAt") as Timestamp).toMillis() : undefined,
+      snapshot.exists ? snapshot.get("count") as number : undefined,
+      nowMs,
+      limit,
+    );
+    if (!state.allowed) {
+      throw new HttpsError("resource-exhausted", "طلبات إعداد المكالمة كثيرة؛ انتظر دقيقة ثم أعد المحاولة.");
+    }
+    transaction.set(rateRef, {
+      windowStartedAt: Timestamp.fromMillis(state.windowStartedAtMs),
+      count: state.count,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+
+  const configuration = createIceServerConfiguration(
     uid,
-    TURN_SHARED_SECRET.value() || undefined,
-    process.env.TURN_URLS,
+    TURN_SECRET.value() || undefined,
+    TURN_HOST.value(),
+    TURN_PORT.value(),
+    STUN_URLS.value(),
+    nowMs,
+    Number.parseInt(TURN_TTL_SECONDS.value(), 10) || 3600,
   );
-  return configuration;
+  return {
+    iceServers: configuration.iceServers,
+    turnAvailable: configuration.configured,
+    expiresAt: configuration.expiresAt,
+  };
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { User } from 'firebase/auth';
 import {
   addDoc, collection, doc, endAt, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp,
@@ -39,6 +39,9 @@ export default function ChatPanel({ user }: { user: User }) {
   const [draft, setDraft] = useState('');
   const [attachment, setAttachment] = useState<File | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
+  const [otherReadAt, setOtherReadAt] = useState<Timestamp | null>(null);
+  const [otherTyping, setOtherTyping] = useState(false);
+  const lastReadMessageRef = useRef('');
   const [loadingChats, setLoadingChats] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -131,6 +134,55 @@ export default function ChatPanel({ user }: { user: User }) {
   }, [selectedId]);
 
   const selected = useMemo(() => chats.find(chat => chat.id === selectedId), [chats, selectedId]);
+
+  const otherUid = selected?.participants.find(uid => uid !== user.uid) ?? '';
+
+  useEffect(() => {
+    if (!selectedId || !otherUid) {
+      setOtherReadAt(null);
+      setOtherTyping(false);
+      return;
+    }
+    const receiptRef = doc(db, 'conversations', selectedId, 'readReceipts', otherUid);
+    const typingRef = doc(db, 'conversations', selectedId, 'typing', otherUid);
+    const stopReceipt = onSnapshot(receiptRef, snapshot => {
+      setOtherReadAt(snapshot.exists() ? snapshot.get('lastReadAt') ?? null : null);
+    });
+    const stopTyping = onSnapshot(typingRef, snapshot => {
+      setOtherTyping(snapshot.exists() && snapshot.get('isTyping') === true);
+    });
+    return () => { stopReceipt(); stopTyping(); };
+  }, [selectedId, otherUid]);
+
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1];
+    if (!selectedId || !lastMessage?.id || lastReadMessageRef.current === lastMessage.id) return;
+    lastReadMessageRef.current = lastMessage.id;
+    setDoc(doc(db, 'conversations', selectedId, 'readReceipts', user.uid), {
+      uid: user.uid,
+      lastReadAt: serverTimestamp(),
+      lastReadMessageId: lastMessage.id
+    }, { merge: true }).catch(() => {
+      lastReadMessageRef.current = '';
+    });
+  }, [messages, selectedId, user.uid]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const typingRef = doc(db, 'conversations', selectedId, 'typing', user.uid);
+    if (!draft.trim()) {
+      setDoc(typingRef, { uid: user.uid, isTyping: false, updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
+      return;
+    }
+    const startTimer = setTimeout(() => {
+      setDoc(typingRef, { uid: user.uid, isTyping: true, updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
+    }, 1200);
+    const stopTimer = setTimeout(() => {
+      setDoc(typingRef, { uid: user.uid, isTyping: false, updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
+    }, 7000);
+    return () => { clearTimeout(startTimer); clearTimeout(stopTimer); };
+  }, [draft, selectedId, user.uid]);
+
 
   async function loadOlderMessages() {
     const oldest = messages[0];
@@ -365,13 +417,13 @@ export default function ChatPanel({ user }: { user: User }) {
         })}</div>}
     </aside>
     <div className="flex min-h-[420px] flex-col">
-      <header className="border-b border-white/10 px-4 py-3"><h3 className="font-bold">{selected ? 'المحادثة' : 'الرسائل'}</h3><p className="mt-1 text-xs text-slate-500">{selected ? selected.id : 'اختر محادثة من القائمة'}</p></header>
+      <header className="border-b border-white/10 px-4 py-3"><h3 className="font-bold">{selected ? 'المحادثة' : 'الرسائل'}</h3><p className="mt-1 text-xs text-slate-500">{selected ? selected.id : 'اختر محادثة من القائمة'}</p>{otherTyping && <p className="mt-1 text-xs text-emerald-300" aria-live="polite">يكتب الآن…</p>}</header>
       <div className="flex-1 space-y-3 overflow-y-auto p-4">
         {selectedId && hasMoreMessages && <button type="button" onClick={loadOlderMessages} disabled={loadingOlder || loadingMessages} className="mx-auto block rounded-lg border border-white/10 px-4 py-2 text-xs text-slate-300 disabled:opacity-50">{loadingOlder ? 'جارٍ تحميل الأقدم…' : 'تحميل رسائل أقدم'}</button>}
         {!selectedId && <p className="py-16 text-center text-sm text-slate-500">لا توجد محادثة محددة.</p>}
         {selectedId && loadingMessages && <p className="text-sm text-slate-400">جارٍ تحميل الرسائل…</p>}
         {selectedId && !loadingMessages && messages.length === 0 && <p className="py-16 text-center text-sm text-slate-500">لا توجد رسائل بعد. أرسل أول رسالة.</p>}
-        {messages.map(message => <div key={message.id} className={`flex ${message.senderUid === user.uid ? 'justify-start' : 'justify-end'}`}><article className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.senderUid === user.uid ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-100'}`}>{message.type === 'image' && mediaUrls[message.id] && <a href={mediaUrls[message.id]} target="_blank" rel="noreferrer"><img src={mediaUrls[message.id]} alt={message.fileName || 'صورة مرفقة'} className="mb-2 max-h-72 max-w-full rounded-xl object-contain" /></a>}{message.type === 'video' && mediaUrls[message.id] && <video src={mediaUrls[message.id]} controls playsInline className="mb-2 max-h-72 max-w-full rounded-xl" />}{message.type === 'audio' && mediaUrls[message.id] && <audio src={mediaUrls[message.id]} controls className="mb-2 max-w-full" />}{message.mediaPath && !mediaUrls[message.id] && <p className="mb-2 text-xs opacity-70">جارٍ تحميل المرفق…</p>}{message.text && <p className="whitespace-pre-wrap break-words text-sm">{message.text}</p>}<time className="mt-2 block text-left text-[10px] opacity-60">{timeLabel(message.createdAt)}</time></article></div>)}
+        {messages.map(message => <div key={message.id} className={`flex ${message.senderUid === user.uid ? 'justify-start' : 'justify-end'}`}><article className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.senderUid === user.uid ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-100'}`}>{message.type === 'image' && mediaUrls[message.id] && <a href={mediaUrls[message.id]} target="_blank" rel="noreferrer"><img src={mediaUrls[message.id]} alt={message.fileName || 'صورة مرفقة'} className="mb-2 max-h-72 max-w-full rounded-xl object-contain" /></a>}{message.type === 'video' && mediaUrls[message.id] && <video src={mediaUrls[message.id]} controls playsInline className="mb-2 max-h-72 max-w-full rounded-xl" />}{message.type === 'audio' && mediaUrls[message.id] && <audio src={mediaUrls[message.id]} controls className="mb-2 max-w-full" />}{message.mediaPath && !mediaUrls[message.id] && <p className="mb-2 text-xs opacity-70">جارٍ تحميل المرفق…</p>}{message.text && <p className="whitespace-pre-wrap break-words text-sm">{message.text}</p>}<time className="mt-2 block text-left text-[10px] opacity-60">{timeLabel(message.createdAt)}{message.senderUid === user.uid && otherReadAt && message.createdAt && otherReadAt.toMillis() >= message.createdAt.toMillis() ? ' · تمت القراءة' : ''}</time></article></div>)}
       </div>
       <form onSubmit={send} className="border-t border-white/10 p-3"><div className="mb-2 flex items-center gap-2"><label className="cursor-pointer rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300">إرفاق ملف<input type="file" accept="image/jpeg,image/png,image/webp,audio/mpeg,audio/mp4,audio/aac,audio/ogg,audio/wav,audio/webm,video/mp4,video/webm" disabled={!selectedId || busy} className="hidden" onChange={event => setAttachment(event.target.files?.[0] ?? null)} /></label>{attachment && <span className="min-w-0 flex-1 truncate text-xs text-slate-400">{attachment.name} · {(attachment.size / (1024 * 1024)).toFixed(1)} MB</span>}{attachment && <button type="button" onClick={() => setAttachment(null)} className="text-xs text-rose-300">إزالة</button>}</div><div className="flex gap-2"><input value={draft} onChange={event => setDraft(event.target.value)} maxLength={1000} disabled={!selectedId || busy} placeholder="اكتب رسالتك…" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-sm outline-none focus:border-blue-500 disabled:opacity-50" /><button disabled={!selectedId || (!draft.trim() && !attachment) || busy} className="rounded-xl bg-blue-600 px-5 text-sm font-bold disabled:opacity-40">{busy ? '…' : 'إرسال'}</button></div></form>
     </div>

@@ -11,7 +11,7 @@ import CurriculumAdminPanel from '@/components/curriculum-admin-panel';
 type Course = { id: string; title: string; description: string; category: string; published: boolean };
 type Lesson = { id: string; title: string; content: string; videoUrl?: string; order: number; published: boolean; sourceType?: string; sourceName?: string; reviewStatus?: string };
 type ContentReport = { id: string; reporterUid: string; courseId: string; lessonId: string; reason: string; details: string; status: string };
-type TeacherApplication = { uid: string; fullName: string; subjectIds: string[]; levelIds: string[]; status: string };
+type TeacherApplication = { uid: string; fullName: string; subjectIds: string[]; levelIds: string[]; status: string; evidencePath: string };
 
 export default function AcademyAdminPanel({ user }: { user: User }) {
   const [authorized, setAuthorized] = useState<boolean | null>(null);
@@ -77,7 +77,7 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
         uid: item.id, fullName: item.get('fullName') || '',
         subjectIds: Array.isArray(item.get('subjectIds')) ? item.get('subjectIds') : [],
         levelIds: Array.isArray(item.get('levelIds')) ? item.get('levelIds') : [],
-        status: item.get('status') || 'pending',
+        status: item.get('status') || 'pending', evidencePath: item.get('evidencePath') || '',
       })));
     }, reason => setError(reason.message));
   }, [authorized]);

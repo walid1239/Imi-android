@@ -256,6 +256,74 @@ test('conversation preview updates must reference a message created in the same 
   await assertFails(mismatchBatch.commit());
 });
 
+test('media message previews must match the real image, audio, or video message', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const conversation = doc(aliceDb, 'conversations/chat-1');
+  const { writeBatch, collection } = await import('firebase/firestore');
+  const cases = [
+    { type: 'image', contentType: 'image/png', fileName: 'photo.png', label: '📷 صورة' },
+    { type: 'audio', contentType: 'audio/webm', fileName: 'voice.webm', label: '🎤 رسالة صوتية' },
+    { type: 'video', contentType: 'video/mp4', fileName: 'clip.mp4', label: '🎬 فيديو' }
+  ];
+
+  for (const item of cases) {
+    const message = doc(collection(conversation, 'messages'), `preview-${item.type}`);
+    const batch = writeBatch(aliceDb);
+    batch.set(message, {
+      senderUid: 'alice',
+      type: item.type,
+      mediaPath: `conversations/chat-1/alice/${message.id}/${item.fileName}`,
+      contentType: item.contentType,
+      fileName: item.fileName,
+      createdAt: serverTimestamp()
+    });
+    batch.update(conversation, {
+      lastMessage: item.label,
+      lastMessageAt: serverTimestamp(),
+      lastSenderUid: 'alice',
+      lastMessageId: message.id
+    });
+    await assertSucceeds(batch.commit());
+  }
+
+  const captionedMessage = doc(collection(conversation, 'messages'), 'preview-captioned-image');
+  const captionedBatch = writeBatch(aliceDb);
+  captionedBatch.set(captionedMessage, {
+    senderUid: 'alice',
+    type: 'image',
+    text: 'صورة من الرحلة',
+    mediaPath: `conversations/chat-1/alice/${captionedMessage.id}/photo.png`,
+    contentType: 'image/png',
+    fileName: 'photo.png',
+    createdAt: serverTimestamp()
+  });
+  captionedBatch.update(conversation, {
+    lastMessage: 'صورة من الرحلة',
+    lastMessageAt: serverTimestamp(),
+    lastSenderUid: 'alice',
+    lastMessageId: captionedMessage.id
+  });
+  await assertSucceeds(captionedBatch.commit());
+
+  const forgedMessage = doc(collection(conversation, 'messages'), 'preview-forged-image');
+  const forgedBatch = writeBatch(aliceDb);
+  forgedBatch.set(forgedMessage, {
+    senderUid: 'alice',
+    type: 'image',
+    mediaPath: `conversations/chat-1/alice/${forgedMessage.id}/photo.png`,
+    contentType: 'image/png',
+    fileName: 'photo.png',
+    createdAt: serverTimestamp()
+  });
+  forgedBatch.update(conversation, {
+    lastMessage: 'معاينة غير صحيحة',
+    lastMessageAt: serverTimestamp(),
+    lastSenderUid: 'alice',
+    lastMessageId: forgedMessage.id
+  });
+  await assertFails(forgedBatch.commit());
+});
+
 test('conversation presence is visible only to members and each user owns their heartbeat', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();

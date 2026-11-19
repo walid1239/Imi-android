@@ -14,9 +14,21 @@ const requiredEnv = {
 
 export const firebaseConfigured = Object.values(requiredEnv).every(Boolean);
 
+// A complete inert configuration allows Next.js to prerender client components in CI
+// when deployment secrets are intentionally absent. Auth actions remain disabled until
+// real Firebase environment variables are supplied.
+const buildFallback = {
+  apiKey: 'build-only-not-a-real-firebase-api-key',
+  authDomain: 'localhost',
+  projectId: 'imi-indroid',
+  storageBucket: 'imi-indroid.firebasestorage.app',
+  messagingSenderId: '000000000000',
+  appId: '1:000000000000:web:0000000000000000000000',
+};
+
 const app = getApps().length
   ? getApp()
-  : initializeApp(firebaseConfigured ? requiredEnv : { projectId: 'imi-indroid' });
+  : initializeApp(firebaseConfigured ? requiredEnv : buildFallback);
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);

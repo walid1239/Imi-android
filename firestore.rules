@@ -210,7 +210,7 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow read: if isConversationMember(conversationId);
         allow create: if isConversationMember(conversationId)
-          && request.resource.data.keys().hasOnly(['senderUid', 'text', 'type', 'createdAt', 'mediaPath'])
+          && request.resource.data.keys().hasOnly(['senderUid', 'text', 'type', 'createdAt', 'mediaPath', 'contentType', 'fileName'])
           && request.resource.data.senderUid == request.auth.uid
           && request.resource.data.type in ['text', 'image', 'audio', 'video']
           && request.resource.data.createdAt == request.time
@@ -219,11 +219,22 @@ service cloud.firestore {
               && request.resource.data.text is string
               && request.resource.data.text.size() > 0
               && request.resource.data.text.size() <= 10000
-              && !('mediaPath' in request.resource.data))
+              && !('mediaPath' in request.resource.data)
+              && !('contentType' in request.resource.data)
+              && !('fileName' in request.resource.data))
             ||
             (request.resource.data.type in ['image', 'audio', 'video']
               && request.resource.data.mediaPath is string
-              && request.resource.data.mediaPath.matches('conversations/' + conversationId + '/.*')
+              && request.resource.data.mediaPath.matches('conversations/' + conversationId + '/' + request.auth.uid + '/.*')
+              && request.resource.data.contentType is string
+              && request.resource.data.fileName is string
+              && request.resource.data.fileName.size() > 0
+              && request.resource.data.fileName.size() <= 120
+              && (
+                (request.resource.data.type == 'image' && request.resource.data.contentType in ['image/jpeg', 'image/png', 'image/webp'])
+                || (request.resource.data.type == 'audio' && request.resource.data.contentType in ['audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/ogg', 'audio/wav', 'audio/webm'])
+                || (request.resource.data.type == 'video' && request.resource.data.contentType in ['video/mp4', 'video/webm'])
+              )
               && (!('text' in request.resource.data)
                 || (request.resource.data.text is string && request.resource.data.text.size() <= 1000)))
           );

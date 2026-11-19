@@ -6,7 +6,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return signedIn() && request.auth.token.get('admin', false) == true;
+      return signedIn() && ('admin' in request.auth.token) && request.auth.token.admin == true;
     }
 
     function isSelf(uid) {
@@ -438,9 +438,9 @@ service cloud.firestore {
 
     // Mock sessions are private to their teacher/admin; real scheduled/live sessions can be public.
     match /teacherContent/{contentId} {
-      allow read: if resource.data.get('published', false) == true
+      allow read: if signedIn() && (resource.data.published == true
         || isAdmin()
-        || (signedIn() && resource.data.ownerUid == request.auth.uid);
+        || resource.data.ownerUid == request.auth.uid);
       allow create, update, delete: if false;
     }
 

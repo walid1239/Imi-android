@@ -11,6 +11,9 @@ on:
       - 'settings.gradle.kts'
       - 'gradle.properties'
       - '.github/workflows/android-build.yml'
+      - 'firestore.rules'
+      - 'storage.rules'
+      - 'tests/**'
   pull_request:
     branches: [ main, master, 'feature/**' ]
     paths:
@@ -20,6 +23,9 @@ on:
       - 'settings.gradle.kts'
       - 'gradle.properties'
       - '.github/workflows/android-build.yml'
+      - 'firestore.rules'
+      - 'storage.rules'
+      - 'tests/**'
   workflow_dispatch:
 
 permissions:

@@ -474,8 +474,8 @@ export const reviewCurriculumNode = onCall<ReviewCurriculumNodeInput>(async requ
     if (node.get("status") === desiredStatus && node.get("needsReview") === desiredReview) {
       return { status: desiredStatus, needsReview: desiredReview, idempotent: true };
     }
-    if (node.get("needsReview") !== true) {
-      throw new HttpsError("failed-precondition", "هذا العنصر لا ينتظر مراجعة؛ لا يمكن تغيير اعتماده بهذه العملية.");
+    if (approved && node.get("needsReview") !== true) {
+      throw new HttpsError("failed-precondition", "هذا العنصر لا ينتظر اعتماداً جديداً.");
     }
     const parentId = node.get("parentId");
     if (approved && typeof parentId === "string") {

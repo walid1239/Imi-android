@@ -52,6 +52,19 @@ async function main() {
     await ensureUser('admin', variant, 'مشرف اختبار', true);
   }
 
+  const curriculumNodes = [
+    { id: 'e2e-primary', parentId: null, type: 'level', nameAr: 'التعليم الابتدائي - اختبار', nameFr: 'Primaire - test', language: 'ar', order: 1 },
+    { id: 'e2e-primary-track', parentId: 'e2e-primary', type: 'track', nameAr: 'المسار العام - اختبار', nameFr: 'Tronc commun - test', language: 'ar', order: 1 },
+    { id: 'e2e-primary-math', parentId: 'e2e-primary-track', type: 'subject', nameAr: 'الرياضيات - اختبار', nameFr: 'Mathématiques - test', language: 'ar', order: 1 },
+  ];
+  for (const node of curriculumNodes) {
+    await db.doc(`curriculumNodes/${node.id}`).set({
+      ...node, needsReview: true, semester: null, officialSource: null,
+      status: 'published', createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
+
   const course = db.doc('courses/e2e-general-skills');
   await course.set({
     title: 'مهارة التعلم الذاتي',

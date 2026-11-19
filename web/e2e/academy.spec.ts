@@ -17,6 +17,13 @@ test('public academy can be browsed without an account in Arabic RTL', async ({ 
   await expect(page.getByRole('heading', { name: 'تعلّم وتقدّم' })).toBeVisible();
   await expect(page.locator('main')).toHaveAttribute('dir', 'rtl');
   await expect(page.getByText('مهارة التعلم الذاتي')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'ابدأ من مستواك، وتقدّم خطوة بخطوة' })).toBeVisible();
+  await expect(page.getByLabel('المستوى')).toBeVisible();
+  await page.getByLabel('المستوى').selectOption('e2e-primary');
+  await page.getByLabel('الشعبة أو المسلك').selectOption('e2e-primary-track');
+  await expect(page.getByRole('button', { name: /الرياضيات - اختبار/ })).toBeVisible();
+  await page.getByRole('button', { name: /الرياضيات - اختبار/ }).click();
+  await expect(page.getByText('لا دروس بعد. سيضيفها أساتذتنا قريباً')).toBeVisible();
   await expect(page.getByRole('link', { name: 'تسجيل الدخول لحفظ التقدم سحابياً' })).toBeVisible();
 });
 

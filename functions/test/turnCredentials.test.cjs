@@ -4,6 +4,7 @@ const { createHmac } = require("node:crypto");
 const {
   createIceServerConfiguration,
   nextRateLimitState,
+  nextIceRestartCount,
   resolveIceUid,
 } = require("../lib/turnCredentials.js");
 
@@ -58,4 +59,11 @@ test("per-user rate limiter allows a bounded number per minute and resets", () =
   assert.equal(state.allowed, false);
   state = nextRateLimitState(state.windowStartedAtMs, state.count, 61_000, 2);
   assert.deepEqual(state, { allowed: true, windowStartedAtMs: 61_000, count: 1 });
+});
+
+test("ICE restart counter allows at most two server-authorized restarts", () => {
+  assert.equal(nextIceRestartCount(0), 1);
+  assert.equal(nextIceRestartCount(1), 2);
+  assert.equal(nextIceRestartCount(2), null);
+  assert.equal(nextIceRestartCount(-1), null);
 });

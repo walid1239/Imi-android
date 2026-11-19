@@ -283,23 +283,9 @@ service cloud.firestore {
     }
 
     match /conversations/{conversationId} {
-      // The current Android and web clients create direct chats only. Keep creation
-      // bounded to two distinct, published profiles; group membership needs a
-      // separate invitation workflow rather than allowing arbitrary UID injection.
-      allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(['participants', 'createdBy', 'createdAt', 'lastMessage', 'lastMessageAt', 'lastSenderUid'])
-        && request.resource.data.createdBy == request.auth.uid
-        && request.resource.data.participants is list
-        && request.resource.data.participants.size() == 2
-        && request.auth.uid in request.resource.data.participants
-        && request.resource.data.participants[0] != request.resource.data.participants[1]
-        && request.resource.data.createdAt == request.time
-        // A new conversation starts empty; previews are written only with a message batch.
-        && request.resource.data.lastMessage == ''
-        && !('lastSenderUid' in request.resource.data)
-        && request.resource.data.lastMessageAt == request.time
-        && exists(/databases/$(database)/documents/publicProfiles/$(request.resource.data.participants[0]))
-        && exists(/databases/$(database)/documents/publicProfiles/$(request.resource.data.participants[1]));
+      // Conversation creation is server-only. The callable enforces role,
+      // block, profile and deterministic-ID policy consistently for Web and Android.
+      allow create: if false;
       allow read: if signedIn() && request.auth.uid in resource.data.participants;
       allow update: if signedIn()
         && request.auth.uid in resource.data.participants

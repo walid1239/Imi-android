@@ -220,6 +220,31 @@ test('conversation creation is limited to two distinct existing profiles', async
   }));
 });
 
+
+test('conversation preview updates must reference a message created in the same batch by the sender', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const conversation = doc(aliceDb, 'conversations/chat-1');
+  const message = doc(aliceDb, 'conversations/chat-1/messages/preview-batch-message');
+  const { writeBatch } = await import('firebase/firestore');
+
+  const validBatch = writeBatch(aliceDb);
+  validBatch.set(message, {
+    senderUid: 'alice', type: 'text', text: 'رسالة أصلية', createdAt: serverTimestamp()
+  });
+  validBatch.update(conversation, {
+    lastMessage: 'رسالة أصلية', lastMessageAt: serverTimestamp(),
+    lastSenderUid: 'alice', lastMessageId: message.id
+  });
+  await assertSucceeds(validBatch.commit());
+
+  const forgedBatch = writeBatch(aliceDb);
+  forgedBatch.update(conversation, {
+    lastMessage: 'معاينة مزيفة', lastMessageAt: serverTimestamp(),
+    lastSenderUid: 'alice', lastMessageId: 'not-created'
+  });
+  await assertFails(forgedBatch.commit());
+});
+
 test('conversation presence is visible only to members and each user owns their heartbeat', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();

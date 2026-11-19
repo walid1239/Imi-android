@@ -266,16 +266,17 @@ test('a user can read their own private document but another user cannot', async
   await assertFails(getDoc(doc(bobDb, 'users/alice')));
 });
 
-test('conversation creation is limited to two distinct existing profiles', async () => {
+test('clients cannot create conversations directly; trusted callable owns creation', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const base = {
-    createdBy: 'alice',
     participants: ['alice', 'bob'],
+    createdBy: 'alice',
     createdAt: serverTimestamp(),
     lastMessage: '',
     lastMessageAt: serverTimestamp()
   };
-  await assertSucceeds(setDoc(doc(aliceDb, 'conversations/direct-created'), base));
+
+  await assertFails(setDoc(doc(aliceDb, 'conversations/direct-created'), base));
   await assertFails(setDoc(doc(aliceDb, 'conversations/group-injection'), {
     ...base,
     participants: ['alice', 'bob', 'mallory']
@@ -288,16 +289,7 @@ test('conversation creation is limited to two distinct existing profiles', async
     ...base,
     participants: ['alice', 'unknown-user']
   }));
-  await assertFails(setDoc(doc(aliceDb, 'conversations/forged-preview'), {
-    ...base,
-    lastMessage: 'رسالة مزيفة لم تُرسل'
-  }));
-  await assertFails(setDoc(doc(aliceDb, 'conversations/forged-sender'), {
-    ...base,
-    lastSenderUid: 'bob'
-  }));
 });
-
 
 test('conversation preview updates must reference a message created in the same batch by the sender', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();

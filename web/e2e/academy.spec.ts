@@ -70,6 +70,11 @@ test('learner can enroll in a general-skills course and complete its lesson', as
   await expect(page.getByRole('heading', { name: 'خطوات عملية لبناء عادة تعلم مستمرة' })).toBeVisible();
   await page.getByRole('button', { name: 'وضع علامة: أكملت الدرس' }).click();
   await expect(page.getByRole('status')).toContainText('تم تسجيل إكمال الدرس');
+  await page.getByRole('button', { name: 'الإبلاغ عن الدرس' }).click();
+  await page.getByLabel('سبب البلاغ').selectOption('incorrect');
+  await page.getByPlaceholder('تفاصيل إضافية (اختياري)').fill('ملاحظة اختبار آلية');
+  await page.getByRole('button', { name: 'إرسال البلاغ' }).click();
+  await expect(page.getByRole('status')).toContainText('تم إرسال البلاغ إلى فريق الإشراف');
 });
 
 test('admin claim exposes the protected Academy administration panel', async ({ page }) => {

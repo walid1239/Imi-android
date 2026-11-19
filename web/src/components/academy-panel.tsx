@@ -20,6 +20,9 @@ export default function AcademyPanel({ user }: { user: User | null }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState('incorrect');
+  const [reportDetails, setReportDetails] = useState('');
 
   const selectedCourse = courses.find(course => course.id === courseId) ?? null;
   const completed = useMemo(() => new Set(enrollment?.completedLessonIds ?? []), [enrollment]);
@@ -109,6 +112,21 @@ export default function AcademyPanel({ user }: { user: User | null }) {
     }
   }
 
+  async function submitReport(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!user || !selectedLesson || busy) return;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const action = httpsCallable(getFunctions(), 'reportAcademyLesson');
+      await action({ courseId, lessonId: selectedLesson.id, reason: reportReason, details: reportDetails });
+      setNotice('تم إرسال البلاغ إلى فريق الإشراف للمراجعة.');
+      setReportDetails('');
+      setReportOpen(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'تعذر إرسال البلاغ.');
+    } finally { setBusy(false); }
+  }
+
   function completeGuestLesson(lessonId: string) {
     const next = [...new Set([...(enrollment?.completedLessonIds ?? []), lessonId])];
     try { localStorage.setItem(`imi-academy-progress:${courseId}`, JSON.stringify(next)); }
@@ -164,6 +182,16 @@ export default function AcademyPanel({ user }: { user: User | null }) {
             <h4 className="font-bold">{selectedLesson.title}</h4>
             {selectedLesson.videoUrl && <video controls playsInline preload="metadata" src={selectedLesson.videoUrl} className="mt-3 max-h-80 w-full rounded-lg bg-black" />}
             {selectedLesson.content && <div className="mt-3 whitespace-pre-wrap text-sm leading-8 text-slate-300">{selectedLesson.content}</div>}
+            {user && <button type="button" onClick={() => setReportOpen(value => !value)} className="mt-4 rounded-lg border border-amber-500/30 px-3 py-2 text-xs text-amber-200">الإبلاغ عن الدرس</button>}
+            {reportOpen && user && <form onSubmit={submitReport} className="mt-3 space-y-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+              <label className="block text-xs text-slate-300">سبب البلاغ
+                <select aria-label="سبب البلاغ" value={reportReason} onChange={event => setReportReason(event.target.value)} className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm">
+                  <option value="incorrect">محتوى غير صحيح</option><option value="inappropriate">محتوى غير مناسب</option><option value="copyright">حقوق نشر أو ملكية فكرية</option><option value="other">سبب آخر</option>
+                </select>
+              </label>
+              <textarea value={reportDetails} onChange={event => setReportDetails(event.target.value)} maxLength={500} rows={3} placeholder="تفاصيل إضافية (اختياري)" className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" />
+              <button disabled={busy} className="rounded-lg bg-amber-700 px-4 py-2 text-xs font-bold disabled:opacity-40">{busy ? 'جارٍ الإرسال…' : 'إرسال البلاغ'}</button>
+            </form>}
             {!selectedLesson.videoUrl && !selectedLesson.content && <p className="mt-3 text-xs text-slate-500">لم يضف المشرف محتوى لهذا الدرس بعد.</p>}
             {enrollment && <button disabled={busy || completed.has(selectedLesson.id)} onClick={() => user
               ? runCallable('completeCourseLesson', { courseId, lessonId: selectedLesson.id }, 'تم تسجيل إكمال الدرس.')

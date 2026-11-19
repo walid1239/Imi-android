@@ -118,6 +118,19 @@ service cloud.firestore {
       allow delete: if isSelf(uid);
     }
 
+    // Reports are created and reviewed only by trusted Cloud Functions.
+    match /contentReports/{reportId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+    match /moderationLogs/{logId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+    match /reportRateLimits/{uid} {
+      allow read, write: if false;
+    }
+
     // Published Reels metadata. Videos themselves live in Firebase Storage.
     match /reels/{reelId} {
       allow read: if signedIn();

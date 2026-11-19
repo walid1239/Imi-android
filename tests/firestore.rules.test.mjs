@@ -141,6 +141,30 @@ test('status documents are readable only by the owner and a reciprocal accepted 
 });
 
 
+test('content reports and moderation logs are admin-readable but never client-writable', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'contentReports/report-1'), {
+      reporterUid: 'alice', targetType: 'academyLesson', courseId: 'math-basics',
+      lessonId: 'lesson-1', reason: 'incorrect', details: 'اختبار', status: 'open', createdAt: new Date()
+    });
+    await setDoc(doc(db, 'moderationLogs/log-1'), {
+      actorUid: 'admin', action: 'report_resolved', reportId: 'report-1', createdAt: new Date()
+    });
+  });
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const adminDb = env.authenticatedContext('admin', { admin: true }).firestore();
+  await assertFails(getDoc(doc(aliceDb, 'contentReports/report-1')));
+  await assertSucceeds(getDoc(doc(adminDb, 'contentReports/report-1')));
+  await assertFails(setDoc(doc(aliceDb, 'contentReports/forged'), { reporterUid: 'alice', status: 'open' }));
+  await assertFails(setDoc(doc(adminDb, 'contentReports/admin-forged'), { reporterUid: 'admin', status: 'open' }));
+  await assertFails(deleteDoc(doc(adminDb, 'contentReports/report-1')));
+  await assertFails(getDoc(doc(aliceDb, 'moderationLogs/log-1')));
+  await assertSucceeds(getDoc(doc(adminDb, 'moderationLogs/log-1')));
+  await assertFails(setDoc(doc(adminDb, 'moderationLogs/forged'), { actorUid: 'admin' }));
+  await assertFails(getDoc(doc(aliceDb, 'reportRateLimits/alice')));
+});
+
 test('learners can read published Academy content but cannot publish or modify it', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();

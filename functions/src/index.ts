@@ -427,6 +427,65 @@ export const publishCourse = onCall<{ courseId?: unknown; published?: unknown }>
   return { published: request.data.published };
 });
 
+type ReportAcademyLessonInput = { courseId?: unknown; lessonId?: unknown; reason?: unknown; details?: unknown };
+const allowedReportReasons = ["incorrect", "inappropriate", "copyright", "other"] as const;
+
+export const reportAcademyLesson = onCall<ReportAcademyLessonInput>(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول لإرسال بلاغ.");
+  const courseId = requireUid(request.data?.courseId, "معرّف الدورة غير صالح.");
+  const lessonId = requireUid(request.data?.lessonId, "معرّف الدرس غير صالح.");
+  const reason = academyText(request.data?.reason, "سبب البلاغ", 32);
+  if (!(allowedReportReasons as readonly string[]).includes(reason)) throw new HttpsError("invalid-argument", "سبب البلاغ غير مدعوم.");
+  const details = academyText(request.data?.details, "تفاصيل البلاغ", 500, true);
+  const courseRef = db.collection("courses").doc(courseId);
+  const lessonRef = courseRef.collection("lessons").doc(lessonId);
+  const rateRef = db.collection("reportRateLimits").doc(uid);
+  const reportRef = db.collection("contentReports").doc();
+  await db.runTransaction(async (transaction) => {
+    const [course, lesson, rate] = await Promise.all([transaction.get(courseRef), transaction.get(lessonRef), transaction.get(rateRef)]);
+    if (!course.exists || course.get("published") !== true || !lesson.exists || lesson.get("published") !== true) {
+      throw new HttpsError("not-found", "المحتوى غير متاح للإبلاغ.");
+    }
+    const now = Timestamp.now();
+    const lastReportAt = rate.get("lastReportAt") as Timestamp | undefined;
+    if (lastReportAt && now.toMillis() - lastReportAt.toMillis() < 30_000) {
+      throw new HttpsError("resource-exhausted", "انتظر 30 ثانية قبل إرسال بلاغ آخر.");
+    }
+    transaction.create(reportRef, {
+      reporterUid: uid, targetType: "academyLesson", courseId, lessonId, reason, details,
+      status: "open", createdAt: now, updatedAt: now,
+    });
+    transaction.set(rateRef, { uid, lastReportAt: now, updatedAt: now }, { merge: true });
+  });
+  return { status: "submitted", reportId: reportRef.id };
+});
+
+type ReviewContentReportInput = { reportId?: unknown; status?: unknown; note?: unknown };
+export const reviewContentReport = onCall<ReviewContentReportInput>(async (request) => {
+  const adminUid = requireAdmin(request);
+  const reportId = requireUid(request.data?.reportId, "معرّف البلاغ غير صالح.");
+  const status = request.data?.status;
+  if (status !== "resolved" && status !== "dismissed") throw new HttpsError("invalid-argument", "حالة مراجعة البلاغ غير صالحة.");
+  const note = academyText(request.data?.note, "ملاحظة المراجعة", 500, true);
+  const reportRef = db.collection("contentReports").doc(reportId);
+  const logRef = db.collection("moderationLogs").doc();
+  await db.runTransaction(async (transaction) => {
+    const report = await transaction.get(reportRef);
+    if (!report.exists) throw new HttpsError("not-found", "البلاغ غير موجود.");
+    if (report.get("status") !== "open") throw new HttpsError("failed-precondition", "تمت مراجعة هذا البلاغ مسبقاً.");
+    const now = FieldValue.serverTimestamp();
+    transaction.update(reportRef, { status, reviewNote: note, reviewedBy: adminUid, reviewedAt: now, updatedAt: now });
+    transaction.create(logRef, {
+      actorUid: adminUid, action: status === "resolved" ? "report_resolved" : "report_dismissed",
+      targetType: report.get("targetType") || "unknown",
+      targetId: report.get("lessonId") || report.get("targetId") || reportId,
+      reportId, createdAt: now,
+    });
+  });
+  return { status };
+});
+
 export const publishCourseLesson = onCall<{ courseId?: unknown; lessonId?: unknown; published?: unknown }>(async (request) => {
   const adminUid = requireAdmin(request);
   const courseId = requireUid(request.data?.courseId, "معرّف الدورة غير صالح.");

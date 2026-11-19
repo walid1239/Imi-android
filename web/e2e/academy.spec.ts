@@ -25,6 +25,7 @@ test('public academy can be browsed without an account in Arabic RTL', async ({ 
   await page.getByRole('button', { name: /الرياضيات - اختبار/ }).click();
   await expect(page.getByText('لا دروس بعد. سيضيفها أساتذتنا قريباً')).toBeVisible();
   await expect(page.getByRole('link', { name: 'تسجيل الدخول لحفظ التقدم سحابياً' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'أصبح أستاذاً' })).toBeVisible();
 });
 
 test('two learners can befriend each other, exchange a message and publish a status', async ({ page, browser }) => {
@@ -89,6 +90,7 @@ test('admin claim exposes the protected Academy administration panel', async ({ 
   await expect(page.getByRole('button', { name: /إدارة الأكاديمية/ })).toBeVisible();
   await page.getByRole('button', { name: /إدارة الأكاديمية/ }).first().click();
   await expect(page.getByRole('heading', { name: 'إدارة الأكاديمية' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'إدارة شجرة المنهاج' })).toBeVisible();
   await expect(page.getByText('أستاذ اختبار آلي')).toBeVisible();
   await page.getByRole('button', { name: 'اعتماد التوثيق' }).click();
   await expect(page.getByRole('status')).toContainText('تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق');

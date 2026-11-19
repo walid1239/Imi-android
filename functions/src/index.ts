@@ -1,6 +1,8 @@
 import { initializeApp } from "firebase-admin/app";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { messageNotificationPreview } from "./notificationLogic";
 import {
   isStatusCooldownActive,
   statusExpiryMillis,
@@ -383,6 +385,49 @@ export const publishCourseLesson = onCall<{ courseId?: unknown; lessonId?: unkno
   return { published: request.data.published };
 });
 
+
+// Create durable in-app notifications from trusted Firestore message events.
+export const notifyConversationMessage = onDocumentCreated(
+  "conversations/{conversationId}/messages/{messageId}",
+  async (event) => {
+    const message = event.data;
+    if (!message) return;
+    const senderUid = message.get("senderUid");
+    const conversationId = event.params.conversationId;
+    const messageId = event.params.messageId;
+    if (typeof senderUid !== "string" || !senderUid) return;
+
+    const conversation = await db.collection("conversations").doc(conversationId).get();
+    const participants = conversation.get("participants");
+    if (!conversation.exists || !Array.isArray(participants) || !participants.includes(senderUid)) return;
+
+    const preview = messageNotificationPreview({
+      type: message.get("type"),
+      text: message.get("text"),
+    });
+    const recipients = participants.filter((uid): uid is string =>
+      typeof uid === "string" && uid !== senderUid
+    );
+
+    await Promise.all(recipients.map(async (recipientUid) => {
+      const notificationRef = db.collection("users").doc(recipientUid)
+        .collection("notifications").doc(`${conversationId}_${messageId}`);
+      await db.runTransaction(async (transaction) => {
+        const existing = await transaction.get(notificationRef);
+        if (existing.exists) return; // Idempotent across event retries; preserve readAt.
+        transaction.create(notificationRef, {
+          type: "message",
+          senderUid,
+          conversationId,
+          messageId,
+          preview,
+          createdAt: FieldValue.serverTimestamp(),
+          readAt: null,
+        });
+      });
+    });
+  }
+);
 
 // One-to-one call lifecycle. Identity and state transitions are server-authoritative.
 type CreateCallInput = { conversationId?: unknown; calleeUid?: unknown; kind?: unknown };

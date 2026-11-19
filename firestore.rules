@@ -87,15 +87,15 @@ service cloud.firestore {
 
     // Published Academy content is read-only for clients; publishing is an admin workflow.
     match /courses/{courseId} {
-      allow read: if signedIn() && (resource.data.published == true || isAdmin());
+      // Published course catalog is public and read-only; drafts remain admin-only.
+      allow read: if resource.data.published == true || (signedIn() && isAdmin());
       allow create, update, delete: if false;
 
       match /lessons/{lessonId} {
-        allow read: if signedIn() && (
-          isAdmin()
-          || (get(/databases/$(database)/documents/courses/$(courseId)).data.published == true
-            && resource.data.published == true)
-        );
+        allow read: if (
+          resource.data.published == true
+          && get(/databases/$(database)/documents/courses/$(courseId)).data.published == true
+        ) || (signedIn() && isAdmin());
         allow create, update, delete: if false;
       }
     }

@@ -29,6 +29,9 @@ before(async () => {
     const db = context.firestore();
     await setDoc(doc(db, 'users/alice'), { privateEmail: 'alice@example.invalid' });
     await setDoc(doc(db, 'users/bob'), { privateEmail: 'bob@example.invalid' });
+    await setDoc(doc(db, 'publicProfiles/alice'), { uid: 'alice', displayName: 'Alice' });
+    await setDoc(doc(db, 'publicProfiles/bob'), { uid: 'bob', displayName: 'Bob' });
+    await setDoc(doc(db, 'publicProfiles/mallory'), { uid: 'mallory', displayName: 'Mallory' });
     await setDoc(doc(db, 'users/alice/friends/bob'), { uid: 'bob', status: 'accepted' });
     await setDoc(doc(db, 'users/bob/friends/alice'), { uid: 'alice', status: 'accepted' });
     await setDoc(doc(db, 'friendRequests/alice__bob'), { fromUid: 'alice', toUid: 'bob', status: 'pending' });
@@ -127,6 +130,30 @@ test('a user can read their own private document but another user cannot', async
   const bobDb = env.authenticatedContext('bob').firestore();
   await assertSucceeds(getDoc(doc(aliceDb, 'users/alice')));
   await assertFails(getDoc(doc(bobDb, 'users/alice')));
+});
+
+test('conversation creation is limited to two distinct existing profiles', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const base = {
+    createdBy: 'alice',
+    participants: ['alice', 'bob'],
+    createdAt: serverTimestamp(),
+    lastMessage: '',
+    lastMessageAt: serverTimestamp()
+  };
+  await assertSucceeds(setDoc(doc(aliceDb, 'conversations/direct-created'), base));
+  await assertFails(setDoc(doc(aliceDb, 'conversations/group-injection'), {
+    ...base,
+    participants: ['alice', 'bob', 'mallory']
+  }));
+  await assertFails(setDoc(doc(aliceDb, 'conversations/duplicate-self'), {
+    ...base,
+    participants: ['alice', 'alice']
+  }));
+  await assertFails(setDoc(doc(aliceDb, 'conversations/unknown-profile'), {
+    ...base,
+    participants: ['alice', 'unknown-user']
+  }));
 });
 
 test('only conversation participants can read a conversation', async () => {

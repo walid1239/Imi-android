@@ -112,13 +112,18 @@ export const createOrGetDirectConversation = onCall<CreateOrGetDirectConversatio
   const conversationRef = db.collection("conversations").doc(conversationId);
   const ownProfileRef = db.collection("publicProfiles").doc(uid);
   const otherProfileRef = db.collection("publicProfiles").doc(otherUid);
+  const ownBlockRef = db.collection("users").doc(uid).collection("blockedUsers").doc(otherUid);
+  const otherBlockRef = db.collection("users").doc(otherUid).collection("blockedUsers").doc(uid);
 
   await db.runTransaction(async (transaction) => {
-    const [conversation, ownProfile, otherProfile] = await Promise.all([
+    const [conversation, ownProfile, otherProfile, ownBlock, otherBlock] = await Promise.all([
       transaction.get(conversationRef),
       transaction.get(ownProfileRef),
       transaction.get(otherProfileRef),
+      transaction.get(ownBlockRef),
+      transaction.get(otherBlockRef),
     ]);
+    if (ownBlock.exists || otherBlock.exists) throw new HttpsError("permission-denied", "لا يمكن بدء محادثة بسبب إعدادات الحظر.");
     if (!ownProfile.exists || !otherProfile.exists) {
       throw new HttpsError("not-found", "يجب أن يكون الطرفان قد نشرا ملفيهما في دليل IMI أولاً.");
     }
@@ -153,15 +158,20 @@ export const sendFriendRequest = onCall<SendFriendRequestInput>(async (request) 
   const targetProfileRef = db.collection("publicProfiles").doc(toUid);
   const ownFriendRef = db.collection("users").doc(uid).collection("friends").doc(toUid);
   const targetFriendRef = db.collection("users").doc(toUid).collection("friends").doc(uid);
+  const ownBlockRef = db.collection("users").doc(uid).collection("blockedUsers").doc(toUid);
+  const targetBlockRef = db.collection("users").doc(toUid).collection("blockedUsers").doc(uid);
 
   await db.runTransaction(async (transaction) => {
-    const [targetProfile, outgoing, incoming, ownFriend, targetFriend] = await Promise.all([
+    const [targetProfile, outgoing, incoming, ownFriend, targetFriend, ownBlock, targetBlock] = await Promise.all([
       transaction.get(targetProfileRef),
       transaction.get(outgoingRef),
       transaction.get(incomingRef),
       transaction.get(ownFriendRef),
       transaction.get(targetFriendRef),
+      transaction.get(ownBlockRef),
+      transaction.get(targetBlockRef),
     ]);
+    if (ownBlock.exists || targetBlock.exists) throw new HttpsError("permission-denied", "لا يمكن إرسال طلب صداقة بسبب إعدادات الحظر.");
     if (!targetProfile.exists) throw new HttpsError("not-found", "لم نعثر على هذا المستخدم في دليل IMI.");
     if (ownFriend.exists && ownFriend.get("status") === "accepted"
       && targetFriend.exists && targetFriend.get("status") === "accepted") {
@@ -693,11 +703,15 @@ export const createCall = onCall<CreateCallInput>(async (request) => {
   const conversationRef = db.collection("conversations").doc(conversationId);
   const callerFriendRef = db.collection("users").doc(uid).collection("friends").doc(calleeUid);
   const calleeFriendRef = db.collection("users").doc(calleeUid).collection("friends").doc(uid);
+  const callerBlockRef = db.collection("users").doc(uid).collection("blockedUsers").doc(calleeUid);
+  const calleeBlockRef = db.collection("users").doc(calleeUid).collection("blockedUsers").doc(uid);
   const callRef = db.collection("calls").doc();
   await db.runTransaction(async (tx) => {
-    const [conversation, callerFriend, calleeFriend] = await Promise.all([
+    const [conversation, callerFriend, calleeFriend, callerBlock, calleeBlock] = await Promise.all([
       tx.get(conversationRef), tx.get(callerFriendRef), tx.get(calleeFriendRef),
+      tx.get(callerBlockRef), tx.get(calleeBlockRef),
     ]);
+    if (callerBlock.exists || calleeBlock.exists) throw new HttpsError("permission-denied", "لا يمكن بدء مكالمة بسبب إعدادات الحظر.");
     const participants = conversation.get("participants");
     if (!conversation.exists || !Array.isArray(participants) || participants.length !== 2
       || !participants.includes(uid) || !participants.includes(calleeUid)) {

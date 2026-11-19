@@ -457,6 +457,13 @@ service cloud.firestore {
     }
 
     // Mock sessions are private to their teacher/admin; real scheduled/live sessions can be public.
+    match /teacherContent/{contentId} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.ownerUid == request.auth.uid)
+        || resource.data.published == true;
+      allow create, update, delete: if false;
+    }
+
     match /teacherLiveSessions/{sessionId} {
       allow read: if isAdmin() || (signedIn() && resource.data.teacherUid == request.auth.uid)
         || resource.data.status in ['scheduled', 'live', 'ended'];

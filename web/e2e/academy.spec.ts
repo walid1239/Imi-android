@@ -28,6 +28,15 @@ test('public academy can be browsed without an account in Arabic RTL', async ({ 
   await expect(page.getByRole('link', { name: 'أصبح أستاذاً' })).toBeVisible();
 });
 
+test('phone OTP validates the selected country number before requesting SMS', async ({ page }) => {
+  await page.goto('/login');
+  await expect(page.getByText('الدخول برقم الهاتف (OTP)')).toBeVisible();
+  await expect(page.getByLabel('الدولة')).toHaveValue('+212');
+  await page.getByLabel('رقم الهاتف').fill('12345');
+  await page.getByRole('button', { name: 'إرسال رمز التحقق' }).click();
+  await expect(page.getByRole('alert')).toContainText('أدخل 9 أرقام بعد رمز الدولة.');
+});
+
 test('two learners can befriend each other, exchange a message and publish a status', async ({ page, browser }) => {
   const project = test.info().project.name;
   const secondContext = await browser.newContext();

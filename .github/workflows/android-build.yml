@@ -17,6 +17,9 @@ on:
       - 'data/curriculum.json'
       - 'scripts/seed-curriculum.cjs'
       - 'scripts/test-teacher-emulator.cjs'
+      - 'web/src/components/phone-otp-form.tsx'
+      - 'web/src/app/login/page.tsx'
+      - 'web/src/components/profile-panel.tsx'
   pull_request:
     branches: [ main, master, 'feature/**' ]
     paths:

@@ -171,6 +171,30 @@ test('a participant can create a message only under their own UID', async () => 
     text: 'مرحبا',
     createdAt: serverTimestamp()
   }));
+  await assertSucceeds(setDoc(doc(aliceDb, 'conversations/chat-1/messages/image-1'), {
+    senderUid: 'alice',
+    type: 'image',
+    mediaPath: 'conversations/chat-1/alice/image-1/photo.png',
+    contentType: 'image/png',
+    fileName: 'photo.png',
+    createdAt: serverTimestamp()
+  }));
+  await assertFails(setDoc(doc(aliceDb, 'conversations/chat-1/messages/foreign-path'), {
+    senderUid: 'alice',
+    type: 'image',
+    mediaPath: 'conversations/chat-1/bob/foreign-path/photo.png',
+    contentType: 'image/png',
+    fileName: 'photo.png',
+    createdAt: serverTimestamp()
+  }));
+  await assertFails(setDoc(doc(aliceDb, 'conversations/chat-1/messages/invalid-type'), {
+    senderUid: 'alice',
+    type: 'image',
+    mediaPath: 'conversations/chat-1/alice/invalid-type/file.exe',
+    contentType: 'application/octet-stream',
+    fileName: 'file.exe',
+    createdAt: serverTimestamp()
+  }));
   await assertFails(setDoc(doc(aliceDb, 'conversations/chat-1/messages/msg-2'), {
     senderUid: 'bob',
     type: 'text',
@@ -203,12 +227,28 @@ test('only conversation members can upload conversation media', async () => {
   const aliceStorage = env.authenticatedContext('alice').storage();
   const malloryStorage = env.authenticatedContext('mallory').storage();
   await assertSucceeds(uploadBytes(
-    ref(aliceStorage, 'conversations/chat-1/photo.png'),
+    ref(aliceStorage, 'conversations/chat-1/alice/message-1/photo.png'),
+    new Blob(['png-data'], { type: 'image/png' })
+  ));
+  await assertSucceeds(uploadBytes(
+    ref(aliceStorage, 'conversations/chat-1/alice/message-2/voice.webm'),
+    new Blob(['audio-data'], { type: 'audio/webm' })
+  ));
+  await assertSucceeds(uploadBytes(
+    ref(aliceStorage, 'conversations/chat-1/alice/message-3/clip.mp4'),
+    new Blob(['video-data'], { type: 'video/mp4' })
+  ));
+  await assertFails(uploadBytes(
+    ref(malloryStorage, 'conversations/chat-1/mallory/message-4/attack.png'),
     new Blob(['png-data'], { type: 'image/png' })
   ));
   await assertFails(uploadBytes(
-    ref(malloryStorage, 'conversations/chat-1/photo.png'),
+    ref(aliceStorage, 'conversations/chat-1/bob/message-5/forged.png'),
     new Blob(['png-data'], { type: 'image/png' })
+  ));
+  await assertFails(uploadBytes(
+    ref(aliceStorage, 'conversations/chat-1/alice/message-6/file.exe'),
+    new Blob(['executable'], { type: 'application/octet-stream' })
   ));
 });
 

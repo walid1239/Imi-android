@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useState} from 'react';
 import {getIdTokenResult,onAuthStateChanged,User} from 'firebase/auth';
-import {collection,getDocs,query,where} from 'firebase/firestore';
+import {collection,doc,getDoc,getDocs,query,where} from 'firebase/firestore';
 import {getFunctions,httpsCallable} from 'firebase/functions';
 import {ref,uploadBytes} from 'firebase/storage';
 import {auth,db,storage,firebaseConfigured} from '@/lib/firebase/client';
@@ -13,6 +13,7 @@ export default function TeacherStudioPanel(){
  const [title,setTitle]=useState(''),[subjectId,setSubjectId]=useState(''),[startsAt,setStartsAt]=useState('');
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  useEffect(()=>onAuthStateChanged(auth,async u=>{setUser(u);if(!u){setVerified(false);return;}try{const token=await getIdTokenResult(u,true);setVerified(token.claims.teacherVerified===true);}catch{setVerified(false);}}),[]);
+ useEffect(()=>{if(!user||!verified||!firebaseConfigured)return;getDoc(doc(db,'teacherProfiles',user.uid)).then(s=>setProfileComplete(s.exists()&&s.get('profileComplete')===true&&s.get('published')===true)).catch(()=>setProfileComplete(false));},[user,verified]);
  useEffect(()=>{if(!firebaseConfigured)return;getDocs(query(collection(db,'curriculumNodes'),where('status','==','published'))).then(s=>{const rows=s.docs.map(d=>({id:d.id,type:d.get('type'),nameAr:String(d.get('nameAr')||'')}));setLevels(rows.filter(x=>x.type==='level'));setSubjects(rows.filter(x=>x.type==='subject'));}).catch(()=>setError('تعذر تحميل فهرس الأكاديمية.'));},[]);
  async function saveProfile(e:React.FormEvent){e.preventDefault();setError('');setNotice('');if(!user||!verified){setError('يجب تسجيل الدخول وتوثيق حساب الأستاذ أولاً.');return;}if(!photo||photo.size>5*1024*1024||!['image/jpeg','image/png','image/webp'].includes(photo.type)){setError('اختر صورة JPEG/PNG/WebP لا تتجاوز 5 ميغابايت.');return;}if(levelIds.length===0||subjectIds.length===0||!contentAgreement||!childSafetyAgreement){setError('اختر مستوى ومادة واقبل اتفاقيتي المحتوى وحماية القاصرين.');return;}setBusy(true);try{const path='teachers/'+user.uid+'/avatar/'+Date.now()+'-'+photo.name.replace(/[^a-zA-Z0-9._-]/g,'_');await uploadBytes(ref(storage,path),photo,{contentType:photo.type});await httpsCallable(getFunctions(),'saveTeacherProfile')({photoPath:path,bio,levelIds,subjectIds,contentAgreement,childSafetyAgreement});setProfileComplete(true);setNotice('اكتملت صفحة الأستاذ ونُشرت بعد التحقق السيرفري من الشروط.');}catch(e){setError(e instanceof Error?e.message:'تعذر حفظ صفحة الأستاذ.');}finally{setBusy(false);}}
  async function schedule(e:React.FormEvent){e.preventDefault();setBusy(true);setError('');setNotice('');try{const result=await httpsCallable(getFunctions(),'scheduleTeacherLiveSession')({title,subjectId,startsAt:new Date(startsAt).toISOString()});const data=result.data as {sessionId:string;status:string;liveEnabled:boolean};setNotice('تم إنشاء موعد تجريبي فقط ('+data.status+'). البث الحقيقي غير مفعّل ولا يوجد رابط انضمام.');setTitle('');}catch(e){setError(e instanceof Error?e.message:'تعذرت جدولة الموعد.');}finally{setBusy(false);}}

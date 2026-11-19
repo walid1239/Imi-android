@@ -1,5 +1,5 @@
-export const TEACHER_CONTENT_RIGHTS_AGREEMENT_VERSION = "2026-11-19-v1";
-export const TEACHER_CHILD_SAFETY_AGREEMENT_VERSION = "2026-11-19-v1";
+export const TEACHER_CONTENT_RIGHTS_AGREEMENT_VERSION = "content-rights-2026-11-19-v1";
+export const TEACHER_CHILD_SAFETY_AGREEMENT_VERSION = "child-safety-2026-11-19-v1";
 
 export type TeacherAgreementAcceptance = {
   version: string;

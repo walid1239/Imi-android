@@ -5,7 +5,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret, defineString } from "firebase-functions/params";
-import { createIceServerConfiguration, nextRateLimitState, resolveIceUid } from "./turnCredentials";
+import { createIceServerConfiguration, nextIceRestartCount, nextRateLimitState, resolveIceUid } from "./turnCredentials";
 import { messageNotificationPreview } from "./notificationLogic";
 import {
   isStatusCooldownActive,
@@ -587,6 +587,7 @@ export const createCall = onCall<CreateCallInput>(async (request) => {
     const now = Timestamp.now();
     tx.create(callRef, {
       callerUid: uid, calleeUid, conversationId, kind, status: "ringing",
+      offerRevision: 0, answerRevision: -1, iceRestartCount: 0,
       createdAt: now, updatedAt: now,
       expiresAt: Timestamp.fromMillis(now.toMillis() + 45_000),
     });
@@ -614,6 +615,42 @@ export const respondToCall = onCall<CallActionInput & { decision?: unknown }>(as
   });
   const latest = await ref.get();
   return { status: latest.get("status") === "missed" ? "missed" : decision };
+});
+
+type RestartCallIceInput = { callId?: unknown; sdp?: unknown };
+
+export const restartCallIce = onCall<RestartCallIceInput>(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  const callId = requireUid(request.data?.callId, "معرّف المكالمة غير صالح.");
+  const sdp = request.data?.sdp;
+  if (typeof sdp !== "string" || sdp.length < 1 || sdp.length > 200000) {
+    throw new HttpsError("invalid-argument", "بيانات إعادة الاتصال غير صالحة.");
+  }
+  const ref = db.collection("calls").doc(callId);
+  let offerRevision = 0;
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists) throw new HttpsError("not-found", "المكالمة غير موجودة.");
+    if (snapshot.get("callerUid") !== uid) {
+      throw new HttpsError("permission-denied", "منشئ المكالمة فقط يمكنه بدء إعادة التفاوض.");
+    }
+    if (snapshot.get("status") !== "accepted" || !snapshot.get("offer")) {
+      throw new HttpsError("failed-precondition", "لا يمكن إعادة الاتصال قبل قبول المكالمة.");
+    }
+    const nextCount = nextIceRestartCount(Number(snapshot.get("iceRestartCount") ?? 0));
+    if (nextCount === null) {
+      throw new HttpsError("resource-exhausted", "تم استنفاد محاولات إعادة الاتصال لهذه المكالمة.");
+    }
+    offerRevision = Number(snapshot.get("offerRevision") ?? 0) + 1;
+    transaction.update(ref, {
+      offer: { type: "offer", sdp },
+      offerRevision,
+      iceRestartCount: nextCount,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return { offerRevision };
 });
 
 export const endCall = onCall<CallActionInput>(async (request) => {

@@ -72,7 +72,8 @@ export default function CallControls({
     const incomingQuery = query(
       collection(db, 'calls'),
       where('calleeUid', '==', user.uid),
-      limit(20)
+      where('status', '==', 'ringing'),
+      limit(10)
     );
     return onSnapshot(incomingQuery, snapshot => {
       const now = Date.now();
@@ -85,7 +86,7 @@ export default function CallControls({
           expiresAt: item.get('expiresAt') ?? null,
           status: item.get('status') ?? ''
         }))
-        .filter(item => item.status === 'ringing' && item.expiresAt instanceof Timestamp && item.expiresAt.toMillis() > now)
+        .filter(item => item.expiresAt instanceof Timestamp && item.expiresAt.toMillis() > now)
         .sort((a, b) => (b.expiresAt?.toMillis() ?? 0) - (a.expiresAt?.toMillis() ?? 0))[0];
       setIncomingCall(candidate ? {
         id: candidate.id,

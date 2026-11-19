@@ -40,8 +40,10 @@ export default function ChatPanel({ user }: { user: User }) {
   const [attachment, setAttachment] = useState<File | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
   const [otherReadAt, setOtherReadAt] = useState<Timestamp | null>(null);
+  const [otherDeliveredAt, setOtherDeliveredAt] = useState<Timestamp | null>(null);
   const [otherTyping, setOtherTyping] = useState(false);
   const lastReadMessageRef = useRef('');
+  const lastDeliveredMessageRef = useRef('');
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
@@ -144,19 +146,37 @@ export default function ChatPanel({ user }: { user: User }) {
   useEffect(() => {
     if (!selectedId || !otherUid) {
       setOtherReadAt(null);
+      setOtherDeliveredAt(null);
       setOtherTyping(false);
       return;
     }
     const receiptRef = doc(db, 'conversations', selectedId, 'readReceipts', otherUid);
+    const deliveryRef = doc(db, 'conversations', selectedId, 'deliveryReceipts', otherUid);
     const typingRef = doc(db, 'conversations', selectedId, 'typing', otherUid);
     const stopReceipt = onSnapshot(receiptRef, snapshot => {
       setOtherReadAt(snapshot.exists() ? snapshot.get('lastReadAt') ?? null : null);
     });
+    const stopDelivery = onSnapshot(deliveryRef, snapshot => {
+      setOtherDeliveredAt(snapshot.exists() ? snapshot.get('lastDeliveredAt') ?? null : null);
+    });
     const stopTyping = onSnapshot(typingRef, snapshot => {
       setOtherTyping(snapshot.exists() && snapshot.get('isTyping') === true);
     });
-    return () => { stopReceipt(); stopTyping(); };
+    return () => { stopReceipt(); stopDelivery(); stopTyping(); };
   }, [selectedId, otherUid]);
+
+  useEffect(() => {
+    const latestIncoming = [...messages].reverse().find(message => message.senderUid !== user.uid);
+    if (!selectedId || !latestIncoming?.id || lastDeliveredMessageRef.current === latestIncoming.id) return;
+    lastDeliveredMessageRef.current = latestIncoming.id;
+    setDoc(doc(db, 'conversations', selectedId, 'deliveryReceipts', user.uid), {
+      uid: user.uid,
+      lastDeliveredAt: serverTimestamp(),
+      lastDeliveredMessageId: latestIncoming.id
+    }, { merge: true }).catch(() => {
+      lastDeliveredMessageRef.current = '';
+    });
+  }, [messages, selectedId, user.uid]);
 
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
@@ -473,7 +493,7 @@ export default function ChatPanel({ user }: { user: User }) {
         {!selectedId && <p className="py-16 text-center text-sm text-slate-500">لا توجد محادثة محددة.</p>}
         {selectedId && loadingMessages && <p className="text-sm text-slate-400">جارٍ تحميل الرسائل…</p>}
         {selectedId && !loadingMessages && messages.length === 0 && <p className="py-16 text-center text-sm text-slate-500">لا توجد رسائل بعد. أرسل أول رسالة.</p>}
-        {messages.map(message => <div key={message.id} className={`flex ${message.senderUid === user.uid ? 'justify-start' : 'justify-end'}`}><article className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.senderUid === user.uid ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-100'}`}>{message.type === 'image' && mediaUrls[message.id] && <a href={mediaUrls[message.id]} target="_blank" rel="noreferrer"><img src={mediaUrls[message.id]} alt={message.fileName || 'صورة مرفقة'} className="mb-2 max-h-72 max-w-full rounded-xl object-contain" /></a>}{message.type === 'video' && mediaUrls[message.id] && <video src={mediaUrls[message.id]} controls playsInline className="mb-2 max-h-72 max-w-full rounded-xl" />}{message.type === 'audio' && mediaUrls[message.id] && <audio src={mediaUrls[message.id]} controls className="mb-2 max-w-full" />}{message.mediaPath && !mediaUrls[message.id] && <p className="mb-2 text-xs opacity-70">جارٍ تحميل المرفق…</p>}{message.text && <p className="whitespace-pre-wrap break-words text-sm">{message.text}</p>}<time className="mt-2 block text-left text-[10px] opacity-60">{timeLabel(message.createdAt)}{message.senderUid === user.uid && otherReadAt && message.createdAt && otherReadAt.toMillis() >= message.createdAt.toMillis() ? ' · تمت القراءة' : ''}</time></article></div>)}
+        {messages.map(message => <div key={message.id} className={`flex ${message.senderUid === user.uid ? 'justify-start' : 'justify-end'}`}><article className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.senderUid === user.uid ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-100'}`}>{message.type === 'image' && mediaUrls[message.id] && <a href={mediaUrls[message.id]} target="_blank" rel="noreferrer"><img src={mediaUrls[message.id]} alt={message.fileName || 'صورة مرفقة'} className="mb-2 max-h-72 max-w-full rounded-xl object-contain" /></a>}{message.type === 'video' && mediaUrls[message.id] && <video src={mediaUrls[message.id]} controls playsInline className="mb-2 max-h-72 max-w-full rounded-xl" />}{message.type === 'audio' && mediaUrls[message.id] && <audio src={mediaUrls[message.id]} controls className="mb-2 max-w-full" />}{message.mediaPath && !mediaUrls[message.id] && <p className="mb-2 text-xs opacity-70">جارٍ تحميل المرفق…</p>}{message.text && <p className="whitespace-pre-wrap break-words text-sm">{message.text}</p>}<time className="mt-2 block text-left text-[10px] opacity-60">{timeLabel(message.createdAt)}{message.senderUid === user.uid ? (otherReadAt && message.createdAt && otherReadAt.toMillis() >= message.createdAt.toMillis() ? ' · تمت القراءة' : otherDeliveredAt && message.createdAt && otherDeliveredAt.toMillis() >= message.createdAt.toMillis() ? ' · تم التسليم' : ' · تم الإرسال') : ''}</time></article></div>)}
       </div>
       <form onSubmit={send} className="border-t border-white/10 p-3"><div className="mb-2 flex items-center gap-2"><label className="cursor-pointer rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300">إرفاق ملف<input type="file" accept="image/jpeg,image/png,image/webp,audio/mpeg,audio/mp4,audio/aac,audio/ogg,audio/wav,audio/webm,video/mp4,video/webm" disabled={!selectedId || busy || recording} className="hidden" onChange={event => setAttachment(event.target.files?.[0] ?? null)} /></label><button type="button" onClick={toggleVoiceRecording} disabled={!selectedId || busy} className={`rounded-lg border px-3 py-2 text-xs ${recording ? 'border-rose-500/50 text-rose-300' : 'border-white/10 text-slate-300'}`}>{recording ? 'إيقاف التسجيل' : 'تسجيل صوت'}</button>{attachment && <span className="min-w-0 flex-1 truncate text-xs text-slate-400">{attachment.name} · {(attachment.size / (1024 * 1024)).toFixed(1)} MB</span>}{attachment && <button type="button" onClick={() => setAttachment(null)} className="text-xs text-rose-300">إزالة</button>}</div><div className="flex gap-2"><input value={draft} onChange={event => setDraft(event.target.value)} maxLength={1000} disabled={!selectedId || busy} placeholder="اكتب رسالتك…" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-sm outline-none focus:border-blue-500 disabled:opacity-50" /><button disabled={!selectedId || (!draft.trim() && !attachment) || busy} className="rounded-xl bg-blue-600 px-5 text-sm font-bold disabled:opacity-40">{busy ? '…' : 'إرسال'}</button></div></form>
     </div>

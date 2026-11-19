@@ -6,7 +6,8 @@
     "test:rules": "node --test tests/firestore.rules.test.mjs",
     "emulators:test": "npx --yes firebase-tools@13.29.2 emulators:exec --only firestore,storage --project demo-imi-security \"npm run test:rules\"",
     "seed:curriculum": "node scripts/seed-curriculum.cjs",
-    "seed:general-skills": "node scripts/seed-general-skills.cjs"
+    "seed:general-skills": "node scripts/seed-general-skills.cjs",
+    "verify:academy-seed": "node scripts/verify-academy-seed.cjs"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^4.0.1",

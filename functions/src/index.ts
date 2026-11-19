@@ -3,6 +3,7 @@ import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { messageNotificationPreview } from "./notificationLogic";
 import {
   isStatusCooldownActive,
@@ -521,6 +522,24 @@ export const notifyIncomingCall = onDocumentCreated("calls/{callId}", async (eve
   } catch {
     // The in-app call notification remains available if push delivery fails.
   }
+});
+
+// Expire unanswered calls on the server so callers do not remain in a ringing state.
+export const expireRingingCalls = onSchedule("every 1 minutes", async () => {
+  const expiredCalls = await db.collection("calls")
+    .where("status", "==", "ringing")
+    .where("expiresAt", "<=", Timestamp.now())
+    .limit(100)
+    .get();
+  if (expiredCalls.empty) return;
+  const batch = db.batch();
+  expiredCalls.docs.forEach(call => {
+    batch.update(call.ref, {
+      status: "missed",
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+  await batch.commit();
 });
 
 // One-to-one call lifecycle. Identity and state transitions are server-authoritative.

@@ -156,6 +156,36 @@ test('conversation creation is limited to two distinct existing profiles', async
   }));
 });
 
+test('conversation read receipts and typing state are private to members and self-writable only', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  const malloryDb = env.authenticatedContext('mallory').firestore();
+  const aliceReceipt = doc(aliceDb, 'conversations/chat-1/readReceipts/alice');
+  await assertSucceeds(setDoc(aliceReceipt, {
+    uid: 'alice', lastReadAt: serverTimestamp(), lastReadMessageId: 'msg-1'
+  }));
+  await assertFails(setDoc(doc(aliceDb, 'conversations/chat-1/readReceipts/bob'), {
+    uid: 'bob', lastReadAt: serverTimestamp(), lastReadMessageId: 'msg-1'
+  }));
+  await assertSucceeds(getDoc(aliceReceipt));
+  await assertFails(getDoc(doc(malloryDb, 'conversations/chat-1/readReceipts/alice')));
+
+  const aliceTyping = doc(aliceDb, 'conversations/chat-1/typing/alice');
+  await assertSucceeds(setDoc(aliceTyping, {
+    uid: 'alice', isTyping: true, updatedAt: serverTimestamp()
+  }));
+  await assertFails(setDoc(doc(aliceDb, 'conversations/chat-1/typing/bob'), {
+    uid: 'bob', isTyping: true, updatedAt: serverTimestamp()
+  }));
+  await assertFails(setDoc(doc(malloryDb, 'conversations/chat-1/typing/mallory'), {
+    uid: 'mallory', isTyping: true, updatedAt: serverTimestamp()
+  }));
+  await new Promise(resolve => setTimeout(resolve, 1100));
+  await assertSucceeds((await import('firebase/firestore')).updateDoc(aliceTyping, {
+    isTyping: false, updatedAt: serverTimestamp()
+  }));
+});
+
 test('only conversation participants can read a conversation', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const malloryDb = env.authenticatedContext('mallory').firestore();

@@ -834,3 +834,5 @@ export const getIceServers = onCall({ secrets: [TURN_SECRET] }, async (request) 
     expiresAt: configuration.expiresAt,
   };
 });
+
+export { submitTeacherApplication, reviewTeacherApplication, saveTeacherProfile, scheduleTeacherLiveSession } from "./teacher";

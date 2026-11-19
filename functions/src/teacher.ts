@@ -3,6 +3,7 @@ import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { mockLiveProvider } from "./liveProvider";
+import { createTeacherAgreementAcceptances } from "./teacherAgreements";
 
 type AppInput = { fullName?: unknown; subjectIds?: unknown; levelIds?: unknown; evidencePath?: unknown };
 type ProfileInput = { photoPath?: unknown; bio?: unknown; subjectIds?: unknown; levelIds?: unknown; contentAgreement?: unknown; childSafetyAgreement?: unknown };
@@ -124,7 +125,9 @@ export const saveTeacherProfile = onCall<ProfileInput>(async request => {
   const displayName = typeof application.get("fullName") === "string" ? application.get("fullName") : "أستاذ IMI";
   await getFirestore().collection("teacherProfiles").doc(userId).set({
     uid: userId, displayName, bio, photoPath, subjectIds, levelIds, verified: true, badge: "أستاذ موثّق",
-    contentAgreement: true, childSafetyAgreement: true, profileComplete: true, published: true,
+    contentAgreement: true, childSafetyAgreement: true,
+    agreementAcceptances: createTeacherAgreementAcceptances(userId, FieldValue.serverTimestamp()),
+    profileComplete: true, published: true,
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
   return { profileComplete: true };

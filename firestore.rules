@@ -106,6 +106,59 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
     }
 
+
+    function isCallParticipant(callId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/calls/$(callId))
+        && (get(/databases/$(database)/documents/calls/$(callId)).data.callerUid == request.auth.uid
+          || get(/databases/$(database)/documents/calls/$(callId)).data.calleeUid == request.auth.uid);
+    }
+
+    // Call identity and lifecycle are server-owned. Clients exchange SDP and ICE only.
+    match /calls/{callId} {
+      allow read: if isCallParticipant(callId);
+      allow create, delete: if false;
+      allow update: if isCallParticipant(callId)
+        && resource.data.status == 'ringing'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['offer'])
+        && resource.data.callerUid == request.auth.uid
+        && !('offer' in resource.data)
+        && request.resource.data.offer is map
+        && request.resource.data.offer.keys().hasOnly(['type', 'sdp'])
+        && request.resource.data.offer.type == 'offer'
+        && request.resource.data.offer.sdp is string
+        && request.resource.data.offer.sdp.size() <= 200000
+        || (isCallParticipant(callId)
+          && resource.data.status == 'ringing'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answer'])
+          && resource.data.calleeUid == request.auth.uid
+          && !('answer' in resource.data)
+          && request.resource.data.answer is map
+          && request.resource.data.answer.keys().hasOnly(['type', 'sdp'])
+          && request.resource.data.answer.type == 'answer'
+          && request.resource.data.answer.sdp is string
+          && request.resource.data.answer.sdp.size() <= 200000);
+
+      match /callerCandidates/{candidateId} {
+        allow read: if isCallParticipant(callId);
+        allow create: if isCallParticipant(callId)
+          && get(/databases/$(database)/documents/calls/$(callId)).data.callerUid == request.auth.uid
+          && request.resource.data.keys().hasOnly(['candidate', 'sdpMid', 'sdpMLineIndex'])
+          && request.resource.data.candidate is string
+          && request.resource.data.candidate.size() <= 4096;
+        allow update, delete: if false;
+      }
+      match /calleeCandidates/{candidateId} {
+        allow read: if isCallParticipant(callId);
+        allow create: if isCallParticipant(callId)
+          && get(/databases/$(database)/documents/calls/$(callId)).data.calleeUid == request.auth.uid
+          && request.resource.data.keys().hasOnly(['candidate', 'sdpMid', 'sdpMLineIndex'])
+          && request.resource.data.candidate is string
+          && request.resource.data.candidate.size() <= 4096;
+        allow update, delete: if false;
+      }
+    }
+
     match /conversations/{conversationId} {
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly(['participants', 'createdBy', 'createdAt', 'lastMessage', 'lastMessageAt', 'lastSenderUid'])

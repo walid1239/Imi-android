@@ -169,6 +169,14 @@ test('conversation read receipts and typing state are private to members and sel
   }));
   await assertSucceeds(getDoc(aliceReceipt));
   await assertFails(getDoc(doc(malloryDb, 'conversations/chat-1/readReceipts/alice')));
+  const aliceDelivery = doc(aliceDb, 'conversations/chat-1/deliveryReceipts/alice');
+  await assertSucceeds(setDoc(aliceDelivery, {
+    uid: 'alice', lastDeliveredAt: serverTimestamp(), lastDeliveredMessageId: 'msg-1'
+  }));
+  await assertFails(setDoc(doc(aliceDb, 'conversations/chat-1/deliveryReceipts/bob'), {
+    uid: 'bob', lastDeliveredAt: serverTimestamp(), lastDeliveredMessageId: 'msg-1'
+  }));
+  await assertFails(getDoc(doc(malloryDb, 'conversations/chat-1/deliveryReceipts/alice')));
 
   const aliceTyping = doc(aliceDb, 'conversations/chat-1/typing/alice');
   await assertSucceeds(setDoc(aliceTyping, {

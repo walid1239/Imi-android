@@ -125,7 +125,7 @@ service firebase.storage {
           && firestore.get(/databases/(default)/documents/teacherProfiles/$(uid)).data.published == true;
       }
       allow read: if (signedIn() && request.auth.uid == uid)
-        || (signedIn() && request.auth.token.admin == true)
+        || isAdmin()
         || contentIsPublished();
       allow create: if signedIn()
         && request.auth.uid == uid
@@ -142,7 +142,7 @@ service firebase.storage {
 
     // Identity documents are write-only for the applicant and readable only by admins.
     match /teacher-verification/{uid}/{fileName} {
-      allow read: if signedIn() && request.auth.token.admin == true;
+      allow read: if isAdmin();
       allow create: if signedIn()
         && request.auth.uid == uid
         && request.resource != null

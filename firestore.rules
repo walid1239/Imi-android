@@ -432,7 +432,7 @@ service cloud.firestore {
 
     // A teacher profile becomes public only after the verified-teacher callable completes it.
     match /teacherProfiles/{uid} {
-      allow read: if signedIn() && (resource.data.get('published', false) == true || isSelf(uid) || isAdmin());
+      allow read: if signedIn() && (resource.data.published == true || isSelf(uid) || isAdmin());
       allow create, update, delete: if false;
     }
 

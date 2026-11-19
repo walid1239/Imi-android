@@ -269,7 +269,8 @@ service cloud.firestore {
           && request.resource.data.lastDeliveredMessageId is string
           && request.resource.data.lastDeliveredMessageId.size() > 0
           && request.resource.data.lastDeliveredMessageId.size() <= 128
-          && exists(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastDeliveredMessageId));
+          && exists(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastDeliveredMessageId))
+          && get(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastDeliveredMessageId)).data.senderUid != uid;
         allow delete: if false;
       }
 

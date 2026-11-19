@@ -3,8 +3,8 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { User } from 'firebase/auth';
 import {
-  collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp,
-  where, writeBatch, Timestamp
+  addDoc, collection, doc, endAt, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp,
+  startAt, where, writeBatch, Timestamp
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 
@@ -14,6 +14,7 @@ type Conversation = {
   lastMessage: string;
   lastMessageAt: Timestamp | null;
 };
+type PublicProfile = { uid: string; displayName: string; city?: string; photoPath?: string };
 type Message = {
   id: string;
   senderUid: string;
@@ -36,6 +37,9 @@ export default function ChatPanel({ user }: { user: User }) {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState<PublicProfile[]>([]);
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     const q = query(
@@ -87,6 +91,71 @@ export default function ChatPanel({ user }: { user: User }) {
 
   const selected = useMemo(() => chats.find(chat => chat.id === selectedId), [chats, selectedId]);
 
+  async function searchUsers(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const term = searchTerm.trim();
+    if (term.length < 2) { setError('اكتب حرفين على الأقل للبحث عن مستخدم.'); return; }
+    setSearching(true);
+    setError('');
+    try {
+      const q = query(
+        collection(db, 'publicProfiles'),
+        orderBy('displayName'),
+        startAt(term),
+        endAt(term + '\\uf8ff'),
+        limit(15)
+      );
+      const snapshot = await getDocs(q);
+      setSearchResults(snapshot.docs
+        .filter(item => item.id !== user.uid)
+        .map(item => ({
+          uid: item.id,
+          displayName: item.get('displayName') ?? 'مستخدم IMI',
+          city: item.get('city') ?? undefined,
+          photoPath: item.get('photoPath') ?? undefined
+        })));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'تعذر البحث عن المستخدمين.');
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  async function startConversation(otherUid: string) {
+    if (!otherUid || otherUid === user.uid || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const currentConversations = await getDocs(query(
+        collection(db, 'conversations'),
+        where('participants', 'array-contains', user.uid),
+        limit(100)
+      ));
+      const existing = currentConversations.docs.find(item => {
+        const members = (item.get('participants') as string[] | undefined) ?? [];
+        return members.length === 2 && members.includes(otherUid) && members.includes(user.uid);
+      });
+      if (existing) {
+        setSelectedId(existing.id);
+      } else {
+        const created = await addDoc(collection(db, 'conversations'), {
+          participants: [user.uid, otherUid].sort(),
+          createdBy: user.uid,
+          createdAt: serverTimestamp(),
+          lastMessage: '',
+          lastMessageAt: serverTimestamp()
+        });
+        setSelectedId(created.id);
+      }
+      setSearchResults([]);
+      setSearchTerm('');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'تعذر إنشاء المحادثة. تحقق من صلاحيات Firestore.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = draft.trim();
@@ -121,6 +190,17 @@ export default function ChatPanel({ user }: { user: User }) {
   return <section className="grid min-h-[520px] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/60 md:grid-cols-[minmax(220px,0.8fr)_1.5fr]" dir="rtl">
     <aside className="border-b border-white/10 p-3 md:border-b-0 md:border-l">
       <div className="mb-3 flex items-center justify-between"><h3 className="font-bold">محادثاتي</h3><span className="text-xs text-slate-500">{chats.length}</span></div>
+      <form onSubmit={searchUsers} className="mb-3 space-y-2">
+        <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="ابحث بالاسم…" className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+        <button disabled={searching || searchTerm.trim().length < 2} className="w-full rounded-xl border border-blue-500/30 px-3 py-2 text-xs font-semibold text-blue-200 disabled:opacity-40">{searching ? 'جارٍ البحث…' : 'بحث عن مستخدمين'}</button>
+      </form>
+      {searchResults.length > 0 && <div className="mb-3 space-y-2 rounded-xl border border-blue-500/20 bg-blue-500/5 p-2">
+        <p className="px-2 text-xs text-slate-400">نتائج البحث</p>
+        {searchResults.map(profile => <div key={profile.uid} className="flex items-center justify-between gap-2 rounded-lg bg-white/[.04] p-2">
+          <div className="min-w-0"><p className="truncate text-sm font-semibold">{profile.displayName}</p><p className="truncate text-[10px] text-slate-500">{profile.city || profile.uid.slice(0, 8)}</p></div>
+          <button onClick={() => startConversation(profile.uid)} disabled={busy} className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold disabled:opacity-40">مراسلة</button>
+        </div>)}
+      </div>}
       {loadingChats ? <p className="p-4 text-sm text-slate-400">جارٍ تحميل المحادثات…</p> : chats.length === 0 ? <p className="rounded-xl bg-white/[.04] p-4 text-sm leading-7 text-slate-400">لا توجد محادثات مرتبطة بهذا الحساب بعد. عندما تبدأ محادثة من تطبيق IMI ستظهر هنا.</p> :
         <div className="space-y-2">{chats.map(chat => {
           const other = chat.participants.find(uid => uid !== user.uid);

@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { User, getIdTokenResult } from 'firebase/auth';
 import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { db } from '@/lib/firebase/client';
+import { getDownloadURL, ref as storageRef } from 'firebase/storage';
+import { db, storage } from '@/lib/firebase/client';
 import CurriculumAdminPanel from '@/components/curriculum-admin-panel';
 
 type Course = { id: string; title: string; description: string; category: string; published: boolean };
@@ -19,6 +20,7 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [reports, setReports] = useState<ContentReport[]>([]);
   const [teacherApplications, setTeacherApplications] = useState<TeacherApplication[]>([]);
+  const [evidenceUrls, setEvidenceUrls] = useState<Record<string, string>>({});
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
@@ -105,6 +107,16 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
     } finally { setBusy(false); }
   }
 
+  async function loadTeacherEvidence(uid: string, path: string) {
+    setError('');
+    try {
+      const url = await getDownloadURL(storageRef(storage, path));
+      setEvidenceUrls(current => ({ ...current, [uid]: url }));
+    } catch {
+      setError('تعذر فتح وثيقة الإثبات. تحقق من صلاحية المشرف وقواعد Storage.');
+    }
+  }
+
   async function createCourse(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await call('createCourse', { title, description, category }, 'تم إنشاء الدورة كمسودة.');
@@ -141,7 +153,10 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
         <p className="mt-1 text-xs text-slate-400">UID: {application.uid}</p>
         <p className="mt-1 text-xs text-slate-400">المستويات: {application.levelIds.join('، ')}</p>
         <p className="mt-1 text-xs text-slate-400">المواد: {application.subjectIds.join('، ')}</p>
-        <p className="mt-2 text-xs text-slate-500">وثيقة الإثبات لا تُعرض هنا ولا يملك الوصول إليها إلا المشرف عبر صلاحيات التخزين.</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          <button type="button" onClick={() => loadTeacherEvidence(application.uid, application.evidencePath)} className="rounded-lg border border-blue-400/25 px-3 py-2 text-blue-200">تحميل رابط الوثيقة الخاصة</button>
+          {evidenceUrls[application.uid] && <a href={evidenceUrls[application.uid]} target="_blank" rel="noreferrer" className="rounded-lg border border-white/10 px-3 py-2 text-slate-200">فتح الوثيقة</a>}
+        </div>
         <div className="mt-3 flex gap-2">
           <button disabled={busy} onClick={() => call('reviewTeacherApplication', { uid: application.uid, approved: true, note: '' }, 'تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق.')} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold disabled:opacity-50">اعتماد التوثيق</button>
           <button disabled={busy} onClick={() => call('reviewTeacherApplication', { uid: application.uid, approved: false, note: 'لم يستوفِ متطلبات التوثيق' }, 'تم رفض طلب التوثيق.')} className="rounded-lg border border-red-400/30 px-3 py-2 text-xs text-red-200 disabled:opacity-50">رفض الطلب</button>

@@ -25,8 +25,8 @@ messaging.onBackgroundMessage((payload) => {
   const title = payload.notification?.title || 'رسالة جديدة في IMI';
   const options = {
     body: payload.notification?.body || 'لديك إشعار جديد.',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
+    icon: '/icons/imi.svg',
+    badge: '/icons/imi.svg',
     data: payload.data || {},
     tag: payload.data?.messageId || 'imi-message',
     renotify: false,

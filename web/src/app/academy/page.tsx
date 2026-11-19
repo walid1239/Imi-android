@@ -7,7 +7,7 @@ export default function PublicAcademyPage() {
     <main dir="rtl" className="mx-auto min-h-screen max-w-6xl px-4 py-8 sm:px-8">
       <header className="mb-6 flex items-center justify-between border-b border-white/10 pb-5">
         <Link href="/" className="text-3xl font-black tracking-widest text-blue-400">IMI</Link>
-        <Link href="/login" className="rounded-xl border border-white/15 px-4 py-2 text-sm text-slate-200 hover:border-blue-400">
+        <div className="flex items-center gap-2"><Link href="/teacher/apply" className="rounded-xl border border-violet-400/30 px-3 py-2 text-sm text-violet-200 hover:bg-violet-400/10">أصبح أستاذاً</Link><Link href="/login" className="rounded-xl border border-white/15 px-4 py-2 text-sm text-slate-200 hover:border-blue-400">
           تسجيل الدخول لحفظ التقدم سحابياً
         </Link>
       </header>

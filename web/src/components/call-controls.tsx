@@ -73,6 +73,7 @@ export default function CallControls({
       collection(db, 'calls'),
       where('calleeUid', '==', user.uid),
       where('status', '==', 'ringing'),
+      where('expiresAt', '>', Timestamp.now()),
       limit(10)
     );
     return onSnapshot(incomingQuery, snapshot => {

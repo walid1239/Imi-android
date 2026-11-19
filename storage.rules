@@ -5,6 +5,10 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return signedIn() && ('admin' in request.auth.token) && request.auth.token.admin == true;
+    }
+
     function isBlockedBetween(uidA, uidB) {
       return firestore.exists(/databases/(default)/documents/users/$(uidA)/blockedUsers/$(uidB))
         || firestore.exists(/databases/(default)/documents/users/$(uidB)/blockedUsers/$(uidA));
@@ -73,7 +77,7 @@ service firebase.storage {
           && firestore.get(/databases/(default)/documents/reels/$(reelId)).data.ownerUid == uid
           && firestore.get(/databases/(default)/documents/reels/$(reelId)).data.storagePath == 'reels/' + uid + '/' + reelId + '/' + fileName;
       }
-      allow read: if signedIn() && (request.auth.uid == uid || request.auth.token.admin == true || reelApproved());
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin() || reelApproved());
       allow create: if signedIn()
         && resource == null
         && request.auth.uid == uid

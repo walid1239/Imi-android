@@ -252,7 +252,8 @@ service cloud.firestore {
           && request.resource.data.lastReadAt == request.time
           && request.resource.data.lastReadMessageId is string
           && request.resource.data.lastReadMessageId.size() > 0
-          && request.resource.data.lastReadMessageId.size() <= 128;
+          && request.resource.data.lastReadMessageId.size() <= 128
+          && exists(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastReadMessageId));
         allow delete: if false;
       }
 
@@ -267,7 +268,8 @@ service cloud.firestore {
           && request.resource.data.lastDeliveredAt == request.time
           && request.resource.data.lastDeliveredMessageId is string
           && request.resource.data.lastDeliveredMessageId.size() > 0
-          && request.resource.data.lastDeliveredMessageId.size() <= 128;
+          && request.resource.data.lastDeliveredMessageId.size() <= 128
+          && exists(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastDeliveredMessageId));
         allow delete: if false;
       }
 

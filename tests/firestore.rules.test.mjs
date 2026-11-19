@@ -200,6 +200,32 @@ test('conversation creation is limited to two distinct existing profiles', async
   }));
 });
 
+test('conversation presence is visible only to members and each user owns their heartbeat', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  const malloryDb = env.authenticatedContext('mallory').firestore();
+  const alicePresence = doc(aliceDb, 'conversations/chat-1/presence/alice');
+  await assertSucceeds(setDoc(alicePresence, {
+    uid: 'alice', isOnline: true, lastSeenAt: serverTimestamp(), updatedAt: serverTimestamp()
+  }));
+  await assertSucceeds(getDoc(alicePresence));
+  await assertSucceeds(getDoc(doc(bobDb, 'conversations/chat-1/presence/alice')));
+  await assertFails(getDoc(doc(malloryDb, 'conversations/chat-1/presence/alice')));
+  await assertFails(setDoc(doc(aliceDb, 'conversations/chat-1/presence/bob'), {
+    uid: 'bob', isOnline: true, lastSeenAt: serverTimestamp(), updatedAt: serverTimestamp()
+  }));
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'conversations/chat-1/presence/alice'), {
+      uid: 'alice', isOnline: true,
+      lastSeenAt: Timestamp.fromDate(new Date(Date.now() - 60_000)),
+      updatedAt: Timestamp.fromDate(new Date(Date.now() - 60_000))
+    });
+  });
+  await assertSucceeds((await import('firebase/firestore')).updateDoc(alicePresence, {
+    isOnline: true, lastSeenAt: serverTimestamp(), updatedAt: serverTimestamp()
+  }));
+});
+
 test('conversation read receipts and typing state are private to members and self-writable only', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();

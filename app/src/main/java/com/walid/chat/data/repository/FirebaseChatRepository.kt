@@ -266,7 +266,7 @@ class FirebaseChatRepository(
             .getHttpsCallable("createOrGetDirectConversation")
             .call(mapOf("otherUid" to otherUid))
             .await()
-        val data = response.data as? Map<*, *>
+        val data = response.getData() as? Map<*, *>
             ?: error("استجابة إنشاء المحادثة غير صالحة")
         val conversationId = data["conversationId"] as? String
             ?: error("لم يُرجع الخادم معرّف المحادثة")

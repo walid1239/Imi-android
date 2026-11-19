@@ -569,6 +569,20 @@ test('teacher applications and profiles are private and client writes cannot gra
   await assertFails(getDoc(doc(alice, 'moderationAudit/audit-1')));
 });
 
+test('blocked direct conversation media becomes unreadable to both participants', async () => {
+  let mediaPath = 'conversations/blocked-media/carol/message-1/photo.png';
+  await env.withSecurityRulesDisabled(async context => {
+    await uploadBytes(ref(context.storage(), mediaPath), new Blob(['image-data'], { type: 'image/png' }));
+    const db = context.firestore();
+    await setDoc(doc(db, 'conversations/blocked-media'), { participants: ['carol', 'dave'] });
+    await setDoc(doc(db, 'users/carol/blockedUsers/dave'), { uid: 'dave' });
+  });
+  const carol = env.authenticatedContext('carol').storage();
+  const dave = env.authenticatedContext('dave').storage();
+  await assertFails(getBytes(ref(carol, mediaPath)));
+  await assertFails(getBytes(ref(dave, mediaPath)));
+});
+
 test('teacher verification files are write-only for applicant and readable only by admin', async () => {
   const aliceStorage = env.authenticatedContext('alice').storage();
   const malloryStorage = env.authenticatedContext('mallory').storage();

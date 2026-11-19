@@ -425,7 +425,7 @@ export const notifyConversationMessage = onDocumentCreated(
           readAt: null,
         });
       });
-    });
+    }));
   }
 );
 

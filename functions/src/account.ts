@@ -9,7 +9,7 @@ export const deleteMyAccount = onCall<{ confirmation?: unknown }>({ timeoutSecon
   if (request.data?.confirmation !== "DELETE") {
     throw new HttpsError("invalid-argument", "اكتب DELETE لتأكيد حذف الحساب وبياناته.");
   }
-  const authTime = Number(request.auth.token.auth_time ?? 0) * 1000;
+  const authTime = Number(request.auth?.token.auth_time ?? 0) * 1000;
   if (!authTime || Date.now() - authTime > 5 * 60_000) {
     throw new HttpsError("failed-precondition", "لأمان حسابك، سجّل الدخول من جديد ثم أعد طلب الحذف.");
   }

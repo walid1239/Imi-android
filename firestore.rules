@@ -426,6 +426,30 @@ service cloud.firestore {
       }
     }
 
+    // Teacher identity evidence is private; only the applicant and trusted admins can read metadata.
+    match /teacherApplications/{uid} {
+      allow read: if isSelf(uid) || isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // A teacher profile becomes public only after the verified-teacher callable completes it.
+    match /teacherProfiles/{uid} {
+      allow read: if isSelf(uid) || isAdmin() || resource.data.published == true;
+      allow create, update, delete: if false;
+    }
+
+    // Mock sessions are private to their teacher/admin; real scheduled/live sessions can be public.
+    match /teacherLiveSessions/{sessionId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.teacherUid == request.auth.uid)
+        || resource.data.status in ['scheduled', 'live', 'ended'];
+      allow create, update, delete: if false;
+    }
+
+    match /moderationAudit/{entryId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
     // Anything not explicitly modelled above is private by default.
     match /{document=**} {
       allow read, write: if false;

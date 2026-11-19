@@ -6,7 +6,8 @@ import {
   addDoc, collection, doc, endAt, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp,
   setDoc, startAt, where, writeBatch, Timestamp
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase/client';
+import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
+import { db, storage } from '@/lib/firebase/client';
 
 type Conversation = {
   id: string;
@@ -21,6 +22,9 @@ type Message = {
   type: string;
   text: string;
   createdAt: Timestamp | null;
+  mediaPath?: string;
+  contentType?: string;
+  fileName?: string;
 };
 
 function timeLabel(value: Timestamp | null) {
@@ -33,6 +37,8 @@ export default function ChatPanel({ user }: { user: User }) {
   const [selectedId, setSelectedId] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
+  const [attachment, setAttachment] = useState<File | null>(null);
+  const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
   const [loadingChats, setLoadingChats] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -101,7 +107,10 @@ export default function ChatPanel({ user }: { user: User }) {
         senderUid: item.get('senderUid') ?? '',
         type: item.get('type') ?? 'text',
         text: item.get('text') ?? '',
-        createdAt: item.get('createdAt') ?? null
+        createdAt: item.get('createdAt') ?? null,
+        mediaPath: item.get('mediaPath') ?? undefined,
+        contentType: item.get('contentType') ?? undefined,
+        fileName: item.get('fileName') ?? undefined
       })));
       setLoadingMessages(false);
       setError('');
@@ -112,6 +121,23 @@ export default function ChatPanel({ user }: { user: User }) {
   }, [selectedId]);
 
   const selected = useMemo(() => chats.find(chat => chat.id === selectedId), [chats, selectedId]);
+
+  useEffect(() => {
+    let active = true;
+    const mediaMessages = messages.filter(message => message.mediaPath && !mediaUrls[message.id]);
+    if (!mediaMessages.length) return;
+    Promise.all(mediaMessages.map(async message => {
+      try {
+        return [message.id, await getDownloadURL(storageRef(storage, message.mediaPath!))] as const;
+      } catch {
+        return [message.id, ''] as const;
+      }
+    })).then(entries => {
+      if (!active) return;
+      setMediaUrls(current => ({ ...current, ...Object.fromEntries(entries) }));
+    });
+    return () => { active = false; };
+  }, [messages, mediaUrls]);
 
   async function publishProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -209,29 +235,54 @@ export default function ChatPanel({ user }: { user: User }) {
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = draft.trim();
-    if (!selectedId || !text || busy) return;
+    if (!selectedId || (!text && !attachment) || busy) return;
     if (text.length > 1000) { setError('الرسالة أطول من 1000 حرف.'); return; }
+    if (attachment) {
+      const type = attachment.type;
+      const category = type.startsWith('image/') ? 'image' : type.startsWith('audio/') ? 'audio' : type.startsWith('video/') ? 'video' : '';
+      const allowed = category === 'image'
+        ? ['image/jpeg', 'image/png', 'image/webp'].includes(type) && attachment.size <= 10 * 1024 * 1024
+        : category === 'audio'
+          ? ['audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/ogg', 'audio/wav', 'audio/webm'].includes(type) && attachment.size <= 20 * 1024 * 1024
+          : category === 'video'
+            ? ['video/mp4', 'video/webm'].includes(type) && attachment.size <= 50 * 1024 * 1024
+            : false;
+      if (!allowed) { setError('نوع الملف غير مدعوم أو حجمه يتجاوز الحد المسموح. الصور 10MB، الصوت 20MB، الفيديو 50MB.'); return; }
+    }
     setBusy(true);
     setError('');
     try {
       const conversationRef = doc(db, 'conversations', selectedId);
       const messageRef = doc(collection(conversationRef, 'messages'));
+      let mediaPath: string | undefined;
+      let type: 'text' | 'image' | 'audio' | 'video' = 'text';
+      if (attachment) {
+        type = attachment.type.startsWith('image/') ? 'image' : attachment.type.startsWith('audio/') ? 'audio' : 'video';
+        mediaPath = `conversations/${selectedId}/${user.uid}/${messageRef.id}/${attachment.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100)}`;
+        await uploadBytes(storageRef(storage, mediaPath), attachment, {
+          contentType: attachment.type,
+          customMetadata: { ownerUid: user.uid, conversationId: selectedId, messageId: messageRef.id }
+        });
+      }
+      const preview = attachment ? (type === 'image' ? '📷 صورة' : type === 'audio' ? '🎤 رسالة صوتية' : '🎬 فيديو') : text;
       const batch = writeBatch(db);
       batch.set(messageRef, {
         senderUid: user.uid,
-        type: 'text',
-        text,
+        type,
+        ...(text ? { text } : {}),
+        ...(mediaPath ? { mediaPath, contentType: attachment!.type, fileName: attachment!.name.slice(0, 120) } : {}),
         createdAt: serverTimestamp()
       });
       batch.update(conversationRef, {
-        lastMessage: text,
+        lastMessage: text || preview,
         lastMessageAt: serverTimestamp(),
         lastSenderUid: user.uid
       });
       await batch.commit();
       setDraft('');
+      setAttachment(null);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'تعذر إرسال الرسالة.');
+      setError(reason instanceof Error ? reason.message : 'تعذر إرسال الرسالة أو رفع الملف.');
     } finally {
       setBusy(false);
     }
@@ -275,9 +326,9 @@ export default function ChatPanel({ user }: { user: User }) {
         {!selectedId && <p className="py-16 text-center text-sm text-slate-500">لا توجد محادثة محددة.</p>}
         {selectedId && loadingMessages && <p className="text-sm text-slate-400">جارٍ تحميل الرسائل…</p>}
         {selectedId && !loadingMessages && messages.length === 0 && <p className="py-16 text-center text-sm text-slate-500">لا توجد رسائل بعد. أرسل أول رسالة.</p>}
-        {messages.map(message => <div key={message.id} className={`flex ${message.senderUid === user.uid ? 'justify-start' : 'justify-end'}`}><article className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.senderUid === user.uid ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-100'}`}><p className="whitespace-pre-wrap break-words text-sm">{message.type === 'text' ? message.text : `[رسالة من نوع ${message.type}]`}</p><time className="mt-2 block text-left text-[10px] opacity-60">{timeLabel(message.createdAt)}</time></article></div>)}
+        {messages.map(message => <div key={message.id} className={`flex ${message.senderUid === user.uid ? 'justify-start' : 'justify-end'}`}><article className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.senderUid === user.uid ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-100'}`}>{message.type === 'image' && mediaUrls[message.id] && <a href={mediaUrls[message.id]} target="_blank" rel="noreferrer"><img src={mediaUrls[message.id]} alt={message.fileName || 'صورة مرفقة'} className="mb-2 max-h-72 max-w-full rounded-xl object-contain" /></a>}{message.type === 'video' && mediaUrls[message.id] && <video src={mediaUrls[message.id]} controls playsInline className="mb-2 max-h-72 max-w-full rounded-xl" />}{message.type === 'audio' && mediaUrls[message.id] && <audio src={mediaUrls[message.id]} controls className="mb-2 max-w-full" />}{message.mediaPath && !mediaUrls[message.id] && <p className="mb-2 text-xs opacity-70">جارٍ تحميل المرفق…</p>}{message.text && <p className="whitespace-pre-wrap break-words text-sm">{message.text}</p>}<time className="mt-2 block text-left text-[10px] opacity-60">{timeLabel(message.createdAt)}</time></article></div>)}
       </div>
-      <form onSubmit={send} className="flex gap-2 border-t border-white/10 p-3"><input value={draft} onChange={event => setDraft(event.target.value)} maxLength={1000} disabled={!selectedId || busy} placeholder="اكتب رسالتك…" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-sm outline-none focus:border-blue-500 disabled:opacity-50" /><button disabled={!selectedId || !draft.trim() || busy} className="rounded-xl bg-blue-600 px-5 text-sm font-bold disabled:opacity-40">{busy ? '…' : 'إرسال'}</button></form>
+      <form onSubmit={send} className="border-t border-white/10 p-3"><div className="mb-2 flex items-center gap-2"><label className="cursor-pointer rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300">إرفاق ملف<input type="file" accept="image/jpeg,image/png,image/webp,audio/mpeg,audio/mp4,audio/aac,audio/ogg,audio/wav,audio/webm,video/mp4,video/webm" disabled={!selectedId || busy} className="hidden" onChange={event => setAttachment(event.target.files?.[0] ?? null)} /></label>{attachment && <span className="min-w-0 flex-1 truncate text-xs text-slate-400">{attachment.name} · {(attachment.size / (1024 * 1024)).toFixed(1)} MB</span>}{attachment && <button type="button" onClick={() => setAttachment(null)} className="text-xs text-rose-300">إزالة</button>}</div><div className="flex gap-2"><input value={draft} onChange={event => setDraft(event.target.value)} maxLength={1000} disabled={!selectedId || busy} placeholder="اكتب رسالتك…" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-sm outline-none focus:border-blue-500 disabled:opacity-50" /><button disabled={!selectedId || (!draft.trim() && !attachment) || busy} className="rounded-xl bg-blue-600 px-5 text-sm font-bold disabled:opacity-40">{busy ? '…' : 'إرسال'}</button></div></form>
     </div>
     {error && <p role="alert" className="col-span-full border-t border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-6 text-amber-200">تعذر تحميل البيانات أو تنفيذ العملية: {error}. قد يتطلب الاستعلام فهرس Firestore أو صلاحيات مناسبة.</p>}
   </section>;

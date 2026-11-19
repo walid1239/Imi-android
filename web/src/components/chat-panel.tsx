@@ -8,6 +8,7 @@ import {
 } from 'firebase/firestore';
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase/client';
+import CallControls from '@/components/call-controls';
 
 type Conversation = {
   id: string;
@@ -535,6 +536,7 @@ export default function ChatPanel({ user }: { user: User }) {
     </aside>
     <div className="flex min-h-[420px] flex-col">
       <header className="border-b border-white/10 px-4 py-3"><h3 className="font-bold">{selected ? 'المحادثة' : 'الرسائل'}</h3><p className="mt-1 text-xs text-slate-500">{selected ? selected.id : 'اختر محادثة من القائمة'}</p>{otherTyping && <p className="mt-1 text-xs text-emerald-300" aria-live="polite">يكتب الآن…</p>}{otherPresenceAt && <p className="mt-1 text-[11px] text-slate-400">{presenceNow - otherPresenceAt.toMillis() < 90_000 ? 'نشط الآن في هذه المحادثة' : `آخر نشاط في المحادثة: ${timeLabel(otherPresenceAt)}`}</p>}</header>
+      <CallControls user={user} conversationId={selectedId || undefined} calleeUid={otherUid || undefined} />
       <div className="flex-1 space-y-3 overflow-y-auto p-4">
         {selectedId && hasMoreMessages && <button type="button" onClick={loadOlderMessages} disabled={loadingOlder || loadingMessages} className="mx-auto block rounded-lg border border-white/10 px-4 py-2 text-xs text-slate-300 disabled:opacity-50">{loadingOlder ? 'جارٍ تحميل الأقدم…' : 'تحميل رسائل أقدم'}</button>}
         {!selectedId && <p className="py-16 text-center text-sm text-slate-500">لا توجد محادثة محددة.</p>}

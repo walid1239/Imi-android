@@ -28,7 +28,9 @@ before(async () => {
     const db = context.firestore();
     await setDoc(doc(db, 'users/alice'), { privateEmail: 'alice@example.invalid' });
     await setDoc(doc(db, 'users/bob'), { privateEmail: 'bob@example.invalid' });
-    await setDoc(doc(db, 'users/alice/friends/bob'), { status: 'accepted' });
+    await setDoc(doc(db, 'users/alice/friends/bob'), { uid: 'bob', status: 'accepted' });
+    await setDoc(doc(db, 'users/bob/friends/alice'), { uid: 'alice', status: 'accepted' });
+    await setDoc(doc(db, 'friendRequests/alice__bob'), { fromUid: 'alice', toUid: 'bob', status: 'pending' });
     await setDoc(doc(db, 'conversations/chat-1'), {
       participants: ['alice', 'bob'],
       createdBy: 'alice',
@@ -39,6 +41,38 @@ before(async () => {
 
 after(async () => {
   await env?.cleanup();
+});
+
+
+test('friend requests are visible only to their sender and recipient and clients cannot forge them', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  const malloryDb = env.authenticatedContext('mallory').firestore();
+  await assertSucceeds(getDoc(doc(aliceDb, 'friendRequests/alice__bob')));
+  await assertSucceeds(getDoc(doc(bobDb, 'friendRequests/alice__bob')));
+  await assertFails(getDoc(doc(malloryDb, 'friendRequests/alice__bob')));
+  await assertFails(setDoc(doc(aliceDb, 'friendRequests/forged'), {
+    fromUid: 'alice', toUid: 'mallory', status: 'accepted'
+  }));
+});
+
+test('status documents are readable only by the owner and a reciprocal accepted friend', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'users/alice/statuses/friend-visible'), {
+      ownerUid: 'alice',
+      text: 'حالة مرئية للصديق',
+      createdAt: serverTimestamp(),
+      expiresAt: Timestamp.fromDate(new Date(Date.now() + 60 * 60 * 1000))
+    });
+    await setDoc(doc(context.firestore(), 'users/alice/friends/mallory'), { status: 'accepted' });
+  });
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  const malloryDb = env.authenticatedContext('mallory').firestore();
+  const statusPath = 'users/alice/statuses/friend-visible';
+  await assertSucceeds(getDoc(doc(aliceDb, statusPath)));
+  await assertSucceeds(getDoc(doc(bobDb, statusPath)));
+  await assertFails(getDoc(doc(malloryDb, statusPath)));
 });
 
 test('unauthenticated clients cannot read private user documents', async () => {

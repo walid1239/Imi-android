@@ -583,6 +583,49 @@ test('blocked direct conversation media becomes unreadable to both participants'
   await assertFails(getBytes(ref(dave, mediaPath)));
 });
 
+test('teacher content drafts stay private until server publication', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'teacherContent/draft-1'), { ownerUid: 'alice', title: 'مسودة', published: false, status: 'draft' });
+    await setDoc(doc(db, 'teacherContent/published-1'), { ownerUid: 'alice', title: 'درس منشور', published: true, status: 'published' });
+  });
+  const alice = env.authenticatedContext('alice').firestore();
+  const bob = env.authenticatedContext('bob').firestore();
+  const admin = env.authenticatedContext('admin', { admin: true }).firestore();
+  const guest = env.unauthenticatedContext().firestore();
+  await assertSucceeds(getDoc(doc(alice, 'teacherContent/draft-1')));
+  await assertFails(getDoc(doc(bob, 'teacherContent/draft-1')));
+  await assertFails(getDoc(doc(guest, 'teacherContent/draft-1')));
+  await assertSucceeds(getDoc(doc(guest, 'teacherContent/published-1')));
+  await assertSucceeds(getDoc(doc(admin, 'teacherContent/draft-1')));
+  await assertFails(setDoc(doc(alice, 'teacherContent/forged'), { ownerUid: 'alice', published: true }));
+});
+
+test('teacher media uploads require a complete verified profile and stay private until published', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'teacherProfiles/alice'), { uid: 'alice', profileComplete: true, published: true });
+  });
+  const teacher = env.authenticatedContext('alice', { teacherVerified: true }).storage();
+  const unverified = env.authenticatedContext('bob').storage();
+  const admin = env.authenticatedContext('admin', { admin: true }).storage();
+  const guest = env.unauthenticatedContext().storage();
+  const path = 'teacher-content/alice/draft-1/lesson.mp4';
+  const file = ref(teacher, path);
+  await assertSucceeds(uploadBytes(file, new Blob(['video-data'], { type: 'video/mp4' })));
+  await assertSucceeds(getBytes(file));
+  await assertFails(getBytes(ref(guest, path)));
+  await assertSucceeds(getBytes(ref(admin, path)));
+  await assertFails(uploadBytes(ref(unverified, 'teacher-content/bob/draft-2/lesson.mp4'), new Blob(['video-data'], { type: 'video/mp4' })));
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'teacherContent/draft-1'), { ownerUid: 'alice', published: false });
+  });
+  await assertFails(getBytes(ref(guest, path)));
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'teacherContent/draft-1'), { ownerUid: 'alice', published: true }, { merge: true });
+  });
+  await assertSucceeds(getBytes(ref(guest, path)));
+});
+
 test('teacher verification files are write-only for applicant and readable only by admin', async () => {
   const aliceStorage = env.authenticatedContext('alice').storage();
   const malloryStorage = env.authenticatedContext('mallory').storage();

@@ -3,7 +3,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 
-export const deleteMyAccount = onCall<{ confirmation?: unknown }>(async request => {
+export const deleteMyAccount = onCall<{ confirmation?: unknown }>({ timeoutSeconds: 540, memory: "512MiB" }, async request => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
   if (request.data?.confirmation !== "DELETE") {

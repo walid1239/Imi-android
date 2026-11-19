@@ -79,7 +79,7 @@ jobs:
         env:
           PROJECT_ID: ${{ inputs.project_id }}
         run: |
-          firebase deploy --project "$PROJECT_ID" --only functions,firestore:rules,storage
+          firebase deploy --project "$PROJECT_ID" --only functions,firestore:rules,firestore:indexes,storage
 
       - name: Report deployed target
         if: success()

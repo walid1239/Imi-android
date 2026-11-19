@@ -59,6 +59,9 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
         content: item.get('content') || '', videoUrl: item.get('videoUrl') || undefined,
         order: typeof item.get('order') === 'number' ? item.get('order') : 0,
         published: item.get('published') === true,
+        sourceType: typeof item.get('sourceType') === 'string' ? item.get('sourceType') : undefined,
+        sourceName: typeof item.get('sourceName') === 'string' ? item.get('sourceName') : undefined,
+        reviewStatus: typeof item.get('reviewStatus') === 'string' ? item.get('reviewStatus') : undefined,
       })));
     }, reason => setError(reason.message));
   }, [authorized, selectedId]);

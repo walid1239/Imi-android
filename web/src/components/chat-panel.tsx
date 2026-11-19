@@ -34,7 +34,7 @@ function timeLabel(value: Timestamp | null) {
 }
 
 async function directConversationId(firstUid: string, secondUid: string) {
-  const canonicalPair = [firstUid, secondUid].sort().join('\\u0000');
+  const canonicalPair = [firstUid, secondUid].sort().map(uid => `${uid.length}:${uid}`).join('');
   const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalPair));
   const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
   return `direct_${hash}`;
@@ -392,37 +392,48 @@ export default function ChatPanel({ user }: { user: User }) {
     setBusy(true);
     setError('');
     try {
-      const currentConversations = await getDocs(query(
-        collection(db, 'conversations'),
-        where('participants', 'array-contains', user.uid)
-      ));
-      const existing = currentConversations.docs.find(item => {
-        const members = (item.get('participants') as string[] | undefined) ?? [];
-        return members.length === 2 && members.includes(otherUid) && members.includes(user.uid);
-      });
-      if (existing) {
-        setSelectedId(existing.id);
-      } else {
-        const conversationId = await directConversationId(user.uid, otherUid);
-        const conversationRef = doc(db, 'conversations', conversationId);
-        await runTransaction(db, async transaction => {
-          const current = await transaction.get(conversationRef);
-          if (current.exists()) {
-            const members = (current.get('participants') as string[] | undefined) ?? [];
-            if (members.length !== 2 || !members.includes(user.uid) || !members.includes(otherUid)) {
-              throw new Error('معرّف المحادثة مرتبط بمشاركين مختلفين.');
-            }
-            return;
-          }
-          transaction.set(conversationRef, {
-            participants: [user.uid, otherUid].sort(),
-            createdBy: user.uid,
-            createdAt: serverTimestamp(),
-            lastMessage: '',
-            lastMessageAt: serverTimestamp()
-          });
-        });
+      const conversationId = await directConversationId(user.uid, otherUid);
+      const conversationRef = doc(db, 'conversations', conversationId);
+      const directSnapshot = await getDoc(conversationRef);
+      if (directSnapshot.exists()) {
+        const members = (directSnapshot.get('participants') as string[] | undefined) ?? [];
+        if (members.length !== 2 || !members.includes(user.uid) || !members.includes(otherUid)) {
+          throw new Error('معرّف المحادثة مرتبط بمشاركين مختلفين.');
+        }
         setSelectedId(conversationId);
+      } else {
+        // Find legacy random-ID conversations before creating the deterministic ID.
+        const legacyConversations = await getDocs(query(
+          collection(db, 'conversations'),
+          where('participants', 'array-contains', user.uid),
+          orderBy('lastMessageAt', 'desc')
+        ));
+        const legacyExisting = legacyConversations.docs.find(item => {
+          const members = (item.get('participants') as string[] | undefined) ?? [];
+          return members.length === 2 && members.includes(otherUid) && members.includes(user.uid);
+        });
+        if (legacyExisting) {
+          setSelectedId(legacyExisting.id);
+        } else {
+          await runTransaction(db, async transaction => {
+            const current = await transaction.get(conversationRef);
+            if (current.exists()) {
+              const members = (current.get('participants') as string[] | undefined) ?? [];
+              if (members.length !== 2 || !members.includes(user.uid) || !members.includes(otherUid)) {
+                throw new Error('معرّف المحادثة مرتبط بمشاركين مختلفين.');
+              }
+              return;
+            }
+            transaction.set(conversationRef, {
+              participants: [user.uid, otherUid].sort(),
+              createdBy: user.uid,
+              createdAt: serverTimestamp(),
+              lastMessage: '',
+              lastMessageAt: serverTimestamp()
+            });
+          });
+          setSelectedId(conversationId);
+        }
       }
       setSearchResults([]);
       setSearchTerm('');

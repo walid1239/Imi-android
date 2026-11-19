@@ -33,3 +33,12 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    networks:
+      imi-turn:
+        ipv4_address: 172.30.250.10
+
+networks:
+  imi-turn:
+    ipam:
+      config:
+        - subnet: 172.30.250.0/24

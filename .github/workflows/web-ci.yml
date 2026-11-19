@@ -34,6 +34,12 @@ on:
 permissions:
   contents: read
 
+# Push and pull_request events for the same feature branch share one slot.
+# New commits supersede stale queued/in-progress CI instead of building a backlog.
+concurrency:
+  group: imi-web-ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   web:
     runs-on: ubuntu-latest

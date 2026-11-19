@@ -135,6 +135,8 @@ export default function CallControls({
       iceServers = iceResult.data.iceServers;
       setTurnConfigured(iceResult.data.turnAvailable);
       if (!iceResult.data.turnAvailable) {
+        // Relay-only with STUN-only servers would prevent all ICE candidates.
+        iceTransportPolicy = 'all';
         setError('خادم TURN غير مهيأ؛ سيُستخدم STUN فقط، وقد يفشل الاتصال بين بعض الشبكات.');
       }
     } catch {

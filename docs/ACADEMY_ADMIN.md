@@ -29,3 +29,8 @@ Course and lesson documents carry server timestamps and creator UID. Learner enr
 ## Operational note
 
 Deploy the Functions and Firestore rules/indexes through the reviewed deployment workflow before calling these functions in production. No Firebase deployment has been performed by this change.
+
+
+## Teacher verification status
+
+Teacher-specific authorization is **not implemented yet**. The current backend recognizes only the server-issued `admin: true` claim for Academy authoring and publishing. There is no teacher claim, teacher-scoped callable policy, or teacher verification workflow in this branch. Do not set a `teacher: true` claim or present an account as a verified teacher until the role model, permitted actions, review evidence, and revocation path are implemented and tested. The existing local script provisions only the first administrator and must not be repurposed for teacher accounts.

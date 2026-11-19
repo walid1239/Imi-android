@@ -155,3 +155,130 @@ export const scheduleTeacherLiveSession = onCall<LiveInput>(async request => {
   });
   return { sessionId: ref.id, status: "mock_scheduled", liveEnabled: false };
 });
+
+
+type TeacherContentInput = {
+  contentId?: unknown; title?: unknown; content?: unknown; kind?: unknown;
+  levelId?: unknown; trackId?: unknown; subjectId?: unknown; unitId?: unknown;
+  mediaPath?: unknown; contentType?: unknown; fileName?: unknown;
+  sourceType?: unknown; sourceName?: unknown; sourceUrl?: unknown;
+  license?: unknown; permissionNote?: unknown;
+};
+type ReviewTeacherContentInput = { contentId?: unknown; approved?: unknown; note?: unknown };
+
+async function curriculumNode(idValue: unknown, expectedType: "level" | "track" | "subject" | "unit") {
+  const id = clean(idValue, 2, 110);
+  if (!id) throw new HttpsError("invalid-argument", "اختيار المنهاج غير صالح.");
+  const snapshot = await getFirestore().collection("curriculumNodes").doc(id).get();
+  if (!snapshot.exists || snapshot.get("status") !== "published" || snapshot.get("type") !== expectedType) {
+    throw new HttpsError("failed-precondition", "يجب اختيار عقدة منشورة صحيحة من شجرة المنهاج.");
+  }
+  return { id, data: snapshot.data()! };
+}
+
+export const createTeacherContent = onCall<TeacherContentInput>(async request => {
+  const userId = request.auth?.uid;
+  if (!userId) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  if (request.auth?.token.teacherVerified !== true) throw new HttpsError("permission-denied", "النشر متاح للأستاذ الموثق فقط.");
+  const db = getFirestore(), profile = await db.collection("teacherProfiles").doc(userId).get();
+  if (!profile.exists || profile.get("profileComplete") !== true || profile.get("published") !== true
+    || profile.get("contentAgreement") !== true || profile.get("childSafetyAgreement") !== true) {
+    throw new HttpsError("failed-precondition", "أكمل صفحة الأستاذ والاتفاقيات قبل إضافة المحتوى.");
+  }
+  const contentId = clean(request.data?.contentId, 8, 128);
+  const title = clean(request.data?.title, 4, 140);
+  const kind = request.data?.kind;
+  if (!contentId || !/^[A-Za-z0-9_-]+$/.test(contentId) || !title
+    || !["text", "video", "image", "pdf"].includes(String(kind))) {
+    throw new HttpsError("invalid-argument", "عنوان المحتوى أو نوعه أو معرّفه غير صالح.");
+  }
+  const [level, track, subject] = await Promise.all([
+    curriculumNode(request.data?.levelId, "level"),
+    curriculumNode(request.data?.trackId, "track"),
+    curriculumNode(request.data?.subjectId, "subject"),
+  ]);
+  if (track.data.parentId !== level.id || subject.data.parentId !== track.id) {
+    throw new HttpsError("failed-precondition", "ترتيب المستوى والشعبة والمادة غير متطابق في شجرة المنهاج.");
+  }
+  let unitId: string | null = null;
+  if (request.data?.unitId) {
+    const unit = await curriculumNode(request.data.unitId, "unit");
+    if (unit.data.parentId !== subject.id) throw new HttpsError("failed-precondition", "الوحدة لا تتبع المادة المختارة.");
+    unitId = unit.id;
+  }
+  const sourceType = request.data?.sourceType;
+  const sourceName = clean(request.data?.sourceName, 2, 120);
+  const license = clean(request.data?.license, 2, 200);
+  const permissionNote = clean(request.data?.permissionNote, 5, 600);
+  const sourceUrl = typeof request.data?.sourceUrl === "string" ? request.data.sourceUrl.trim() : "";
+  if (!["original", "teacher-agreement", "official", "open-license", "embed"].includes(String(sourceType))
+    || !sourceName || !license || !permissionNote
+    || (sourceType !== "original" && (!/^https:\/\//i.test(sourceUrl) || sourceUrl.length > 500))) {
+    throw new HttpsError("invalid-argument", "بيانات المصدر والترخيص والإذن مطلوبة قبل حفظ المحتوى.");
+  }
+  const body = typeof request.data?.content === "string" ? request.data.content.trim() : "";
+  if (kind === "text" && body.length < 50) throw new HttpsError("invalid-argument", "الدرس النصي يجب أن يحتوي على 50 حرفاً على الأقل.");
+  if (body.length > 20000) throw new HttpsError("invalid-argument", "محتوى الدرس يتجاوز الحد المسموح.");
+  let mediaPath: string | null = null, contentType: string | null = null, fileName: string | null = null;
+  if (kind !== "text") {
+    mediaPath = clean(request.data?.mediaPath, 10, 400);
+    contentType = clean(request.data?.contentType, 3, 100);
+    fileName = clean(request.data?.fileName, 1, 120);
+    if (!mediaPath || !mediaPath.startsWith("teacher-content/" + userId + "/" + contentId + "/") || mediaPath.includes("..") || !contentType || !fileName) {
+      throw new HttpsError("invalid-argument", "مسار الملف أو بياناته غير صالحة.");
+    }
+    let metadata: { size?: string | number; contentType?: string };
+    try { const [file] = await getStorage().bucket().file(mediaPath).getMetadata(); metadata = file; }
+    catch { throw new HttpsError("failed-precondition", "ارفع الملف إلى مساحة الأستاذ الخاصة أولاً."); }
+    const size = Number(metadata.size ?? 0), actualType = String(metadata.contentType ?? "");
+    const allowed = kind === "video"
+      ? actualType === "video/mp4" || actualType === "video/webm"
+      : kind === "image"
+        ? ["image/jpeg", "image/png", "image/webp"].includes(actualType)
+        : actualType === "application/pdf";
+    const max = kind === "video" ? 100 * 1024 * 1024 : kind === "image" ? 10 * 1024 * 1024 : 20 * 1024 * 1024;
+    if (!allowed || size <= 0 || size > max || actualType !== contentType) {
+      throw new HttpsError("invalid-argument", "نوع الملف أو حجمه غير مسموح.");
+    }
+  }
+  const ref = db.collection("teacherContent").doc(contentId);
+  if ((await ref.get()).exists) throw new HttpsError("already-exists", "معرّف المحتوى مستخدم بالفعل.");
+  await ref.create({
+    id: contentId, ownerUid: userId, title, body, kind,
+    levelId: level.id, trackId: track.id, subjectId: subject.id, unitId,
+    curriculumNodeIds: [level.id, track.id, subject.id, ...(unitId ? [unitId] : [])],
+    mediaPath, contentType, fileName,
+    sourceType, sourceName, sourceUrl: sourceUrl || null, license, permissionNote,
+    reviewTier: "light", reviewStatus: "pending", needsHumanReview: true,
+    status: "draft", published: false,
+    createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+  });
+  return { contentId, status: "draft", needsHumanReview: true };
+});
+
+export const reviewTeacherContent = onCall<ReviewTeacherContentInput>(async request => {
+  if (request.auth?.token.admin !== true) throw new HttpsError("permission-denied", "المشرف الموثق فقط يمكنه مراجعة المحتوى.");
+  const contentId = clean(request.data?.contentId, 8, 128);
+  if (!contentId || !/^[A-Za-z0-9_-]+$/.test(contentId) || typeof request.data?.approved !== "boolean") {
+    throw new HttpsError("invalid-argument", "بيانات المراجعة غير صالحة.");
+  }
+  const ref = getFirestore().collection("teacherContent").doc(contentId);
+  const content = await ref.get();
+  if (!content.exists || content.get("status") !== "draft") throw new HttpsError("failed-precondition", "المحتوى غير موجود أو ليس مسودة.");
+  const approved = request.data.approved;
+  await ref.update({
+    status: approved ? "published" : "rejected",
+    published: approved,
+    reviewStatus: approved ? "approved" : "rejected",
+    reviewedBy: request.auth.uid,
+    reviewedAt: FieldValue.serverTimestamp(),
+    reviewNote: typeof request.data.note === "string" ? request.data.note.trim().slice(0, 500) : "",
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  await getFirestore().collection("moderationAudit").add({
+    actorUid: request.auth.uid, targetUid: content.get("ownerUid"),
+    contentId, action: approved ? "teacher_content_published" : "teacher_content_rejected",
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return { status: approved ? "published" : "rejected" };
+});

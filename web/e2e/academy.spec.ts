@@ -153,6 +153,16 @@ test('teacher application and studio routes explain verification gate', async ({
   await expect(page.getByRole('link', { name: 'طلب توثيق' })).toBeVisible();
 });
 
+test('guest sessions can be linked to a permanent email account without changing UID', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: /الدخول السريع كضيف/ }).click();
+  await expect(page).toHaveURL(/\/app$/);
+  await page.getByRole('button', { name: /ملفي/ }).first().click();
+  await expect(page.getByText('تحويل حساب الضيف إلى حساب دائم')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'ربط البريد بالحساب الحالي' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'حذف الحساب نهائياً' })).toBeDisabled();
+});
+
 test('login exposes country-aware phone OTP with local E.164 validation', async ({ page }) => {
   await page.goto('/login');
   await expect(page.getByRole('heading', { name: 'الدخول برقم الهاتف (OTP)' })).toBeVisible();

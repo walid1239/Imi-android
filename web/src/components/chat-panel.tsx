@@ -7,6 +7,7 @@ import {
   setDoc, startAfter, startAt, where, writeBatch, Timestamp
 } from 'firebase/firestore';
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db, storage } from '@/lib/firebase/client';
 import CallControls from '@/components/call-controls';
 
@@ -31,13 +32,6 @@ type Message = {
 function timeLabel(value: Timestamp | null) {
   if (!value) return '';
   return new Intl.DateTimeFormat('ar', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' }).format(value.toDate());
-}
-
-async function directConversationId(firstUid: string, secondUid: string) {
-  const canonicalPair = [firstUid, secondUid].sort().map(uid => `${uid.length}:${uid}`).join('');
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalPair));
-  const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
-  return `direct_${hash}`;
 }
 
 export default function ChatPanel({ user }: { user: User }) {
@@ -392,53 +386,16 @@ export default function ChatPanel({ user }: { user: User }) {
     setBusy(true);
     setError('');
     try {
-      const conversationId = await directConversationId(user.uid, otherUid);
-      const conversationRef = doc(db, 'conversations', conversationId);
-      const directSnapshot = await getDoc(conversationRef);
-      if (directSnapshot.exists()) {
-        const members = (directSnapshot.get('participants') as string[] | undefined) ?? [];
-        if (members.length !== 2 || !members.includes(user.uid) || !members.includes(otherUid)) {
-          throw new Error('معرّف المحادثة مرتبط بمشاركين مختلفين.');
-        }
-        setSelectedId(conversationId);
-      } else {
-        // Find legacy random-ID conversations before creating the deterministic ID.
-        const legacyConversations = await getDocs(query(
-          collection(db, 'conversations'),
-          where('participants', 'array-contains', user.uid),
-          orderBy('lastMessageAt', 'desc')
-        ));
-        const legacyExisting = legacyConversations.docs.find(item => {
-          const members = (item.get('participants') as string[] | undefined) ?? [];
-          return members.length === 2 && members.includes(otherUid) && members.includes(user.uid);
-        });
-        if (legacyExisting) {
-          setSelectedId(legacyExisting.id);
-        } else {
-          await runTransaction(db, async transaction => {
-            const current = await transaction.get(conversationRef);
-            if (current.exists()) {
-              const members = (current.get('participants') as string[] | undefined) ?? [];
-              if (members.length !== 2 || !members.includes(user.uid) || !members.includes(otherUid)) {
-                throw new Error('معرّف المحادثة مرتبط بمشاركين مختلفين.');
-              }
-              return;
-            }
-            transaction.set(conversationRef, {
-              participants: [user.uid, otherUid].sort(),
-              createdBy: user.uid,
-              createdAt: serverTimestamp(),
-              lastMessage: '',
-              lastMessageAt: serverTimestamp()
-            });
-          });
-          setSelectedId(conversationId);
-        }
-      }
+      const action = httpsCallable<{ otherUid: string }, { conversationId: string }>(
+        getFunctions(), 'createOrGetDirectConversation'
+      );
+      const response = await action({ otherUid });
+      if (!response.data.conversationId) throw new Error('لم يرجع الخادم معرّف المحادثة.');
+      setSelectedId(response.data.conversationId);
       setSearchResults([]);
       setSearchTerm('');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'تعذر إنشاء المحادثة. تحقق من صلاحيات Firestore.');
+      setError(reason instanceof Error ? reason.message : 'تعذر إنشاء المحادثة.');
     } finally {
       setBusy(false);
     }

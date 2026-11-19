@@ -6,6 +6,7 @@ import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { createIceServerConfiguration, nextIceRestartCount, nextRateLimitState, resolveIceUid } from "./turnCredentials";
+import { directConversationId } from "./conversationLogic";
 import { messageNotificationPreview } from "./notificationLogic";
 import { canPublishLessonSource, validateLessonSource } from "./academyContent";
 import {
@@ -93,6 +94,53 @@ function requireUid(value: unknown, message: string, maxLength = 128): string {
 function friendRequestId(fromUid: string, toUid: string): string {
   return `${encodeURIComponent(fromUid)}__${encodeURIComponent(toUid)}`;
 }
+
+type CreateOrGetDirectConversationInput = { otherUid?: unknown };
+
+/**
+ * Creates a deterministic direct conversation using Admin SDK. The browser
+ * never needs permission to read a not-yet-created private conversation ID.
+ */
+export const createOrGetDirectConversation = onCall<CreateOrGetDirectConversationInput>(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  const otherUid = requireUid(request.data?.otherUid, "معرّف المستخدم الآخر غير صالح.");
+  if (otherUid === uid) throw new HttpsError("invalid-argument", "لا يمكنك بدء محادثة مع نفسك.");
+
+  const participants = [uid, otherUid].sort();
+  const conversationId = directConversationId(uid, otherUid);
+  const conversationRef = db.collection("conversations").doc(conversationId);
+  const ownProfileRef = db.collection("publicProfiles").doc(uid);
+  const otherProfileRef = db.collection("publicProfiles").doc(otherUid);
+
+  await db.runTransaction(async (transaction) => {
+    const [conversation, ownProfile, otherProfile] = await Promise.all([
+      transaction.get(conversationRef),
+      transaction.get(ownProfileRef),
+      transaction.get(otherProfileRef),
+    ]);
+    if (!ownProfile.exists || !otherProfile.exists) {
+      throw new HttpsError("not-found", "يجب أن يكون الطرفان قد نشرا ملفيهما في دليل IMI أولاً.");
+    }
+    if (conversation.exists) {
+      const current = conversation.get("participants");
+      if (!Array.isArray(current) || current.length !== 2
+        || current[0] !== participants[0] || current[1] !== participants[1]) {
+        throw new HttpsError("failed-precondition", "معرّف المحادثة مرتبط بأعضاء مختلفين.");
+      }
+      return;
+    }
+    transaction.create(conversationRef, {
+      participants,
+      createdBy: uid,
+      createdAt: FieldValue.serverTimestamp(),
+      lastMessage: "",
+      lastMessageAt: FieldValue.serverTimestamp(),
+    });
+  });
+
+  return { conversationId };
+});
 
 export const sendFriendRequest = onCall<SendFriendRequestInput>(async (request) => {
   const uid = request.auth?.uid;

@@ -8,3 +8,12 @@ app/google-services.json
 *.jks
 *.keystore
 keystore.properties
+
+# Local-only secrets and environment files
+.env
+.env.*
+!.env.example
+infra/coturn/.env
+functions/.env
+functions/.env.*
+!functions/.env.example

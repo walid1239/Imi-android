@@ -52,6 +52,25 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Published Academy content is read-only for clients; publishing is an admin workflow.
+    match /courses/{courseId} {
+      allow read: if signedIn() && resource.data.published == true;
+      allow create, update, delete: if false;
+
+      match /lessons/{lessonId} {
+        allow read: if signedIn()
+          && get(/databases/$(database)/documents/courses/$(courseId)).data.published == true
+          && resource.data.published == true;
+        allow create, update, delete: if false;
+      }
+    }
+
+    // Learners can read only their own enrollment and progress. Cloud Functions own all writes.
+    match /users/{uid}/enrollments/{courseId} {
+      allow read: if isSelf(uid);
+      allow create, update, delete: if false;
+    }
+
     // Authenticated users can see only the minimal public profile projection.
     match /publicProfiles/{uid} {
       allow read: if signedIn();

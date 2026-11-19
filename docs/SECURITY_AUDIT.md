@@ -43,3 +43,15 @@ The Android dependency graph previously selected OkHttp 3.12.13 transitively thr
 ## Limitations
 
 CI success only proves the checks that ran against the commit. It does not prove production Firebase configuration, App Check enforcement, live TURN connectivity, real device behavior, or legal compliance.
+
+# ملحق: ضوابط الأستاذ والبث
+
+أضيفت في فرع التطوير:
+- طلب توثيق خادمي يتحقق من وجود وثيقة الإثبات وحجمها ونوعها واختيارات المنهاج.
+- منح صلاحيات الأستاذ من callable للمشرف فقط، مع Custom Claims وسجل إشراف.
+- صفحة الأستاذ لا تنشر إلا بعد اكتمال الملف وقبول اتفاقية المحتوى وقواعد حماية القاصرين.
+- جدولة البث ترفض إذا لم تكتمل صفحة الأستاذ أو لم تكن المادة ضمن ملفه.
+- البث يستخدم mock adapter فقط ولا ينتج رابطاً أو غرفة أو تسجيلاً حقيقياً.
+- قواعد Firestore وStorage تمنع القراءة العامة لوثائق الإثبات، وتمنع الكتابة المباشرة إلى سجلات الطلبات والملفات العامة.
+
+هذه الضوابط مكتوبة وتخضع الآن لاختبارات CI/Emulator؛ لا تعتبر مفعلة على Firebase الحقيقي.

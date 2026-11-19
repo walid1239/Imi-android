@@ -44,6 +44,8 @@ export default function ChatPanel({ user }: { user: User }) {
   const [otherTyping, setOtherTyping] = useState(false);
   const lastReadMessageRef = useRef('');
   const lastDeliveredMessageRef = useRef('');
+  const lastTypingSentAtRef = useRef(0);
+  const otherTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
@@ -160,9 +162,19 @@ export default function ChatPanel({ user }: { user: User }) {
       setOtherDeliveredAt(snapshot.exists() ? snapshot.get('lastDeliveredAt') ?? null : null);
     });
     const stopTyping = onSnapshot(typingRef, snapshot => {
-      setOtherTyping(snapshot.exists() && snapshot.get('isTyping') === true);
+      const active = snapshot.exists() && snapshot.get('isTyping') === true;
+      setOtherTyping(active);
+      if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current);
+      if (active) {
+        otherTypingTimeoutRef.current = setTimeout(() => setOtherTyping(false), 8500);
+      }
     });
-    return () => { stopReceipt(); stopDelivery(); stopTyping(); };
+    return () => {
+      stopReceipt();
+      stopDelivery();
+      stopTyping();
+      if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current);
+    };
   }, [selectedId, otherUid]);
 
   useEffect(() => {
@@ -195,16 +207,20 @@ export default function ChatPanel({ user }: { user: User }) {
     if (!selectedId) return;
     const typingRef = doc(db, 'conversations', selectedId, 'typing', user.uid);
     if (!draft.trim()) {
+      lastTypingSentAtRef.current = 0;
       setDoc(typingRef, { uid: user.uid, isTyping: false, updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
       return;
     }
-    const startTimer = setTimeout(() => {
+    const now = Date.now();
+    if (now - lastTypingSentAtRef.current >= 4000) {
+      lastTypingSentAtRef.current = now;
       setDoc(typingRef, { uid: user.uid, isTyping: true, updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
-    }, 1200);
+    }
     const stopTimer = setTimeout(() => {
       setDoc(typingRef, { uid: user.uid, isTyping: false, updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
-    }, 7000);
-    return () => { clearTimeout(startTimer); clearTimeout(stopTimer); };
+      lastTypingSentAtRef.current = 0;
+    }, 8000);
+    return () => clearTimeout(stopTimer);
   }, [draft, selectedId, user.uid]);
 
 

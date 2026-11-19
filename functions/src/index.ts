@@ -431,16 +431,15 @@ export const notifyConversationMessage = onDocumentCreated(
 
       const tokenSnapshot = await db.collection("users").doc(recipientUid)
         .collection("fcmTokens").limit(500).get();
-      const tokens = tokenSnapshot.docs
-        .map((tokenDoc) => ({ ref: tokenDoc.ref, token: tokenDoc.get("token") }))
-        .filter((item): item is { ref: FirebaseFirestore.DocumentReference; token: string } =>
-          typeof item.token === "string" && item.token.length > 20
-        );
+      const tokens = tokenSnapshot.docs.filter((tokenDoc) => {
+        const token = tokenDoc.get("token");
+        return typeof token === "string" && token.length > 20;
+      });
       if (tokens.length === 0) return;
 
       try {
         const pushResult = await getMessaging().sendEachForMulticast({
-          tokens: tokens.map((item) => item.token),
+          tokens: tokens.map((tokenDoc) => tokenDoc.get("token") as string),
           notification: { title: "رسالة جديدة في IMI", body: preview },
           data: { type: "message", conversationId, messageId, senderUid },
         });

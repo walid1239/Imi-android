@@ -1,5 +1,6 @@
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { directConversationId } from "./conversationLogic";
 
 type UidInput = { targetUid?: unknown };
 type GroupInput = { name?: unknown; participantUids?: unknown };
@@ -36,7 +37,8 @@ export const blockUser = onCall<UidInput>(async request => {
   const db = getFirestore();
   const profile = await db.doc("publicProfiles/" + target).get();
   if (!profile.exists) throw new HttpsError("not-found", "الحساب غير موجود.");
-  const conversations = await db.collection("conversations").where("participants", "array-contains", actor).limit(100).get();
+  const directRef = db.collection("conversations").doc(directConversationId(actor, target));
+  const direct = await directRef.get();
   const batch = db.batch();
   batch.set(db.doc("users/" + actor + "/blockedUsers/" + target), {
     uid: target, blockedAt: FieldValue.serverTimestamp(),
@@ -45,13 +47,7 @@ export const blockUser = onCall<UidInput>(async request => {
   batch.delete(db.doc("users/" + target + "/friends/" + actor));
   batch.delete(db.doc("friendRequests/" + encodeURIComponent(actor) + "__" + encodeURIComponent(target)));
   batch.delete(db.doc("friendRequests/" + encodeURIComponent(target) + "__" + encodeURIComponent(actor)));
-  for (const conversation of conversations.docs) {
-    const participants = conversation.get("participants");
-    if (conversation.get("type") !== "group" && Array.isArray(participants)
-      && participants.length === 2 && participants.includes(target)) {
-      batch.update(conversation.ref, { status: "blocked", updatedAt: FieldValue.serverTimestamp() });
-    }
-  }
+  if (direct.exists) batch.update(directRef, { status: "blocked", updatedAt: FieldValue.serverTimestamp() });
   await batch.commit();
   return { status: "blocked" };
 });
@@ -63,16 +59,11 @@ export const unblockUser = onCall<UidInput>(async request => {
   await db.doc("users/" + actor + "/blockedUsers/" + target).delete();
   const reverse = await db.doc("users/" + target + "/blockedUsers/" + actor).get();
   if (!reverse.exists) {
-    const conversations = await db.collection("conversations").where("participants", "array-contains", actor).limit(100).get();
-    const batch = db.batch();
-    for (const conversation of conversations.docs) {
-      const participants = conversation.get("participants");
-      if (conversation.get("type") !== "group" && Array.isArray(participants)
-        && participants.length === 2 && participants.includes(target) && conversation.get("status") === "blocked") {
-        batch.update(conversation.ref, { status: "active", updatedAt: FieldValue.serverTimestamp() });
-      }
+    const directRef = db.collection("conversations").doc(directConversationId(actor, target));
+    const direct = await directRef.get();
+    if (direct.exists && direct.get("status") === "blocked") {
+      await directRef.update({ status: "active", updatedAt: FieldValue.serverTimestamp() });
     }
-    await batch.commit();
   }
   return { status: "unblocked" };
 });

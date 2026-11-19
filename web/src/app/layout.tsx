@@ -4,7 +4,9 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'IMI — تواصل وتعلّم',
-  description: 'IMI منصة اجتماعية وتعليمية عربية.',
+  description: 'IMI منصة اجتماعية وتعليمية عربية للمحادثات والحالات ومقاطع الفيديو والتعلّم.',
+  openGraph: { title: 'IMI — تواصل وتعلّم', description: 'مساحة عربية تجمع التواصل والتعلّم.', siteName: 'IMI', locale: 'ar_MA', type: 'website' },
+  twitter: { card: 'summary', title: 'IMI — تواصل وتعلّم', description: 'منصة اجتماعية وتعليمية عربية.' },
   applicationName: 'IMI',
   manifest: '/manifest.webmanifest',
   icons: { icon: '/icons/imi.svg' },

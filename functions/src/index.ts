@@ -7,6 +7,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { createIceServerConfiguration, nextIceRestartCount, nextRateLimitState, resolveIceUid } from "./turnCredentials";
 import { messageNotificationPreview } from "./notificationLogic";
+import { canPublishLessonSource, validateLessonSource } from "./academyContent";
 import {
   isStatusCooldownActive,
   statusExpiryMillis,
@@ -284,7 +285,7 @@ export const completeCourseLesson = onCall<CourseEnrollmentInput>(async (request
 
 // Academy authoring is deliberately server-only. Never trust a client-supplied role.
 type CreateCourseInput = { title?: unknown; description?: unknown; category?: unknown };
-type CreateLessonInput = { courseId?: unknown; title?: unknown; content?: unknown; videoUrl?: unknown; order?: unknown };
+type CreateLessonInput = { courseId?: unknown; title?: unknown; content?: unknown; videoUrl?: unknown; order?: unknown; sourceType?: unknown; sourceName?: unknown; sourceUrl?: unknown; license?: unknown; permissionNote?: unknown };
 
 function requireAdmin(request: { auth?: { uid: string; token: Record<string, unknown> } | null }): string {
   const uid = request.auth?.uid;
@@ -332,6 +333,12 @@ export const createCourseLesson = onCall<CreateLessonInput>(async (request) => {
   if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 0 || order > 100000) {
     throw new HttpsError("invalid-argument", "ترتيب الدرس غير صالح.");
   }
+  let source;
+  try {
+    source = validateLessonSource(request.data ?? {});
+  } catch (error) {
+    throw new HttpsError("invalid-argument", error instanceof Error ? error.message : "بيانات مصدر الدرس غير صالحة.");
+  }
   const courseRef = db.collection("courses").doc(courseId);
   const lessonRef = courseRef.collection("lessons").doc();
   await db.runTransaction(async (transaction) => {
@@ -342,6 +349,7 @@ export const createCourseLesson = onCall<CreateLessonInput>(async (request) => {
     }
     transaction.create(lessonRef, {
       title, content, ...(videoUrl ? { videoUrl } : {}), order,
+      ...source, addedBy: adminUid, reviewStatus: "draft",
       published: false, createdAt: FieldValue.serverTimestamp(),
       createdBy: adminUid, updatedAt: FieldValue.serverTimestamp(),
     });
@@ -372,7 +380,7 @@ export const publishCourse = onCall<{ courseId?: unknown; published?: unknown }>
 });
 
 export const publishCourseLesson = onCall<{ courseId?: unknown; lessonId?: unknown; published?: unknown }>(async (request) => {
-  requireAdmin(request);
+  const adminUid = requireAdmin(request);
   const courseId = requireUid(request.data?.courseId, "معرّف الدورة غير صالح.");
   const lessonId = requireUid(request.data?.lessonId, "معرّف الدرس غير صالح.");
   if (typeof request.data?.published !== "boolean") {
@@ -388,8 +396,16 @@ export const publishCourseLesson = onCall<{ courseId?: unknown; lessonId?: unkno
     if (request.data?.published === true && course.get("published") !== true) {
       throw new HttpsError("failed-precondition", "انشر الدورة أولاً ثم انشر الدرس.");
     }
+    if (request.data?.published === true && !canPublishLessonSource(lesson.data(), adminUid)) {
+      throw new HttpsError("failed-precondition", "لا يمكن نشر الدرس قبل استكمال بيانات المصدر والإذن وتوثيق المراجعة.");
+    }
     transaction.update(lessonRef, {
       published: request.data?.published,
+      ...(request.data?.published === true ? {
+        reviewStatus: "reviewed",
+        reviewedBy: adminUid,
+        reviewedAt: FieldValue.serverTimestamp(),
+      } : {}),
       updatedAt: FieldValue.serverTimestamp(),
     });
   });

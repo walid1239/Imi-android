@@ -118,6 +118,22 @@ test('admin claim exposes the protected Academy administration panel', async ({ 
 
 
 
+test('verified teachers cannot start private student chats or mixed private groups', async ({ page }) => {
+  await login(page, email('a', test.info().project.name));
+  await page.goto('/messages');
+  await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ جيم');
+  await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
+  await page.getByRole('button', { name: 'مراسلة' }).click();
+  await expect(page.getByRole('alert')).toContainText('التواصل الخاص بين الأستاذ والتلميذ غير متاح');
+  await page.getByRole('button', { name: 'للمجموعة' }).click();
+  await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ دال');
+  await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
+  await page.getByRole('button', { name: 'للمجموعة' }).click();
+  await page.getByPlaceholder('اسم المجموعة').fill('مجموعة مختلطة ممنوعة');
+  await page.getByRole('button', { name: 'إنشاء مجموعة (3 أعضاء على الأقل)' }).click();
+  await expect(page.getByRole('alert')).toContainText('المجموعات الخاصة بين الأساتذة والتلاميذ غير متاحة');
+});
+
 test('approved teacher content appears under its curriculum subject', async ({ page }) => {
   await page.goto('/academy');
   await page.getByLabel('المستوى').selectOption('e2e-primary');

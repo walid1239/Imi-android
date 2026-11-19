@@ -387,7 +387,7 @@ export const publishCourseLesson = onCall<{ courseId?: unknown; lessonId?: unkno
 // One-to-one call lifecycle. Identity and state transitions are server-authoritative.
 type CreateCallInput = { conversationId?: unknown; calleeUid?: unknown; kind?: unknown };
 type CallActionInput = { callId?: unknown };
-function callParticipant(data: FirebaseFirestore.DocumentData | undefined, uid: string): boolean {
+function callParticipant(data: Record<string, unknown> | undefined, uid: string): boolean {
   return !!data && (data.callerUid === uid || data.calleeUid === uid);
 }
 
@@ -441,11 +441,12 @@ export const respondToCall = onCall<CallActionInput & { decision?: unknown }>(as
     if (snap.get("status") !== "ringing") throw new HttpsError("failed-precondition", "لم تعد المكالمة في حالة رنين.");
     if ((snap.get("expiresAt") as Timestamp).toMillis() <= Date.now()) {
       tx.update(ref, { status: "missed", updatedAt: FieldValue.serverTimestamp() });
-      throw new HttpsError("deadline-exceeded", "انتهت مهلة المكالمة.");
+      return;
     }
     tx.update(ref, { status: decision, updatedAt: FieldValue.serverTimestamp(), respondedAt: FieldValue.serverTimestamp() });
   });
-  return { status: decision };
+  const latest = await ref.get();
+  return { status: latest.get("status") === "missed" ? "missed" : decision };
 });
 
 export const endCall = onCall<CallActionInput>(async (request) => {

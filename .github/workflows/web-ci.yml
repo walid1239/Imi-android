@@ -8,6 +8,9 @@ on:
       - 'firestore.rules'
       - 'storage.rules'
       - 'firebase.json'
+      - 'tests/**'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/web-ci.yml'
   push:
     branches: [main, 'feature/**']

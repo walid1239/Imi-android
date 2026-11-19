@@ -64,6 +64,7 @@ export default function ChatPanel({ user }: { user: User }) {
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<PublicProfile[]>([]);
   const [searching, setSearching] = useState(false);
@@ -460,7 +461,7 @@ export default function ChatPanel({ user }: { user: User }) {
       await httpsCallable(getFunctions(), 'blockUser')({ targetUid: otherUid });
       setSelectedId('');
       setMessages([]);
-      setError('تم حظر المستخدم وإيقاف المحادثة المباشرة.');
+      setNotice('تم حظر المستخدم وإيقاف المحادثة المباشرة.');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'تعذر حظر المستخدم.');
     } finally { setBlockBusy(false); }
@@ -626,6 +627,7 @@ export default function ChatPanel({ user }: { user: User }) {
       </div>
       <form onSubmit={send} className="border-t border-white/10 p-3"><div className="mb-2 flex items-center gap-2"><label className="cursor-pointer rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300">إرفاق ملف<input type="file" accept="image/jpeg,image/png,image/webp,audio/mpeg,audio/mp4,audio/aac,audio/ogg,audio/wav,audio/webm,video/mp4,video/webm" disabled={!selectedId || busy || recording} className="hidden" onChange={event => setAttachment(event.target.files?.[0] ?? null)} /></label><button type="button" onClick={toggleVoiceRecording} disabled={!selectedId || busy} className={`rounded-lg border px-3 py-2 text-xs ${recording ? 'border-rose-500/50 text-rose-300' : 'border-white/10 text-slate-300'}`}>{recording ? 'إيقاف التسجيل' : 'تسجيل صوت'}</button>{attachment && <span className="min-w-0 flex-1 truncate text-xs text-slate-400">{attachment.name} · {(attachment.size / (1024 * 1024)).toFixed(1)} MB</span>}{attachment && <button type="button" onClick={() => setAttachment(null)} className="text-xs text-rose-300">إزالة</button>}</div><div className="flex gap-2"><input value={draft} onChange={event => setDraft(event.target.value)} maxLength={1000} disabled={!selectedId || busy} placeholder="اكتب رسالتك…" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-sm outline-none focus:border-blue-500 disabled:opacity-50" /><button disabled={!selectedId || (!draft.trim() && !attachment) || busy} className="rounded-xl bg-blue-600 px-5 text-sm font-bold disabled:opacity-40">{busy ? '…' : 'إرسال'}</button></div></form>
     </div>
+    {notice && <p role="status" className="col-span-full border-t border-emerald-500/20 bg-emerald-500/10 p-3 text-xs leading-6 text-emerald-200">{notice}</p>}
     {error && <p role="alert" className="col-span-full border-t border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-6 text-amber-200">تعذر تحميل البيانات أو تنفيذ العملية: {error}. قد يتطلب الاستعلام فهرس Firestore أو صلاحيات مناسبة.</p>}
   </section>;
 }

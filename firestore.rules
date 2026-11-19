@@ -151,7 +151,7 @@ service cloud.firestore {
       allow create, delete: if false;
       allow update: if (
         isCallParticipant(callId)
-        && resource.data.status == 'ringing'
+        && resource.data.status in ['ringing', 'accepted']
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['offer'])
         && resource.data.callerUid == request.auth.uid
         && !('offer' in resource.data)

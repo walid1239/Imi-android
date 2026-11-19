@@ -45,7 +45,7 @@ before(async () => {
       createdBy: 'alice',
       createdAt: new Date()
     });
-    await setDoc(doc(db, 'conversations/chat-1/messages/msg-1'), {
+    await setDoc(doc(db, 'conversations/chat-1/messages/receipt-target'), {
       senderUid: 'bob',
       type: 'text',
       text: 'رسالة اختبار موجودة',
@@ -238,28 +238,25 @@ test('conversation read receipts and typing state are private to members and sel
   const malloryDb = env.authenticatedContext('mallory').firestore();
   const aliceReceipt = doc(aliceDb, 'conversations/chat-1/readReceipts/alice');
   await assertSucceeds(setDoc(aliceReceipt, {
-    uid: 'alice', lastReadAt: serverTimestamp(), lastReadMessageId: 'msg-1'
-  }));
-  await assertFails(setDoc(doc(aliceDb, 'conversations/chat-1/readReceipts/alice-invalid'), {
-    uid: 'alice-invalid', lastReadAt: serverTimestamp(), lastReadMessageId: 'msg-1'
+    uid: 'alice', lastReadAt: serverTimestamp(), lastReadMessageId: 'receipt-target'
   }));
   await assertFails(setDoc(doc(aliceDb, 'conversations/chat-1/readReceipts/alice'), {
     uid: 'alice', lastReadAt: serverTimestamp(), lastReadMessageId: 'missing-message'
   }));
   await assertFails(setDoc(doc(aliceDb, 'conversations/chat-1/readReceipts/bob'), {
-    uid: 'bob', lastReadAt: serverTimestamp(), lastReadMessageId: 'msg-1'
+    uid: 'bob', lastReadAt: serverTimestamp(), lastReadMessageId: 'receipt-target'
   }));
   await assertSucceeds(getDoc(aliceReceipt));
   await assertFails(getDoc(doc(malloryDb, 'conversations/chat-1/readReceipts/alice')));
   const aliceDelivery = doc(aliceDb, 'conversations/chat-1/deliveryReceipts/alice');
   await assertSucceeds(setDoc(aliceDelivery, {
-    uid: 'alice', lastDeliveredAt: serverTimestamp(), lastDeliveredMessageId: 'msg-1'
+    uid: 'alice', lastDeliveredAt: serverTimestamp(), lastDeliveredMessageId: 'receipt-target'
   }));
   await assertFails(setDoc(aliceDelivery, {
     uid: 'alice', lastDeliveredAt: serverTimestamp(), lastDeliveredMessageId: 'missing-message'
   }));
   await assertFails(setDoc(doc(aliceDb, 'conversations/chat-1/deliveryReceipts/bob'), {
-    uid: 'bob', lastDeliveredAt: serverTimestamp(), lastDeliveredMessageId: 'msg-1'
+    uid: 'bob', lastDeliveredAt: serverTimestamp(), lastDeliveredMessageId: 'receipt-target'
   }));
   await assertFails(getDoc(doc(malloryDb, 'conversations/chat-1/deliveryReceipts/alice')));
 

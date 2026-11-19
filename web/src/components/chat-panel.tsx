@@ -486,6 +486,7 @@ export default function ChatPanel({ user }: { user: User }) {
       });
       batch.update(conversationRef, {
         lastMessage: text || preview,
+        lastMessageId: messageRef.id,
         lastMessageAt: serverTimestamp(),
         lastSenderUid: user.uid
       });

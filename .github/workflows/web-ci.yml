@@ -101,6 +101,14 @@ jobs:
           java-version: '17'
       - run: npm install --no-audit --no-fund
       - run: npm run emulators:test
+      - name: Verify curriculum and legacy lesson seeds in a disposable Firestore Emulator
+        run: >-
+          npx --yes firebase-tools@13.29.2 emulators:exec
+          --only firestore --project demo-imi-academy
+          "node scripts/seed-curriculum.cjs --emulator --project=demo-imi-academy &&
+          node scripts/seed-general-skills.cjs --emulator --project=demo-imi-academy &&
+          node scripts/verify-academy-seed.cjs"
+
 
   playwright-e2e:
     name: Playwright browser tests against Firebase Emulator

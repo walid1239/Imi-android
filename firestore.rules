@@ -32,6 +32,24 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, create, update, delete: if isSelf(uid);
 
+      // FCM registration tokens are private to the account owner. Only the
+      // trusted Admin SDK sends pushes; clients cannot read other users' tokens.
+      match /fcmTokens/{tokenId} {
+        allow read: if isSelf(uid);
+        allow create: if isSelf(uid)
+          && request.resource.data.keys().hasOnly(['token', 'createdAt', 'updatedAt'])
+          && request.resource.data.token == tokenId
+          && request.resource.data.token is string
+          && request.resource.data.token.size() > 20
+          && request.resource.data.token.size() <= 4096
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time;
+        allow update: if isSelf(uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt'])
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if isSelf(uid);
+      }
+
       // Server-created in-app notifications. Users may read their own inbox and
       // mark an unread item as read, but cannot forge or edit notification content.
       match /notifications/{notificationId} {

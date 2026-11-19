@@ -10,6 +10,9 @@ async function main() {
   if (!uid || !projectId) {
     throw new Error('Set IMI_ADMIN_UID and GCLOUD_PROJECT (or FIREBASE_PROJECT_ID).');
   }
+  if (projectId !== 'imi-indroid') {
+    throw new Error(`Refusing to grant admin outside the approved IMI project (received: ${projectId}).`);
+  }
   if (process.env.CONFIRM_GRANT_IMI_ADMIN !== `GRANT_ADMIN_TO_${uid}`) {
     throw new Error('Set CONFIRM_GRANT_IMI_ADMIN to the exact value GRANT_ADMIN_TO_<uid>.');
   }

@@ -1,5 +1,10 @@
 package com.walid.chat.ui
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -9,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Send
@@ -24,12 +30,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.storage.FirebaseStorage
 import com.walid.chat.data.model.Chat
 import com.walid.chat.data.model.ChatMessage
 import com.walid.chat.data.model.PublicProfile
 import com.walid.chat.data.repository.FirebaseChatRepository
 import com.walid.chat.data.repository.FirebaseChatRepositoryFactory
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 private val CloudBg = Color(0xFF07090F)
 private val CloudSurface = Color(0xFF171E2D)
@@ -41,6 +49,41 @@ private val CloudMuted = Color(0xFF929BB0)
 internal fun FirebaseChatsScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val mediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val chatId = selectedChat?.id
+        val repo = repository
+        if (uri != null && chatId != null && repo != null && !sending) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            var fileName = "attachment"
+            var sizeBytes = -1L
+            context.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex >= 0) fileName = cursor.getString(nameIndex) ?: fileName
+                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) sizeBytes = cursor.getLong(sizeIndex)
+                }
+            }
+            val contentType = context.contentResolver.getType(uri).orEmpty()
+            sending = true
+            errorText = null
+            scope.launch {
+                repo.sendMediaMessage(chatId, uri, contentType, fileName, sizeBytes).fold(
+                    onSuccess = { errorText = null },
+                    onFailure = { errorText = it.localizedMessage ?: "تعذر إرسال المرفق" }
+                )
+                sending = false
+            }
+        }
+    }
     var repository by remember { mutableStateOf<FirebaseChatRepository?>(null) }
     var chats by remember { mutableStateOf<List<Chat>>(emptyList()) }
     var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
@@ -213,11 +256,41 @@ internal fun FirebaseChatsScreen() {
                             color = if (item.senderUid == ownUid) CloudBlue.copy(alpha = .22f) else CloudSurface,
                             shape = RoundedCornerShape(16.dp)
                         ) {
-                            Text(
-                                item.text.ifBlank { if (item.type == "text") "" else "مرفق: " + item.type },
-                                color = CloudText,
-                                modifier = Modifier.padding(horizontal = 13.dp, vertical = 9.dp)
-                            )
+                            Column(Modifier.padding(horizontal = 13.dp, vertical = 9.dp)) {
+                                if (item.text.isNotBlank()) {
+                                    Text(item.text, color = CloudText)
+                                } else if (item.type != "text") {
+                                    Text("مرفق: ${item.type}", color = CloudText)
+                                }
+                                if (item.mediaPath != null) {
+                                    var downloadUrl by remember(item.id) { mutableStateOf<String?>(null) }
+                                    var mediaLoadFailed by remember(item.id) { mutableStateOf(false) }
+                                    LaunchedEffect(item.mediaPath) {
+                                        try {
+                                            downloadUrl = FirebaseStorage.getInstance().reference
+                                                .child(item.mediaPath)
+                                                .downloadUrl
+                                                .await()
+                                                .toString()
+                                        } catch (_: Exception) {
+                                            mediaLoadFailed = true
+                                        }
+                                    }
+                                    if (downloadUrl != null) {
+                                        TextButton(onClick = {
+                                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)))
+                                        }) {
+                                            Text("فتح ${item.fileName ?: "المرفق"}", color = CloudText)
+                                        }
+                                    } else {
+                                        Text(
+                                            if (mediaLoadFailed) "تعذر تحميل المرفق" else "جارٍ تجهيز المرفق…",
+                                            color = CloudMuted,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -226,6 +299,16 @@ internal fun FirebaseChatsScreen() {
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    enabled = selectedChat != null && !sending,
+                    onClick = {
+                        mediaPicker.launch(arrayOf(
+                            "image/jpeg", "image/png", "image/webp",
+                            "audio/mpeg", "audio/mp4", "audio/aac", "audio/ogg", "audio/wav", "audio/webm",
+                            "video/mp4", "video/webm"
+                        ))
+                    }
+                ) { Icon(Icons.Filled.AttachFile, "إرفاق صورة أو صوت أو فيديو", tint = CloudBlue) }
                 OutlinedTextField(
                     value = draft,
                     onValueChange = { draft = it.take(1000) },

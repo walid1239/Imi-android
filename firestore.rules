@@ -154,7 +154,7 @@ service cloud.firestore {
         && resource.data.status in ['ringing', 'accepted']
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['offer'])
         && resource.data.callerUid == request.auth.uid
-        && (!('offer' in resource.data) || resource.data.status == 'accepted')
+        && !('offer' in resource.data)
         && request.resource.data.offer is map
         && request.resource.data.offer.keys().hasOnly(['type', 'sdp'])
         && request.resource.data.offer.type == 'offer'
@@ -165,9 +165,11 @@ service cloud.firestore {
         isCallParticipant(callId)
         && resource.data.status in ['ringing', 'accepted']
         && 'offer' in resource.data
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answer'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answer', 'answerRevision'])
         && resource.data.calleeUid == request.auth.uid
-        && (!('answer' in resource.data) || resource.data.status == 'accepted')
+        && request.resource.data.answerRevision is int
+        && request.resource.data.answerRevision == resource.data.offerRevision
+        && request.resource.data.answerRevision > resource.data.answerRevision
         && request.resource.data.answer is map
         && request.resource.data.answer.keys().hasOnly(['type', 'sdp'])
         && request.resource.data.answer.type == 'answer'

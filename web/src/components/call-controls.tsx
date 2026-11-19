@@ -112,15 +112,15 @@ export default function CallControls({
     if (!navigator.mediaDevices?.getUserMedia || typeof RTCPeerConnection === 'undefined') {
       throw new Error('المتصفح لا يدعم المكالمات أو لا يوفر إذن الميكروفون والكاميرا.');
     }
-    let iceServers: RTCIceServer[] = [{ urls: ['stun:stun.l.google.com:19302'] }];
+    let iceServers: RTCIceServer[] = [];
     try {
       const turnResult = await getTurnIceServers({});
       iceServers = turnResult.data.iceServers;
       setTurnConfigured(turnResult.data.configured);
-      if (!turnResult.data.configured) setError('خادم TURN الداخلي غير مهيأ بعد؛ الاتصال سيحاول STUN فقط.');
+      if (!turnResult.data.configured) setError('خادم Coturn الداخلي غير مهيأ؛ لن يستخدم IMI خوادم STUN خارجية، وقد يقتصر الاتصال على الشبكات التي تسمح بالاتصال المباشر.');
     } catch {
       setTurnConfigured(false);
-      setError('تعذر جلب إعداد TURN الداخلي؛ الاتصال سيحاول STUN فقط.');
+      setError('تعذر جلب إعداد Coturn الداخلي؛ لن يستخدم IMI خوادم STUN خارجية، وقد لا ينجح الاتصال عبر شبكات مختلفة.');
     }
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: true,
@@ -315,7 +315,7 @@ export default function CallControls({
         {activeKind === 'audio' && <div className="absolute text-5xl" aria-hidden="true">🎧</div>}
       </div>
       <div className="flex justify-center gap-3 py-4"><button type="button" onClick={toggleMute} className="rounded-xl border border-white/15 px-4 py-3 text-sm">{muted ? 'إلغاء كتم الصوت' : 'كتم الصوت'}</button>{activeKind === 'video' && <button type="button" onClick={toggleCamera} className="rounded-xl border border-white/15 px-4 py-3 text-sm">{cameraOff ? 'تشغيل الكاميرا' : 'إيقاف الكاميرا'}</button>}<button type="button" onClick={endCall} className="rounded-xl bg-rose-700 px-5 py-3 text-sm font-bold">إنهاء المكالمة</button></div>
-      <p className="text-center text-[10px] text-slate-500">{turnConfigured ? 'خادم TURN الداخلي مهيأ؛ جودة الاتصال تعتمد على إتاحته وشبكة الطرفين.' : 'خادم TURN الداخلي غير مهيأ؛ الاتصال يعتمد على STUN وقد يفشل عبر بعض الشبكات.'}</p>
+      <p className="text-center text-[10px] text-slate-500">{turnConfigured ? 'خادم Coturn الداخلي مهيأ؛ جودة الاتصال تعتمد على إتاحته وشبكة الطرفين.' : 'Coturn الداخلي غير مهيأ؛ لا يستخدم IMI خوادم STUN خارجية، وقد تقتصر المكالمات على الاتصال المباشر.'}</p>
     </div>}
   </>;
 }

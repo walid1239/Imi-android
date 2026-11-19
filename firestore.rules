@@ -13,11 +13,24 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    function isBlockedBetween(uidA, uidB) {
+      return exists(/databases/$(database)/documents/users/$(uidA)/blockedUsers/$(uidB))
+        || exists(/databases/$(database)/documents/users/$(uidB)/blockedUsers/$(uidA));
+    }
+
     function isConversationMember(conversationId) {
       return signedIn()
         && exists(/databases/$(database)/documents/conversations/$(conversationId))
         && get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants is list
-        && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+        && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
+        && (
+          get(/databases/$(database)/documents/conversations/$(conversationId)).data.type == 'group'
+          || get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.size() != 2
+          || !isBlockedBetween(
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants[0],
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants[1]
+          )
+        );
     }
 
     function areFriends(ownerUid, viewerUid) {
@@ -31,6 +44,11 @@ service cloud.firestore {
     // Private account data: only the account owner can access it.
     match /users/{uid} {
       allow read, create, update, delete: if isSelf(uid);
+
+      match /blockedUsers/{targetUid} {
+        allow read: if isSelf(uid);
+        allow create, update, delete: if false;
+      }
 
       // FCM registration tokens are private to the account owner. Only the
       // trusted Admin SDK sends pushes; clients cannot read other users' tokens.

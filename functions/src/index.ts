@@ -1,4 +1,5 @@
 import { initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
@@ -17,6 +18,17 @@ import {
 
 initializeApp();
 const db = getFirestore();
+
+async function assertNoTeacherStudentPrivateChat(firstUid: string, secondUid: string) {
+  const [first, second] = await Promise.all([
+    getAuth().getUser(firstUid), getAuth().getUser(secondUid),
+  ]);
+  const firstTeacher = first.customClaims?.teacherVerified === true;
+  const secondTeacher = second.customClaims?.teacherVerified === true;
+  if (firstTeacher !== secondTeacher) {
+    throw new HttpsError("permission-denied", "التواصل الخاص بين الأستاذ والتلميذ غير متاح. استخدم قنوات الأكاديمية العامة والمراقبة.");
+  }
+}
 const TURN_SECRET = defineSecret("TURN_SECRET");
 const TURN_HOST = defineString("TURN_HOST", { default: "" });
 const TURN_PORT = defineString("TURN_PORT", { default: "3478" });
@@ -107,6 +119,7 @@ export const createOrGetDirectConversation = onCall<CreateOrGetDirectConversatio
   const otherUid = requireUid(request.data?.otherUid, "معرّف المستخدم الآخر غير صالح.");
   if (otherUid === uid) throw new HttpsError("invalid-argument", "لا يمكنك بدء محادثة مع نفسك.");
 
+  await assertNoTeacherStudentPrivateChat(uid, otherUid);
   const participants = [uid, otherUid].sort();
   const conversationId = directConversationId(uid, otherUid);
   const conversationRef = db.collection("conversations").doc(conversationId);
@@ -153,6 +166,7 @@ export const sendFriendRequest = onCall<SendFriendRequestInput>(async (request) 
   const toUid = requireUid(request.data?.toUid, "معرّف المستخدم المستهدف غير صالح.");
   if (toUid === uid) throw new HttpsError("invalid-argument", "لا يمكنك إرسال طلب صداقة إلى نفسك.");
 
+  await assertNoTeacherStudentPrivateChat(uid, toUid);
   const outgoingRef = db.collection("friendRequests").doc(friendRequestId(uid, toUid));
   const incomingRef = db.collection("friendRequests").doc(friendRequestId(toUid, uid));
   const targetProfileRef = db.collection("publicProfiles").doc(toUid);
@@ -705,6 +719,7 @@ export const createCall = onCall<CreateCallInput>(async (request) => {
   if (kind !== "audio" && kind !== "video") throw new HttpsError("invalid-argument", "نوع المكالمة غير صالح.");
   if (calleeUid === uid) throw new HttpsError("invalid-argument", "لا يمكنك الاتصال بنفسك.");
 
+  await assertNoTeacherStudentPrivateChat(uid, calleeUid);
   const conversationRef = db.collection("conversations").doc(conversationId);
   const callerFriendRef = db.collection("users").doc(uid).collection("friends").doc(calleeUid);
   const calleeFriendRef = db.collection("users").doc(calleeUid).collection("friends").doc(uid);

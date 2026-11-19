@@ -3,6 +3,7 @@ package com.walid.chat.data.repository
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
@@ -65,21 +66,27 @@ class FirebaseChatRepository(
             registration = firestore.collection("conversations")
                 .document(chatId)
                 .collection("messages")
-                .orderBy("createdAt", Query.Direction.ASCENDING)
+                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .orderBy(FieldPath.documentId(), Query.Direction.DESCENDING)
+                .limit(50)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         trySend(Result.failure(error))
                     } else if (snapshot != null) {
                         val messages = snapshot.documents.map { document ->
+                            val createdAt = document.getTimestamp("createdAt")
                             ChatMessage(
                                 id = document.id,
                                 senderUid = document.getString("senderUid") ?: "",
                                 type = document.getString("type") ?: "text",
                                 text = document.getString("text") ?: "",
-                                timestamp = document.getTimestamp("createdAt")?.toDate()?.toString() ?: "",
-                                mediaPath = document.getString("mediaPath")
+                                timestamp = createdAt?.toDate()?.toString() ?: "",
+                                mediaPath = document.getString("mediaPath"),
+                                contentType = document.getString("contentType"),
+                                fileName = document.getString("fileName"),
+                                createdAt = createdAt
                             )
-                        }
+                        }.reversed()
                         trySend(Result.success(messages))
                     }
                 }
@@ -89,6 +96,40 @@ class FirebaseChatRepository(
         }
 
         awaitClose { registration?.remove() }
+    }
+
+    override suspend fun loadOlderMessages(
+        chatId: String,
+        before: ChatMessage
+    ): Result<List<ChatMessage>> = runCatching {
+        require(chatId.isNotBlank()) { "معرّف المحادثة غير صالح" }
+        val cursor = before.createdAt ?: error("توقيت الرسالة غير متاح لتحميل الرسائل الأقدم")
+        requireUid()
+        firestore.collection("conversations")
+            .document(chatId)
+            .collection("messages")
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .orderBy(FieldPath.documentId(), Query.Direction.DESCENDING)
+            .startAfter(cursor, before.id)
+            .limit(50)
+            .get()
+            .await()
+            .documents
+            .map { document ->
+                val createdAt = document.getTimestamp("createdAt")
+                ChatMessage(
+                    id = document.id,
+                    senderUid = document.getString("senderUid") ?: "",
+                    type = document.getString("type") ?: "text",
+                    text = document.getString("text") ?: "",
+                    timestamp = createdAt?.toDate()?.toString() ?: "",
+                    mediaPath = document.getString("mediaPath"),
+                    contentType = document.getString("contentType"),
+                    fileName = document.getString("fileName"),
+                    createdAt = createdAt
+                )
+            }
+            .reversed()
     }
 
     override suspend fun sendMessage(chatId: String, text: String): Result<Unit> = runCatching {

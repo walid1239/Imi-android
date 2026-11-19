@@ -11,6 +11,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  deleteDoc,
   serverTimestamp,
   Timestamp
 } from 'firebase/firestore';
@@ -308,11 +309,22 @@ test('WebRTC signaling is limited to call participants and each side owns its SD
   const call = doc(alice, 'calls/call-1');
   await assertSucceeds(getDoc(call));
   await assertFails(getDoc(doc(mallory, 'calls/call-1')));
+  await assertFails(setDoc(doc(alice, 'calls/forged-call'), {
+    callerUid: 'alice', calleeUid: 'mallory', status: 'ringing'
+  }));
+  await assertFails(deleteDoc(call));
+  await assertFails(getDoc(doc(mallory, 'calls/call-1/callerCandidates/a1')));
   await assertSucceeds(setDoc(doc(alice, 'calls/call-1/callerCandidates/a1'), {
     candidate: 'candidate:1 1 udp 1 127.0.0.1 1234 typ host', sdpMid: '0', sdpMLineIndex: 0
   }));
   await assertFails(setDoc(doc(bob, 'calls/call-1/callerCandidates/bad'), {
     candidate: 'forged caller candidate', sdpMid: '0', sdpMLineIndex: 0
+  }));
+  await assertFails(setDoc(doc(alice, 'calls/call-1/callerCandidates/bad-index'), {
+    candidate: 'candidate:bad', sdpMid: '0', sdpMLineIndex: 'zero'
+  }));
+  await assertFails(setDoc(doc(alice, 'calls/call-1/callerCandidates/bad-mid'), {
+    candidate: 'candidate:bad', sdpMid: { value: '0' }, sdpMLineIndex: 0
   }));
   await assertSucceeds(setDoc(doc(bob, 'calls/call-1/calleeCandidates/b1'), {
     candidate: 'candidate:2 1 udp 1 127.0.0.1 1235 typ host', sdpMid: '0', sdpMLineIndex: 0
@@ -320,11 +332,23 @@ test('WebRTC signaling is limited to call participants and each side owns its SD
   await assertFails(setDoc(doc(mallory, 'calls/call-1/calleeCandidates/x'), {
     candidate: 'unauthorized', sdpMid: '0', sdpMLineIndex: 0
   }));
+  await assertFails((await import('firebase/firestore')).updateDoc(doc(bob, 'calls/call-1'), {
+    offer: { type: 'offer', sdp: 'v=0\\r\\n' }
+  }));
+  await assertFails((await import('firebase/firestore')).updateDoc(call, {
+    answer: { type: 'answer', sdp: 'v=0\\r\\n' }
+  }));
   await assertSucceeds((await import('firebase/firestore')).updateDoc(call, {
     offer: { type: 'offer', sdp: 'v=0\\r\\n' }
   }));
+  await assertFails((await import('firebase/firestore')).updateDoc(call, {
+    offer: { type: 'offer', sdp: 'v=1\\r\\n' }
+  }));
   await assertSucceeds((await import('firebase/firestore')).updateDoc(doc(bob, 'calls/call-1'), {
     answer: { type: 'answer', sdp: 'v=0\\r\\n' }
+  }));
+  await assertFails((await import('firebase/firestore')).updateDoc(doc(bob, 'calls/call-1'), {
+    answer: { type: 'answer', sdp: 'v=1\\r\\n' }
   }));
   await assertFails((await import('firebase/firestore')).updateDoc(doc(mallory, 'calls/call-1'), {
     status: 'accepted'

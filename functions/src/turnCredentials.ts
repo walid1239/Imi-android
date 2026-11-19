@@ -103,3 +103,10 @@ export function createIceServerConfiguration(
     expiresAt,
   };
 }
+
+export function nextIceRestartCount(current: number, maximum = 2): number | null {
+  if (!Number.isInteger(current) || current < 0 || !Number.isInteger(maximum) || maximum < 1 || current >= maximum) {
+    return null;
+  }
+  return current + 1;
+}

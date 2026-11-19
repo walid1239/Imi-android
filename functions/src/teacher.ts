@@ -29,7 +29,7 @@ async function curriculumIds(value: unknown, type: "level" | "subject"): Promise
   const ids = [...new Set(value as string[])];
   const db = getFirestore();
   const docs = await Promise.all(ids.map(id => db.collection("curriculumNodes").doc(id).get()));
-  if (docs.some(doc => !doc.exists || doc.get("status") !== "published" || doc.get("type") !== type)) {
+  if (docs.some(doc => !doc.exists || doc.get("status") !== "published" || doc.get("needsReview") === true || doc.get("type") !== type)) {
     throw new HttpsError("failed-precondition", "تتضمن الاختيارات عقدة غير منشورة أو من نوع غير صحيح.");
   }
   return ids;
@@ -176,7 +176,7 @@ async function curriculumNode(idValue: unknown, expectedType: "level" | "track" 
   const id = clean(idValue, 2, 110);
   if (!id) throw new HttpsError("invalid-argument", "اختيار المنهاج غير صالح.");
   const snapshot = await getFirestore().collection("curriculumNodes").doc(id).get();
-  if (!snapshot.exists || snapshot.get("status") !== "published" || snapshot.get("type") !== expectedType) {
+  if (!snapshot.exists || snapshot.get("status") !== "published" || snapshot.get("needsReview") === true || snapshot.get("type") !== expectedType) {
     throw new HttpsError("failed-precondition", "يجب اختيار عقدة منشورة صحيحة من شجرة المنهاج.");
   }
   return { id, data: snapshot.data()! };

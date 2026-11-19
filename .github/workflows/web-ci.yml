@@ -114,7 +114,6 @@ jobs:
           npx --yes firebase-tools@13.29.2 emulators:exec
           --only firestore --project demo-imi-academy
           "node scripts/seed-curriculum.cjs --emulator --project=demo-imi-academy &&
-          node scripts/seed-general-skills.cjs --emulator --project=demo-imi-academy &&
           node scripts/verify-academy-seed.cjs"
 
 

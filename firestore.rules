@@ -105,7 +105,7 @@ service cloud.firestore {
 
     // Curriculum tree nodes are public when published; only trusted admins may change them.
     match /curriculumNodes/{nodeId} {
-    allow read: if resource.data.status == 'published' || isAdmin();
+    allow read: if (resource.data.status == 'published' && resource.data.needsReview == false) || isAdmin();
     allow create: if isAdmin()
       && request.resource.data.keys().hasOnly(['id', 'parentId', 'type', 'nameAr', 'nameFr', 'language', 'order', 'semester', 'officialSource', 'needsReview', 'status', 'createdAt', 'updatedAt'])
       && request.resource.data.id == nodeId
@@ -119,6 +119,7 @@ service cloud.firestore {
       && request.resource.data.order is int
       && request.resource.data.needsReview is bool
       && request.resource.data.status in ['hidden', 'published']
+      && (request.resource.data.status != 'published' || request.resource.data.needsReview == false)
       && request.resource.data.createdAt == request.time
       && request.resource.data.updatedAt == request.time;
     allow update: if isAdmin()
@@ -133,7 +134,8 @@ service cloud.firestore {
       && request.resource.data.language in ['ar', 'fr', 'mixed', 'unknown']
       && request.resource.data.order is int
       && request.resource.data.needsReview is bool
-      && request.resource.data.status in ['hidden', 'published'];
+      && request.resource.data.status in ['hidden', 'published']
+      && (request.resource.data.status != 'published' || request.resource.data.needsReview == false);
     allow delete: if isAdmin();
     }
 

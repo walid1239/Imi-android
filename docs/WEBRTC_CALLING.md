@@ -44,7 +44,7 @@ Validate IDs, call status transitions, and rate limits on the server. Do not tru
 
 ## Network requirements
 
-A public STUN server may help establish direct connections but does not guarantee connectivity across carrier-grade NATs, restrictive Wi-Fi, or mobile networks. Production reliability requires a TURN service with authenticated, short-lived credentials delivered securely. Never commit TURN shared secrets or static credentials to the repository or browser bundle. Document the configured TURN provider and validate relay connectivity before claiming production readiness.
+IMI intentionally does not use public STUN/TURN endpoints or third-party relay services. Until the project-owned Coturn server is configured, the client supplies no external ICE servers and can connect only when direct host connectivity is possible; calls across restrictive NATs, carrier-grade NATs, or separate networks may fail. Production reliability requires the owner-operated Coturn service with authenticated, short-lived credentials delivered securely. Never commit TURN shared secrets or static credentials to the repository or browser bundle. Validate relay connectivity before claiming production readiness.
 
 ## Security rules
 

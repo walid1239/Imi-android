@@ -83,6 +83,19 @@ async function main() {
     status: 'pending', submittedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
+  await db.doc('teacherContent/e2e-teacher-draft').set({
+    id: 'e2e-teacher-draft', ownerUid: 'imi-e2e-b-desktop',
+    title: 'درس أستاذ اختبار منشور', body: 'هذا نص تجريبي طويل بما يكفي لاختبار مراجعة المحتوى ونشره داخل مادة الرياضيات في بيئة المحاكي فقط.',
+    kind: 'text', levelId: 'e2e-primary', trackId: 'e2e-primary-track',
+    subjectId: 'e2e-primary-math', unitId: null,
+    curriculumNodeIds: ['e2e-primary', 'e2e-primary-track', 'e2e-primary-math'],
+    sourceType: 'original', sourceName: 'IMI E2E fixture', sourceUrl: null,
+    license: 'Test-only original fixture', permissionNote: 'بيانات اختبار محلية فقط.',
+    reviewTier: 'light', reviewStatus: 'pending', needsHumanReview: true,
+    status: 'draft', published: false, createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+
   const course = db.doc('courses/e2e-general-skills');
   await course.set({
     title: 'مهارة التعلم الذاتي',

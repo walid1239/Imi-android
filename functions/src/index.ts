@@ -396,7 +396,7 @@ export const publishCourseLesson = onCall<{ courseId?: unknown; lessonId?: unkno
     if (request.data?.published === true && course.get("published") !== true) {
       throw new HttpsError("failed-precondition", "انشر الدورة أولاً ثم انشر الدرس.");
     }
-    if (request.data?.published === true && !canPublishLessonSource(lesson.data(), adminUid)) {
+    if (request.data?.published === true && !canPublishLessonSource(lesson.data() ?? {}, adminUid)) {
       throw new HttpsError("failed-precondition", "لا يمكن نشر الدرس قبل استكمال بيانات المصدر والإذن وتوثيق المراجعة.");
     }
     transaction.update(lessonRef, {

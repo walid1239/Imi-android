@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { User } from 'firebase/auth';
 import {
-  addDoc, collection, doc, documentId, endAt, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp,
+  collection, doc, documentId, endAt, getDoc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp,
   setDoc, startAfter, startAt, where, writeBatch, Timestamp
 } from 'firebase/firestore';
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
@@ -31,6 +31,13 @@ type Message = {
 function timeLabel(value: Timestamp | null) {
   if (!value) return '';
   return new Intl.DateTimeFormat('ar', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' }).format(value.toDate());
+}
+
+async function directConversationId(firstUid: string, secondUid: string) {
+  const canonicalPair = [firstUid, secondUid].sort().join('\\u0000');
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalPair));
+  const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+  return `direct_${hash}`;
 }
 
 export default function ChatPanel({ user }: { user: User }) {
@@ -387,8 +394,7 @@ export default function ChatPanel({ user }: { user: User }) {
     try {
       const currentConversations = await getDocs(query(
         collection(db, 'conversations'),
-        where('participants', 'array-contains', user.uid),
-        limit(100)
+        where('participants', 'array-contains', user.uid)
       ));
       const existing = currentConversations.docs.find(item => {
         const members = (item.get('participants') as string[] | undefined) ?? [];
@@ -397,14 +403,26 @@ export default function ChatPanel({ user }: { user: User }) {
       if (existing) {
         setSelectedId(existing.id);
       } else {
-        const created = await addDoc(collection(db, 'conversations'), {
-          participants: [user.uid, otherUid].sort(),
-          createdBy: user.uid,
-          createdAt: serverTimestamp(),
-          lastMessage: '',
-          lastMessageAt: serverTimestamp()
+        const conversationId = await directConversationId(user.uid, otherUid);
+        const conversationRef = doc(db, 'conversations', conversationId);
+        await runTransaction(db, async transaction => {
+          const current = await transaction.get(conversationRef);
+          if (current.exists()) {
+            const members = (current.get('participants') as string[] | undefined) ?? [];
+            if (members.length !== 2 || !members.includes(user.uid) || !members.includes(otherUid)) {
+              throw new Error('معرّف المحادثة مرتبط بمشاركين مختلفين.');
+            }
+            return;
+          }
+          transaction.set(conversationRef, {
+            participants: [user.uid, otherUid].sort(),
+            createdBy: user.uid,
+            createdAt: serverTimestamp(),
+            lastMessage: '',
+            lastMessageAt: serverTimestamp()
+          });
         });
-        setSelectedId(created.id);
+        setSelectedId(conversationId);
       }
       setSearchResults([]);
       setSearchTerm('');

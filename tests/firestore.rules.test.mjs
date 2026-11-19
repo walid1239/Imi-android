@@ -203,8 +203,11 @@ test('curriculum nodes expose published structure only and block client self-pro
   await assertFails((await import('firebase/firestore')).updateDoc(doc(aliceDb, 'curriculumNodes/hidden-unit'), {
     status: 'published', updatedAt: serverTimestamp()
   }));
-  await assertSucceeds((await import('firebase/firestore')).updateDoc(doc(adminDb, 'curriculumNodes/hidden-unit'), {
+  await assertFails((await import('firebase/firestore')).updateDoc(doc(adminDb, 'curriculumNodes/hidden-unit'), {
     status: 'published', updatedAt: serverTimestamp()
+  }));
+  await assertSucceeds((await import('firebase/firestore')).updateDoc(doc(adminDb, 'curriculumNodes/hidden-unit'), {
+    status: 'hidden', updatedAt: serverTimestamp()
   }));
 });
 

@@ -12,11 +12,16 @@ if (-not $domainLine) { throw "DUCKDNS_DOMAIN is missing from infra/coturn/.env.
 $domain = $domainLine.Substring("DUCKDNS_DOMAIN=".Length).Trim()
 if ($domain -like "REPLACE*") { throw "Replace the DUCKDNS_DOMAIN placeholder locally." }
 
-$publicIp = (Invoke-RestMethod -Uri "https://api.ipify.org").ToString().Trim()
+$publicIp = (Invoke-RestMethod -Uri "https://api4.ipify.org").ToString().Trim()
 if ($publicIp -notmatch '^\d{1,3}(\.\d{1,3}){3}$') { throw "Could not determine a public IPv4 address." }
-$lanIp = (Get-NetIPAddress -AddressFamily IPv4 |
-    Where-Object { $_.IPAddress -match '^192\.168\.|^10\.|^172\.(1[6-9]|2\d|3[01])\.' -and $_.IPAddress -ne '127.0.0.1' } |
-    Select-Object -First 1 -ExpandProperty IPAddress)
+$defaultRoute = Get-NetRoute -DestinationPrefix "0.0.0.0/0" |
+    Sort-Object RouteMetric |
+    Select-Object -First 1
+$lanIp = if ($defaultRoute) {
+    Get-NetIPAddress -InterfaceIndex $defaultRoute.InterfaceIndex -AddressFamily IPv4 |
+        Where-Object { $_.IPAddress -notlike "169.254.*" -and $_.IPAddress -ne "127.0.0.1" } |
+        Select-Object -First 1 -ExpandProperty IPAddress
+}
 if (-not $lanIp) { throw "Could not find a private LAN IPv4 address; set TURN_EXTERNAL_IP manually." }
 
 $uri = "https://www.duckdns.org/update?domains=$([uri]::EscapeDataString($domain))&token=$([uri]::EscapeDataString($env:DUCKDNS_TOKEN))&ip=$publicIp"

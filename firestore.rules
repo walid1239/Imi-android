@@ -143,7 +143,7 @@ service cloud.firestore {
     // Published Academy content is read-only for clients; publishing is an admin workflow.
     match /courses/{courseId} {
     // Published course catalog is public and read-only; drafts remain admin-only.
-      allow read: if resource.data.published == true || (signedIn() && isAdmin());
+      allow read: if resource.data.get('published', false) == true || (signedIn() && isAdmin());
       allow create, update, delete: if false;
 
       match /lessons/{lessonId} {

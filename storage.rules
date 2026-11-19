@@ -64,14 +64,23 @@ service firebase.storage {
       allow delete: if signedIn() && request.auth.uid == uid;
     }
 
-    // Public-to-authenticated-user Reels; only the owner can upload/delete.
-    match /reels/{uid}/{fileName} {
-      allow read: if signedIn();
+    // Reels stay private to their owner until the server approves metadata.
+    // The document ID is part of the path so Storage can verify moderation state.
+    match /reels/{uid}/{reelId}/{fileName} {
+      function reelApproved() {
+        return firestore.exists(/databases/(default)/documents/reels/$(reelId))
+          && firestore.get(/databases/(default)/documents/reels/$(reelId)).data.status == 'approved'
+          && firestore.get(/databases/(default)/documents/reels/$(reelId)).data.ownerUid == uid
+          && firestore.get(/databases/(default)/documents/reels/$(reelId)).data.storagePath == 'reels/' + uid + '/' + reelId + '/' + fileName;
+      }
+      allow read: if signedIn() && (request.auth.uid == uid || reelApproved());
       allow create: if signedIn()
         && resource == null
         && request.auth.uid == uid
-        && request.resource.size < 100 * 1024 * 1024
+        && request.resource.size > 0
+        && request.resource.size <= 100 * 1024 * 1024
         && request.resource.contentType.matches('video/(mp4|webm)');
+      allow update: if false;
       allow delete: if signedIn() && request.auth.uid == uid;
     }
 

@@ -264,10 +264,17 @@ test('users can upload only their own avatar files', async () => {
 test('only conversation members can upload conversation media', async () => {
   const aliceStorage = env.authenticatedContext('alice').storage();
   const malloryStorage = env.authenticatedContext('mallory').storage();
-  await assertSucceeds(uploadBytes(
-    ref(aliceStorage, 'conversations/chat-1/alice/message-1/photo.png'),
-    new Blob(['png-data'], { type: 'image/png' })
-  ));
+  const orphanRef = ref(aliceStorage, 'conversations/chat-1/alice/orphan-message/photo.png');
+  await assertSucceeds(uploadBytes(orphanRef, new Blob(['png-data'], { type: 'image/png' })));
+  await assertSucceeds(deleteObject(orphanRef));
+  const referencedRef = ref(aliceStorage, 'conversations/chat-1/alice/message-1/photo.png');
+  await assertSucceeds(uploadBytes(referencedRef, new Blob(['png-data'], { type: 'image/png' })));
+  await assertSucceeds(setDoc(doc(env.authenticatedContext('alice').firestore(), 'conversations/chat-1/messages/message-1'), {
+    senderUid: 'alice', type: 'image',
+    mediaPath: 'conversations/chat-1/alice/message-1/photo.png',
+    contentType: 'image/png', fileName: 'photo.png', createdAt: serverTimestamp()
+  }));
+  await assertFails(deleteObject(referencedRef));
   await assertSucceeds(uploadBytes(
     ref(aliceStorage, 'conversations/chat-1/alice/message-2/voice.webm'),
     new Blob(['audio-data'], { type: 'audio/webm' })

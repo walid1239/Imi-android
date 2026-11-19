@@ -210,6 +210,14 @@ test('conversation creation is limited to two distinct existing profiles', async
     ...base,
     participants: ['alice', 'unknown-user']
   }));
+  await assertFails(setDoc(doc(aliceDb, 'conversations/forged-preview'), {
+    ...base,
+    lastMessage: 'رسالة مزيفة لم تُرسل'
+  }));
+  await assertFails(setDoc(doc(aliceDb, 'conversations/forged-sender'), {
+    ...base,
+    lastSenderUid: 'bob'
+  }));
 });
 
 test('conversation presence is visible only to members and each user owns their heartbeat', async () => {

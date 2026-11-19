@@ -110,6 +110,7 @@ class FirebaseChatRepository(
             ))
             batch.update(conversation, mapOf(
                 "lastMessage" to cleanText,
+                "lastMessageId" to message.id,
                 "lastMessageAt" to FieldValue.serverTimestamp(),
                 "lastSenderUid" to uid
             ))

@@ -207,6 +207,40 @@ service cloud.firestore {
         && request.resource.data.lastMessageAt == request.time;
       allow delete: if false;
 
+      // Read receipts are per-member private conversation metadata. Each user
+      // may advance only their own read cursor; clients cannot forge another user's receipt.
+      match /readReceipts/{uid} {
+        allow read: if isConversationMember(conversationId);
+        allow create, update: if isConversationMember(conversationId)
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['uid', 'lastReadAt', 'lastReadMessageId'])
+          && request.resource.data.uid == uid
+          && request.resource.data.lastReadAt == request.time
+          && request.resource.data.lastReadMessageId is string
+          && request.resource.data.lastReadMessageId.size() > 0
+          && request.resource.data.lastReadMessageId.size() <= 128;
+        allow delete: if false;
+      }
+
+      // Typing presence is intentionally scoped to one conversation and is short-lived.
+      match /typing/{uid} {
+        allow read: if isConversationMember(conversationId);
+        allow create: if isConversationMember(conversationId)
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['uid', 'isTyping', 'updatedAt'])
+          && request.resource.data.uid == uid
+          && request.resource.data.isTyping is bool
+          && request.resource.data.updatedAt == request.time;
+        allow update: if isConversationMember(conversationId)
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['uid', 'isTyping', 'updatedAt'])
+          && request.resource.data.uid == uid
+          && request.resource.data.isTyping is bool
+          && request.resource.data.updatedAt == request.time
+          && request.time > resource.data.updatedAt + duration.value(1, 's');
+        allow delete: if false;
+      }
+
       match /messages/{messageId} {
         allow read: if isConversationMember(conversationId);
         allow create: if isConversationMember(conversationId)

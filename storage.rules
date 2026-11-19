@@ -6,7 +6,7 @@ service firebase.storage {
     }
 
     function isAdmin() {
-      return signedIn() && ('admin' in request.auth.token) && request.auth.token.admin == true;
+      return signedIn() && request.auth.token.get('admin', false) == true;
     }
 
     function isBlockedBetween(uidA, uidB) {
@@ -19,7 +19,7 @@ service firebase.storage {
         && firestore.exists(/databases/(default)/documents/conversations/$(conversationId))
         && request.auth.uid in firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.participants
         && (
-          firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.type == 'group'
+          firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.get('type', '') == 'group'
           || firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.participants.size() != 2
           || !isBlockedBetween(
             firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.participants[0],
@@ -129,7 +129,7 @@ service firebase.storage {
         || contentIsPublished();
       allow create: if signedIn()
         && request.auth.uid == uid
-        && request.auth.token.teacherVerified == true
+        && request.auth.token.get('teacherVerified', false) == true
         && teacherProfileIsComplete()
         && request.resource != null
         && (

@@ -6,7 +6,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { useRouter } from 'next/navigation';
 import { doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase/client';
+import { auth, db, storage } from '@/lib/firebase/client';
 
 type ProfileData = {
   displayName: string;
@@ -146,7 +146,7 @@ export default function ProfilePanel({ user }: { user: User }) {
     setAccountBusy(true); setError(''); setNotice('');
     try {
       await httpsCallable(getFunctions(), 'deleteMyAccount')({ confirmation: 'DELETE' });
-      await signOut(user.auth);
+      await signOut(auth);
       router.replace('/login');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'تعذر حذف الحساب. قد تحتاج إلى تسجيل الدخول من جديد.');

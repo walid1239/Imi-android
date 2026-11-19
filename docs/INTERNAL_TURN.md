@@ -21,7 +21,7 @@
   firebase functions:secrets:set TURN_SECRET
   ```
   الصق السر في المطالبة المحلية فقط. لا تنفذ الأمر قبل أن تقرر إنشاء السر. هذا الأمر وحده لا ينشر Function.
-- متغيرات Functions: `TURN_HOST`, `TURN_PORT`, `TURN_TTL_SECONDS`, `STUN_URLS`, `TURN_ALLOW_ANONYMOUS`, `ICE_RATE_LIMIT_PER_MINUTE`. انسخ `functions/.env.example` إلى `functions/.env` محلياً لتعبئة القيم غير السرية عند التطوير المحلي؛ الملف المحلي مستثنى من Git. في البيئة السحابية تُضبط المتغيرات في إعداد Function/ملف البيئة المعتمد عند النشر، ولا تضع السر في هذا الملف.
+- متغيرات Functions: `TURN_HOST`, `TURN_PORT`, `TURN_TTL_SECONDS`, `STUN_URLS`, `TURN_ALLOW_ANONYMOUS`, `ICE_RATE_LIMIT_PER_MINUTE`. انسخ `functions/.env.example` إلى `functions/.env` محلياً لتعبئة القيم غير السرية عند التطوير المحلي؛ الملف المحلي مستثنى من Git. لمحاكي Functions فقط، خزّن السر محلياً في `functions/.secret.local` بصيغة `TURN_SECRET=...`، واحفظ الملف محلياً ولا تشاركه؛ هذا الملف مستثنى من Git أيضاً. في البيئة السحابية تُضبط المتغيرات في إعداد Function/ملف البيئة المعتمد عند النشر، ولا تضع السر في هذا الملف.
 - الضيف مرفوض افتراضياً. يمكن السماح به لاحقاً عبر `TURN_ALLOW_ANONYMOUS=true).
 - العمر الافتراضي ساعة واحدة كحد أقصى، واسم المستخدم `unixExpiry:uid` وكلمة المرور HMAC-SHA1.
 - المحدد الافتراضي 10 طلبات لكل مستخدم في الدقيقة. يمكن ضبطه، مع حد أقصى 60.

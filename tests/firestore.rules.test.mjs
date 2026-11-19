@@ -243,6 +243,17 @@ test('conversation preview updates must reference a message created in the same 
     lastSenderUid: 'alice', lastMessageId: 'not-created'
   });
   await assertFails(forgedBatch.commit());
+
+  const mismatchBatch = writeBatch(aliceDb);
+  const mismatchMessage = doc(aliceDb, 'conversations/chat-1/messages/preview-mismatch');
+  mismatchBatch.set(mismatchMessage, {
+    senderUid: 'alice', type: 'text', text: 'النص الحقيقي', createdAt: serverTimestamp()
+  });
+  mismatchBatch.update(conversation, {
+    lastMessage: 'نص مختلف مزيف', lastMessageAt: serverTimestamp(),
+    lastSenderUid: 'alice', lastMessageId: mismatchMessage.id
+  });
+  await assertFails(mismatchBatch.commit());
 });
 
 test('conversation presence is visible only to members and each user owns their heartbeat', async () => {

@@ -10,7 +10,7 @@ type Course = { id: string; title: string; description: string; category: string
 type Lesson = { id: string; title: string; content: string; videoUrl?: string; order: number };
 type Enrollment = { completedLessonIds: string[] };
 
-export default function AcademyPanel({ user }: { user: User }) {
+export default function AcademyPanel({ user }: { user: User | null }) {
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseId, setCourseId] = useState('');
   const [lessons, setLessons] = useState<Lesson[]>([]);
@@ -69,12 +69,22 @@ export default function AcademyPanel({ user }: { user: User }) {
   useEffect(() => {
     setEnrollment(null);
     if (!courseId) return;
+    if (!user) {
+      try {
+        const saved = localStorage.getItem(`imi-academy-progress:${courseId}`);
+        const ids: unknown = saved ? JSON.parse(saved) : [];
+        setEnrollment({ completedLessonIds: Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [] });
+      } catch {
+        setEnrollment({ completedLessonIds: [] });
+      }
+      return;
+    }
     return onSnapshot(doc(db, 'users', user.uid, 'enrollments', courseId), snapshot => {
       if (!snapshot.exists()) { setEnrollment(null); return; }
       const ids = snapshot.get('completedLessonIds');
       setEnrollment({ completedLessonIds: Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [] });
     }, reason => setError(reason.message));
-  }, [courseId, user.uid]);
+  }, [courseId, user?.uid]);
 
   async function runCallable(name: 'enrollInCourse' | 'completeCourseLesson', payload: Record<string, string>, success: string) {
     setBusy(true);
@@ -89,6 +99,14 @@ export default function AcademyPanel({ user }: { user: User }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  function completeGuestLesson(lessonId: string) {
+    const next = [...new Set([...(enrollment?.completedLessonIds ?? []), lessonId])];
+    try { localStorage.setItem(`imi-academy-progress:${courseId}`, JSON.stringify(next)); }
+    catch { setError('تعذر حفظ التقدم محلياً على هذا الجهاز.'); return; }
+    setEnrollment({ completedLessonIds: next });
+    setNotice('تم حفظ تقدمك على هذا الجهاز دون إنشاء حساب.');
   }
 
   return <section dir="rtl" className="space-y-5">
@@ -121,9 +139,9 @@ export default function AcademyPanel({ user }: { user: User }) {
             ? <div className="rounded-xl bg-white/5 p-3">
               <div className="flex justify-between text-xs"><span>تقدمك في الدورة</span><span>{progress}%</span></div>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-blue-500" style={{ width: `${progress}%` }} /></div>
-              <p className="mt-2 text-[11px] text-slate-500">{completed.size} من {lessons.length} دروس مكتملة</p>
+              <p className="mt-2 text-[11px] text-slate-500">{completed.size} من {lessons.length} دروس مكتملة{user ? '' : ' · محفوظ على هذا الجهاز'}</p>
             </div>
-            : <button disabled={busy} onClick={() => runCallable('enrollInCourse', { courseId }, 'تم تسجيلك في الدورة.')} className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold disabled:opacity-40">{busy ? 'جارٍ التسجيل…' : 'سجّل في هذه الدورة'}</button>}
+            : user ? <button disabled={busy} onClick={() => runCallable('enrollInCourse', { courseId }, 'تم تسجيلك في الدورة.')} className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold disabled:opacity-40">{busy ? 'جارٍ التسجيل…' : 'سجّل في هذه الدورة'}</button> : null}
 
           <div className="space-y-2">
             <h4 className="font-bold">محتوى الدورة</h4>
@@ -139,7 +157,9 @@ export default function AcademyPanel({ user }: { user: User }) {
             {selectedLesson.videoUrl && <video controls playsInline preload="metadata" src={selectedLesson.videoUrl} className="mt-3 max-h-80 w-full rounded-lg bg-black" />}
             {selectedLesson.content && <div className="mt-3 whitespace-pre-wrap text-sm leading-8 text-slate-300">{selectedLesson.content}</div>}
             {!selectedLesson.videoUrl && !selectedLesson.content && <p className="mt-3 text-xs text-slate-500">لم يضف المشرف محتوى لهذا الدرس بعد.</p>}
-            {enrollment && <button disabled={busy || completed.has(selectedLesson.id)} onClick={() => runCallable('completeCourseLesson', { courseId, lessonId: selectedLesson.id }, 'تم تسجيل إكمال الدرس.')} className="mt-4 w-full rounded-lg bg-emerald-700 px-4 py-3 text-sm font-bold disabled:opacity-40">{completed.has(selectedLesson.id) ? 'أكملت هذا الدرس' : busy ? 'جارٍ الحفظ…' : 'وضع علامة: أكملت الدرس'}</button>}
+            {enrollment && <button disabled={busy || completed.has(selectedLesson.id)} onClick={() => user
+              ? runCallable('completeCourseLesson', { courseId, lessonId: selectedLesson.id }, 'تم تسجيل إكمال الدرس.')
+              : completeGuestLesson(selectedLesson.id)} className="mt-4 w-full rounded-lg bg-emerald-700 px-4 py-3 text-sm font-bold disabled:opacity-40">{completed.has(selectedLesson.id) ? 'أكملت هذا الدرس' : busy ? 'جارٍ الحفظ…' : 'وضع علامة: أكملت الدرس'}</button>}
           </article>}
         </div>}
       </div>}

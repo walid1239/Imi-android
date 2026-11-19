@@ -51,7 +51,7 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-storage")
     implementation("com.google.firebase:firebase-functions")
-    // Override the obsolete, vulnerable OkHttp 3.x transitive dependency.
+    // Force the maintained OkHttp 4.x line over Firebase Functions' obsolete 3.x transitive request.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
     implementation("androidx.media3:media3-exoplayer:1.5.1")

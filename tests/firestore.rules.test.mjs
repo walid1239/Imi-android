@@ -152,6 +152,14 @@ test('learners can read published Academy content but cannot publish or modify i
   await assertFails(setDoc(doc(aliceDb, 'courses/math-basics/lessons/lesson-2'), { title: 'درس مزيف', published: true }));
 });
 
+test('published Academy content is readable without an account while drafts stay private', async () => {
+  const guestDb = env.unauthenticatedContext().firestore();
+  await assertSucceeds(getDoc(doc(guestDb, 'courses/math-basics')));
+  await assertSucceeds(getDoc(doc(guestDb, 'courses/math-basics/lessons/lesson-1')));
+  await assertFails(getDoc(doc(guestDb, 'courses/draft-course')));
+  await assertFails(getDoc(doc(guestDb, 'courses/draft-course/lessons/lesson-1')));
+});
+
 test('only verified Academy admins can read draft content; client writes remain denied', async () => {
   const learnerDb = env.authenticatedContext('learner').firestore();
   const adminDb = env.authenticatedContext('academy-admin', { admin: true }).firestore();

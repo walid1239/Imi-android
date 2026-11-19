@@ -2,8 +2,8 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { User } from 'firebase/auth';
-import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
-import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase/client';
 
 type ProfileData = {
@@ -89,15 +89,17 @@ export default function ProfilePanel({ user }: { user: User }) {
         city: location,
         ...(nextPhotoPath ? { photoPath: nextPhotoPath } : {}),
       };
-      await setDoc(doc(db, 'users', user.uid), {
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'users', user.uid), {
         ...profile,
         updatedAt: serverTimestamp(),
       }, { merge: true });
-      await setDoc(doc(db, 'publicProfiles', user.uid), {
+      batch.set(doc(db, 'publicProfiles', user.uid), {
         uid: user.uid,
         ...profile,
         updatedAt: serverTimestamp(),
       }, { merge: true });
+      await batch.commit();
 
       if (file && uploadedPath) {
         const url = await getDownloadURL(ref(storage, uploadedPath));
@@ -106,13 +108,9 @@ export default function ProfilePanel({ user }: { user: User }) {
         setFile(null);
         const input = document.getElementById('imi-profile-photo') as HTMLInputElement | null;
         if (input) input.value = '';
-        if (photoPath && photoPath !== uploadedPath) {
-          await deleteObject(ref(storage, photoPath)).catch(() => undefined);
-        }
       }
       setNotice('تم حفظ ملفك الشخصي وتحديث بياناتك الظاهرة في دليل IMI.');
     } catch (reason) {
-      if (uploadedPath) await deleteObject(ref(storage, uploadedPath)).catch(() => undefined);
       setError(reason instanceof Error ? reason.message : 'تعذر حفظ الملف الشخصي. تحقق من اتصال Firebase وصلاحياته.');
     } finally {
       setSaving(false);

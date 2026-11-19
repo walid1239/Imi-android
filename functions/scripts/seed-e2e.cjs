@@ -29,7 +29,7 @@ async function ensureUser(role, variant, displayName, admin = false) {
       displayName,
     });
   }
-  await auth.setCustomUserClaims(uid, admin ? { admin: true } : {});
+  await auth.setCustomUserClaims(uid, admin ? { admin: true } : role === 'c' ? { teacher: true, teacherVerified: true } : {});
   await db.doc(`users/${uid}`).set({
     uid,
     displayName,
@@ -49,7 +49,7 @@ async function main() {
   for (const variant of ['desktop', 'mobile']) {
     await ensureUser('a', variant, 'تلميذ ألف');
     await ensureUser('b', variant, 'تلميذ باء');
-    await ensureUser('c', variant, 'تلميذ جيم');
+    await ensureUser('c', variant, 'أستاذ اختبار موثّق');
     await ensureUser('d', variant, 'تلميذ دال');
     await ensureUser('admin', variant, 'مشرف اختبار', true);
   }
@@ -76,25 +76,29 @@ async function main() {
     }, { merge: true });
   }
 
-  await db.doc('teacherApplications/imi-e2e-a-desktop').set({
-    uid: 'imi-e2e-a-desktop', fullName: 'أستاذ اختبار آلي',
-    subjectIds: ['e2e-primary-math'], levelIds: ['e2e-primary'],
-    evidencePath: 'teacher-verification/imi-e2e-a-desktop/mock.pdf',
-    status: 'pending', submittedAt: FieldValue.serverTimestamp(),
-  }, { merge: true });
+  for (const variant of ['desktop', 'mobile']) {
+    const teacherUid = 'imi-e2e-a-' + variant;
+    await db.doc('teacherApplications/' + teacherUid).set({
+      uid: teacherUid, fullName: 'أستاذ اختبار آلي ' + variant,
+      subjectIds: ['e2e-primary-math'], levelIds: ['e2e-primary'],
+      evidencePath: 'teacher-verification/' + teacherUid + '/mock.pdf',
+      status: 'pending', submittedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
 
-  await db.doc('teacherContent/e2e-teacher-draft').set({
-    id: 'e2e-teacher-draft', ownerUid: 'imi-e2e-b-desktop',
-    title: 'درس أستاذ اختبار منشور', body: 'هذا نص تجريبي طويل بما يكفي لاختبار مراجعة المحتوى ونشره داخل مادة الرياضيات في بيئة المحاكي فقط.',
-    kind: 'text', levelId: 'e2e-primary', trackId: 'e2e-primary-track',
-    subjectId: 'e2e-primary-math', unitId: null,
-    curriculumNodeIds: ['e2e-primary', 'e2e-primary-track', 'e2e-primary-math'],
-    sourceType: 'original', sourceName: 'IMI E2E fixture', sourceUrl: null,
-    license: 'Test-only original fixture', permissionNote: 'بيانات اختبار محلية فقط.',
-    reviewTier: 'light', reviewStatus: 'pending', needsHumanReview: true,
-    status: 'draft', published: false, createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
-  }, { merge: true });
+    const contentId = 'e2e-teacher-draft-' + variant;
+    await db.doc('teacherContent/' + contentId).set({
+      id: contentId, ownerUid: 'imi-e2e-b-' + variant,
+      title: 'درس أستاذ اختبار منشور ' + variant, body: 'هذا نص تجريبي طويل بما يكفي لاختبار مراجعة المحتوى ونشره داخل مادة الرياضيات في بيئة المحاكي فقط.',
+      kind: 'text', levelId: 'e2e-primary', trackId: 'e2e-primary-track',
+      subjectId: 'e2e-primary-math', unitId: null,
+      curriculumNodeIds: ['e2e-primary', 'e2e-primary-track', 'e2e-primary-math'],
+      sourceType: 'original', sourceName: 'IMI E2E fixture', sourceUrl: null,
+      license: 'Test-only original fixture', permissionNote: 'بيانات اختبار محلية فقط.',
+      reviewTier: 'light', reviewStatus: 'pending', needsHumanReview: true,
+      status: 'draft', published: false, createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
 
   const course = db.doc('courses/e2e-general-skills');
   await course.set({

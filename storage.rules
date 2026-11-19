@@ -5,10 +5,23 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function isBlockedBetween(uidA, uidB) {
+      return firestore.exists(/databases/(default)/documents/users/$(uidA)/blockedUsers/$(uidB))
+        || firestore.exists(/databases/(default)/documents/users/$(uidB)/blockedUsers/$(uidA));
+    }
+
     function isConversationMember(conversationId) {
       return signedIn()
         && firestore.exists(/databases/(default)/documents/conversations/$(conversationId))
-        && request.auth.uid in firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.participants;
+        && request.auth.uid in firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.participants
+        && (
+          firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.type == 'group'
+          || firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.participants.size() != 2
+          || !isBlockedBetween(
+            firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.participants[0],
+            firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.participants[1]
+          )
+        );
     }
 
     function acceptedFriend(ownerUid) {

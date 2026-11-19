@@ -20,7 +20,7 @@ test("TURN is safely disabled when the secret or TURN URLs are absent", () => {
   for (const result of [withoutSecret, withoutUrls]) {
     assert.equal(result.configured, false);
     assert.equal(result.expiresAt, null);
-    assert.deepEqual(result.iceServers, [{ urls: ["stun:stun.l.google.com:19302"] }]);
+    assert.deepEqual(result.iceServers, []);
   }
 });
 

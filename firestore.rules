@@ -246,6 +246,25 @@ service cloud.firestore {
         && existsAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId))
         && getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId)).data.senderUid == request.auth.uid
         && getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId)).data.createdAt == request.time;
+        && (
+          (getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId)).data.type == 'text'
+            && request.resource.data.lastMessage == getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId)).data.text)
+          || (getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId)).data.type == 'image'
+            && (
+              request.resource.data.lastMessage == '📷 صورة'
+              || request.resource.data.lastMessage == getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId)).data.text
+            ))
+          || (getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId)).data.type == 'audio'
+            && (
+              request.resource.data.lastMessage == '🎤 رسالة صوتية'
+              || request.resource.data.lastMessage == getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId)).data.text
+            ))
+          || (getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId)).data.type == 'video'
+            && (
+              request.resource.data.lastMessage == '🎬 فيديو'
+              || request.resource.data.lastMessage == getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId)).data.text
+            ))
+        );
       allow delete: if false;
 
       // Read receipts are per-member private conversation metadata. Each user

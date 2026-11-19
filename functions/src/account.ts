@@ -56,7 +56,10 @@ export const deleteMyAccount = onCall<{ confirmation?: unknown }>(async request 
   ]);
   for (const result of requests) for (const item of result.docs) await item.ref.delete();
 
-  for (const collectionName of ["reels", "statuses", "contentReports"]) {
+  const ownReports = await db.collection("contentReports").where("reporterUid", "==", uid).get();
+  for (const report of ownReports.docs) await report.ref.delete();
+
+  for (const collectionName of ["reels", "statuses"]) {
     const result = await db.collection(collectionName).where("ownerUid", "==", uid).get().catch(() => null);
     if (result) for (const item of result.docs) await item.ref.delete();
   }
@@ -69,7 +72,7 @@ export const deleteMyAccount = onCall<{ confirmation?: unknown }>(async request 
   ]);
 
   // Remove files under account-owned prefixes. Storage paths are scoped by UID.
-  for (const prefix of ["users/" + uid + "/", "teacher-verification/" + uid + "/", "teachers/" + uid + "/", "teacher-content/" + uid + "/"]) {
+  for (const prefix of ["users/" + uid + "/", "teacher-verification/" + uid + "/", "teachers/" + uid + "/", "teacher-content/" + uid + "/", "reels/" + uid + "/"]) {
     const [files] = await bucket.getFiles({ prefix });
     await Promise.all(files.map(file => file.delete().catch(() => undefined)));
   }

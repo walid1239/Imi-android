@@ -12,6 +12,7 @@ import ProfilePanel from '@/components/profile-panel';
 import FriendsPanel from '@/components/friends-panel';
 import AcademyPanel from '@/components/academy-panel';
 import AcademyAdminPanel from '@/components/academy-admin-panel';
+import NotificationsPanel from '@/components/notifications-panel';
 
 const tabs = [
   { label: 'المحادثات', icon: '💬', description: 'محادثاتك المتزامنة مع تطبيق IMI.' },
@@ -55,7 +56,7 @@ export default function AppHomePage() {
   return <main dir="rtl" className="mx-auto min-h-screen max-w-6xl px-4 pb-24 pt-6 sm:px-8">
     <header className="flex items-center justify-between border-b border-white/10 pb-5">
       <Link href="/" className="text-3xl font-black tracking-widest text-blue-400">IMI</Link>
-      <div className="flex items-center gap-3"><span className="hidden max-w-48 truncate text-sm text-slate-400 sm:inline">{user.email ?? user.uid}</span><button onClick={logout} className="rounded-xl border border-white/15 px-4 py-2 text-sm">خروج</button></div>
+      <div className="flex items-center gap-3"><span className="hidden max-w-48 truncate text-sm text-slate-400 sm:inline">{user.email ?? user.uid}</span><NotificationsPanel user={user} /><button onClick={logout} className="rounded-xl border border-white/15 px-4 py-2 text-sm">خروج</button></div>
     </header>
     <section className="py-8"><p className="text-sm text-blue-300">مساحتك الشخصية</p><h1 className="mt-2 text-3xl font-black">أهلاً بك في IMI</h1><p className="mt-2 text-sm text-slate-400">بيانات المحادثات تُقرأ وتُحدّث مباشرة من مشروع Firebase نفسه.</p></section>
     <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-4 sm:p-5">

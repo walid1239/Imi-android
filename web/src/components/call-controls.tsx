@@ -34,6 +34,7 @@ export default function CallControls({
   const [callStatus, setCallStatus] = useState('');
   const [muted, setMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
+  const [turnConfigured, setTurnConfigured] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -48,6 +49,7 @@ export default function CallControls({
   const createCall = httpsCallable<{ conversationId: string; calleeUid: string; kind: CallKind }, { callId: string }>(functions, 'createCall');
   const respondToCall = httpsCallable<{ callId: string; decision: 'accepted' | 'rejected' }, { status: string }>(functions, 'respondToCall');
   const endCallAction = httpsCallable<{ callId: string }, { status: string }>(functions, 'endCall');
+  const getTurnIceServers = httpsCallable<Record<string, never>, { configured: boolean; iceServers: RTCIceServer[] }>(functions, 'getTurnIceServers');
 
   function cleanupSession() {
     unsubsRef.current.forEach(unsubscribe => unsubscribe());
@@ -110,6 +112,16 @@ export default function CallControls({
     if (!navigator.mediaDevices?.getUserMedia || typeof RTCPeerConnection === 'undefined') {
       throw new Error('المتصفح لا يدعم المكالمات أو لا يوفر إذن الميكروفون والكاميرا.');
     }
+    let iceServers: RTCIceServer[] = [{ urls: ['stun:stun.l.google.com:19302'] }];
+    try {
+      const turnResult = await getTurnIceServers({});
+      iceServers = turnResult.data.iceServers;
+      setTurnConfigured(turnResult.data.configured);
+      if (!turnResult.data.configured) setError('خادم TURN الداخلي غير مهيأ بعد؛ الاتصال سيحاول STUN فقط.');
+    } catch {
+      setTurnConfigured(false);
+      setError('تعذر جلب إعداد TURN الداخلي؛ الاتصال سيحاول STUN فقط.');
+    }
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: true,
       video: kind === 'video' ? { facingMode: 'user' } : false
@@ -120,11 +132,7 @@ export default function CallControls({
       await localVideoRef.current.play().catch(() => {});
     }
 
-    // STUN-only connectivity is a best-effort baseline. TURN is required for
-    // reliable calls across restrictive NATs and mobile carrier networks.
-    const peer = new RTCPeerConnection({
-      iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }]
-    });
+    const peer = new RTCPeerConnection({ iceServers });
     peerRef.current = peer;
     stream.getTracks().forEach(track => peer.addTrack(track, stream));
     peer.ontrack = event => {
@@ -307,7 +315,7 @@ export default function CallControls({
         {activeKind === 'audio' && <div className="absolute text-5xl" aria-hidden="true">🎧</div>}
       </div>
       <div className="flex justify-center gap-3 py-4"><button type="button" onClick={toggleMute} className="rounded-xl border border-white/15 px-4 py-3 text-sm">{muted ? 'إلغاء كتم الصوت' : 'كتم الصوت'}</button>{activeKind === 'video' && <button type="button" onClick={toggleCamera} className="rounded-xl border border-white/15 px-4 py-3 text-sm">{cameraOff ? 'تشغيل الكاميرا' : 'إيقاف الكاميرا'}</button>}<button type="button" onClick={endCall} className="rounded-xl bg-rose-700 px-5 py-3 text-sm font-bold">إنهاء المكالمة</button></div>
-      <p className="text-center text-[10px] text-slate-500">الاتصال الحالي يستخدم STUN فقط؛ قد لا يعمل عبر بعض شبكات الهاتف أو NAT قبل إعداد TURN.</p>
+      <p className="text-center text-[10px] text-slate-500">{turnConfigured ? 'خادم TURN الداخلي مهيأ؛ جودة الاتصال تعتمد على إتاحته وشبكة الطرفين.' : 'خادم TURN الداخلي غير مهيأ؛ الاتصال يعتمد على STUN وقد يفشل عبر بعض الشبكات.'}</p>
     </div>}
   </>;
 }

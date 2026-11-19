@@ -41,6 +41,7 @@ service firebase.storage {
       // Require an active status document created by the trusted callable before accepting media.
       // The client uploads only after the callable returns the server-created status ID.
       allow create: if signedIn()
+        && resource == null
         && request.auth.uid == uid
         && statusIsActive()
         && firestore.get(/databases/(default)/documents/users/$(uid)/statuses/$(statusId)).data.ownerUid == uid
@@ -54,6 +55,7 @@ service firebase.storage {
     match /reels/{uid}/{fileName} {
       allow read: if signedIn();
       allow create: if signedIn()
+        && resource == null
         && request.auth.uid == uid
         && request.resource.size < 100 * 1024 * 1024
         && request.resource.contentType.matches('video/(mp4|webm)');

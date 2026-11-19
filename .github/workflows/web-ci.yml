@@ -1,6 +1,8 @@
 name: IMI Web CI
+# Manual dispatch is available for operator-requested validation of the selected branch.
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - 'web/**'

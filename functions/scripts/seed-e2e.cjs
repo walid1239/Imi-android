@@ -65,6 +65,13 @@ async function main() {
     }, { merge: true });
   }
 
+  await db.doc('teacherApplications/imi-e2e-a-desktop').set({
+    uid: 'imi-e2e-a-desktop', fullName: 'أستاذ اختبار آلي',
+    subjectIds: ['e2e-primary-math'], levelIds: ['e2e-primary'],
+    evidencePath: 'teacher-verification/imi-e2e-a-desktop/mock.pdf',
+    status: 'pending', submittedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+
   const course = db.doc('courses/e2e-general-skills');
   await course.set({
     title: 'مهارة التعلم الذاتي',

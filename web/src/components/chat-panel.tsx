@@ -3,8 +3,8 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { User } from 'firebase/auth';
 import {
-  addDoc, collection, doc, endAt, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp,
-  startAt, where, writeBatch, Timestamp
+  addDoc, collection, doc, endAt, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp,
+  setDoc, startAt, where, writeBatch, Timestamp
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 
@@ -40,6 +40,28 @@ export default function ChatPanel({ user }: { user: User }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<PublicProfile[]>([]);
   const [searching, setSearching] = useState(false);
+  const [profileName, setProfileName] = useState(user.displayName || user.email?.split('@')[0] || 'مستخدم IMI');
+  const [profileCity, setProfileCity] = useState('المغرب');
+  const [profileReady, setProfileReady] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    getDoc(doc(db, 'users', user.uid)).then(snapshot => {
+      if (!active) return;
+      if (snapshot.exists()) {
+        setProfileName(snapshot.get('displayName') || user.displayName || user.email?.split('@')[0] || 'مستخدم IMI');
+        setProfileCity(snapshot.get('city') || 'المغرب');
+      }
+      setProfileReady(true);
+    }).catch(reason => {
+      if (active) {
+        setProfileReady(true);
+        setError(reason instanceof Error ? reason.message : 'تعذر تحميل الملف الشخصي.');
+      }
+    });
+    return () => { active = false; };
+  }, [user.uid, user.displayName, user.email]);
 
   useEffect(() => {
     const q = query(
@@ -90,6 +112,34 @@ export default function ChatPanel({ user }: { user: User }) {
   }, [selectedId]);
 
   const selected = useMemo(() => chats.find(chat => chat.id === selectedId), [chats, selectedId]);
+
+  async function publishProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = profileName.trim();
+    const city = profileCity.trim();
+    if (name.length < 2 || name.length > 60) { setError('الاسم يجب أن يكون بين حرفين و60 حرفاً.'); return; }
+    if (city.length > 80) { setError('اسم المدينة طويل جداً.'); return; }
+    setProfileSaving(true);
+    setError('');
+    try {
+      const updatedAt = serverTimestamp();
+      await setDoc(doc(db, 'users', user.uid), {
+        displayName: name,
+        city,
+        updatedAt
+      }, { merge: true });
+      await setDoc(doc(db, 'publicProfiles', user.uid), {
+        uid: user.uid,
+        displayName: name,
+        city,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'تعذر نشر الملف الشخصي.');
+    } finally {
+      setProfileSaving(false);
+    }
+  }
 
   async function searchUsers(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -190,6 +240,15 @@ export default function ChatPanel({ user }: { user: User }) {
   return <section className="grid min-h-[520px] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/60 md:grid-cols-[minmax(220px,0.8fr)_1.5fr]" dir="rtl">
     <aside className="border-b border-white/10 p-3 md:border-b-0 md:border-l">
       <div className="mb-3 flex items-center justify-between"><h3 className="font-bold">محادثاتي</h3><span className="text-xs text-slate-500">{chats.length}</span></div>
+      <details className="mb-3 rounded-xl border border-white/10 bg-white/[.025] p-3">
+        <summary className="cursor-pointer text-xs font-semibold text-slate-300">ملفي في دليل IMI</summary>
+        <form onSubmit={publishProfile} className="mt-3 space-y-2">
+          <input value={profileName} onChange={event => setProfileName(event.target.value)} maxLength={60} disabled={!profileReady} aria-label="الاسم الظاهر" placeholder="اسمك الظاهر" className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+          <input value={profileCity} onChange={event => setProfileCity(event.target.value)} maxLength={80} disabled={!profileReady} aria-label="المدينة" placeholder="المدينة" className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+          <button disabled={!profileReady || profileSaving} className="w-full rounded-lg bg-white/10 px-3 py-2 text-xs font-semibold disabled:opacity-40">{profileSaving ? 'جارٍ النشر…' : 'حفظ ونشر اسمي للبحث'}</button>
+          <p className="text-[10px] leading-5 text-slate-500">سيظهر اسمك ومدينتك للمستخدمين المسجلين في دليل IMI.</p>
+        </form>
+      </details>
       <form onSubmit={searchUsers} className="mb-3 space-y-2">
         <input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="ابحث بالاسم…" className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-blue-500" />
         <button disabled={searching || searchTerm.trim().length < 2} className="w-full rounded-xl border border-blue-500/30 px-3 py-2 text-xs font-semibold text-blue-200 disabled:opacity-40">{searching ? 'جارٍ البحث…' : 'بحث عن مستخدمين'}</button>

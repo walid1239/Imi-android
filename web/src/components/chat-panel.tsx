@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { User } from 'firebase/auth';
 import {
   addDoc, collection, doc, endAt, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp,
-  setDoc, startAt, where, writeBatch, Timestamp
+  setDoc, startAfter, startAt, where, writeBatch, Timestamp
 } from 'firebase/firestore';
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase/client';
@@ -41,6 +41,8 @@ export default function ChatPanel({ user }: { user: User }) {
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
   const [loadingChats, setLoadingChats] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -94,15 +96,17 @@ export default function ChatPanel({ user }: { user: User }) {
   }, [user.uid]);
 
   useEffect(() => {
-    if (!selectedId) { setMessages([]); return; }
+    if (!selectedId) { setMessages([]); setHasMoreMessages(false); return; }
+    setMessages([]);
+    setHasMoreMessages(true);
     setLoadingMessages(true);
     const q = query(
       collection(db, 'conversations', selectedId, 'messages'),
-      orderBy('createdAt', 'asc'),
-      limit(200)
+      orderBy('createdAt', 'desc'),
+      limit(50)
     );
     return onSnapshot(q, snapshot => {
-      setMessages(snapshot.docs.map(item => ({
+      const latest = snapshot.docs.map(item => ({
         id: item.id,
         senderUid: item.get('senderUid') ?? '',
         type: item.get('type') ?? 'text',
@@ -111,7 +115,13 @@ export default function ChatPanel({ user }: { user: User }) {
         mediaPath: item.get('mediaPath') ?? undefined,
         contentType: item.get('contentType') ?? undefined,
         fileName: item.get('fileName') ?? undefined
-      })));
+      })).reverse();
+      setMessages(current => {
+        const firstLatest = latest[0]?.createdAt?.toMillis() ?? Number.POSITIVE_INFINITY;
+        const older = current.filter(item => item.createdAt && item.createdAt.toMillis() < firstLatest);
+        return [...older, ...latest];
+      });
+      if (snapshot.size < 50) setHasMoreMessages(false);
       setLoadingMessages(false);
       setError('');
     }, reason => {
@@ -121,6 +131,40 @@ export default function ChatPanel({ user }: { user: User }) {
   }, [selectedId]);
 
   const selected = useMemo(() => chats.find(chat => chat.id === selectedId), [chats, selectedId]);
+
+  async function loadOlderMessages() {
+    const oldest = messages[0];
+    if (!selectedId || !oldest?.createdAt || loadingOlder || !hasMoreMessages) return;
+    setLoadingOlder(true);
+    try {
+      const olderQuery = query(
+        collection(db, 'conversations', selectedId, 'messages'),
+        orderBy('createdAt', 'desc'),
+        startAfter(oldest.createdAt),
+        limit(50)
+      );
+      const snapshot = await getDocs(olderQuery);
+      const older = snapshot.docs.map(item => ({
+        id: item.id,
+        senderUid: item.get('senderUid') ?? '',
+        type: item.get('type') ?? 'text',
+        text: item.get('text') ?? '',
+        createdAt: item.get('createdAt') ?? null,
+        mediaPath: item.get('mediaPath') ?? undefined,
+        contentType: item.get('contentType') ?? undefined,
+        fileName: item.get('fileName') ?? undefined
+      })).reverse();
+      setMessages(current => {
+        const known = new Set(current.map(message => message.id));
+        return [...older.filter(message => !known.has(message.id)), ...current];
+      });
+      setHasMoreMessages(snapshot.size === 50);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'تعذر تحميل الرسائل الأقدم.');
+    } finally {
+      setLoadingOlder(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -323,6 +367,7 @@ export default function ChatPanel({ user }: { user: User }) {
     <div className="flex min-h-[420px] flex-col">
       <header className="border-b border-white/10 px-4 py-3"><h3 className="font-bold">{selected ? 'المحادثة' : 'الرسائل'}</h3><p className="mt-1 text-xs text-slate-500">{selected ? selected.id : 'اختر محادثة من القائمة'}</p></header>
       <div className="flex-1 space-y-3 overflow-y-auto p-4">
+        {selectedId && hasMoreMessages && <button type="button" onClick={loadOlderMessages} disabled={loadingOlder || loadingMessages} className="mx-auto block rounded-lg border border-white/10 px-4 py-2 text-xs text-slate-300 disabled:opacity-50">{loadingOlder ? 'جارٍ تحميل الأقدم…' : 'تحميل رسائل أقدم'}</button>}
         {!selectedId && <p className="py-16 text-center text-sm text-slate-500">لا توجد محادثة محددة.</p>}
         {selectedId && loadingMessages && <p className="text-sm text-slate-400">جارٍ تحميل الرسائل…</p>}
         {selectedId && !loadingMessages && messages.length === 0 && <p className="py-16 text-center text-sm text-slate-500">لا توجد رسائل بعد. أرسل أول رسالة.</p>}

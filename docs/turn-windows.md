@@ -127,9 +127,14 @@ docker compose down
 3. أضف:
    - `stun:stun.l.google.com:19302`
    - `turn:TURN_HOST:3478?transport=udp`
-4. استخدم اسم مستخدم مؤقتاً وكلمة مرور مولّدين من دالة IMI بعد إعداد Firebase؛ لا تستخدم السر المشترك ككلمة مرور للمتصفح.
-5. ابدأ جمع المرشحين. نجاح TURN يظهر مرشحاً من نوع `relay`. ظهور `srflx` فقط لا يثبت نجاح الترحيل.
-6. إذا لم يظهر `relay`: افحص CGNAT، Port Forwarding، Windows Firewall، نطاق relay، تطابق السر، و`TURN_EXTERNAL_IP`.
+4. لتجربة Coturn محلياً دون نشر Function، أنشئ بيانات اعتماد مؤقتة من ملف `.env` المحلي:
+   ```powershell
+   .\\test-credentials.ps1
+   ```
+   أدخل `username` و`credential` الناتجين في Trickle ICE. تنتهي صلاحية بيانات الاختبار بعد 10 دقائق. السكربت لا يطبع `TURN_SECRET`.
+5. بعد تهيئة Firebase Secret Manager والدالة لاحقاً، استخدم بيانات `getIceServers` بدلاً من بيانات الاختبار اليدوية. لا تستخدم السر المشترك ككلمة مرور للمتصفح.
+6. ابدأ جمع المرشحين. نجاح TURN يظهر مرشحاً من نوع `relay`. ظهور `srflx` فقط لا يثبت نجاح الترحيل.
+7. إذا لم يظهر `relay`: افحص CGNAT، Port Forwarding، Windows Firewall، نطاق relay، تطابق السر، و`TURN_EXTERNAL_IP`.
 
 ## 10) تحذيرات أمنية وتشغيلية
 

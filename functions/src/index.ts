@@ -456,6 +456,49 @@ export const publishCourse = onCall<{ courseId?: unknown; published?: unknown }>
   return { published: request.data.published };
 });
 
+type ReviewCurriculumNodeInput = { nodeId?: unknown; approved?: unknown };
+
+export const reviewCurriculumNode = onCall<ReviewCurriculumNodeInput>(async request => {
+  const adminUid = requireAdmin(request);
+  const nodeId = requireUid(request.data?.nodeId, "معرّف عنصر المنهاج غير صالح.");
+  if (typeof request.data?.approved !== "boolean") throw new HttpsError("invalid-argument", "قرار اعتماد المنهاج غير صالح.");
+  const approved = request.data.approved;
+  const nodeRef = db.collection("curriculumNodes").doc(nodeId);
+  const operationId = `curriculum-${nodeId}-${Date.now()}`;
+  const auditRef = db.collection("moderationAudit").doc(operationId);
+  const result = await db.runTransaction(async transaction => {
+    const node = await transaction.get(nodeRef);
+    if (!node.exists) throw new HttpsError("not-found", "عنصر المنهاج غير موجود.");
+    const desiredStatus = approved ? "published" : "hidden";
+    const desiredReview = !approved;
+    if (node.get("status") === desiredStatus && node.get("needsReview") === desiredReview) {
+      return { status: desiredStatus, needsReview: desiredReview, idempotent: true };
+    }
+    if (node.get("needsReview") !== true) {
+      throw new HttpsError("failed-precondition", "هذا العنصر لا ينتظر مراجعة؛ لا يمكن تغيير اعتماده بهذه العملية.");
+    }
+    const parentId = node.get("parentId");
+    if (approved && typeof parentId === "string") {
+      const parentRef = db.collection("curriculumNodes").doc(parentId);
+      const parent = await transaction.get(parentRef);
+      if (!parent.exists || parent.get("status") !== "published" || parent.get("needsReview") === true) {
+        throw new HttpsError("failed-precondition", "اعتمد العنصر الأب أولاً قبل نشر هذا العنصر.");
+      }
+    }
+    const now = FieldValue.serverTimestamp();
+    transaction.update(nodeRef, {
+      status: desiredStatus, needsReview: desiredReview,
+      reviewedBy: adminUid, reviewedAt: now, updatedAt: now,
+    });
+    transaction.create(auditRef, {
+      actorUid: adminUid, action: approved ? "curriculum_node_approved" : "curriculum_node_rejected",
+      targetType: "curriculumNode", targetId: nodeId, operationId, createdAt: now,
+    });
+    return { status: desiredStatus, needsReview: desiredReview, idempotent: false };
+  });
+  return { ...result, operationId };
+});
+
 type ReportAcademyLessonInput = { courseId?: unknown; lessonId?: unknown; reason?: unknown; details?: unknown };
 const allowedReportReasons = ["incorrect", "inappropriate", "copyright", "other"] as const;
 

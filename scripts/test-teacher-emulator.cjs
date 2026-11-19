@@ -75,6 +75,22 @@ async function main() {
     metadata: { contentType: 'application/pdf' },
   });
 
+  await db.doc('curriculumNodes/unreviewed-unit').set({
+    id: 'unreviewed-unit', parentId: 'subject-math', type: 'unit', nameAr: 'وحدة تنتظر المراجعة',
+    nameFr: 'Unité en attente', language: 'ar', order: 1, needsReview: true, status: 'hidden',
+  });
+  await assert.rejects(
+    call('reviewCurriculumNode', { nodeId: 'unreviewed-unit', approved: true }, applicantToken),
+    error => error.code === 'PERMISSION_DENIED',
+  );
+  const curriculumReview = await call('reviewCurriculumNode', { nodeId: 'unreviewed-unit', approved: true }, await tokenFor(adminUid));
+  assert.equal(curriculumReview.status, 'published');
+  const reviewedNode = await db.doc('curriculumNodes/unreviewed-unit').get();
+  assert.equal(reviewedNode.get('needsReview'), false);
+  assert.equal(reviewedNode.get('reviewedBy'), adminUid);
+  assert.ok(reviewedNode.get('reviewedAt') instanceof Timestamp);
+  assert.equal((await db.collection('moderationAudit').doc(curriculumReview.operationId).get()).get('action'), 'curriculum_node_approved');
+
   await assert.rejects(call('submitTeacherApplication', {}, null), error => error.code === 'UNAUTHENTICATED');
   const applicantToken = await tokenFor(applicantUid);
   const submitted = await call('submitTeacherApplication', {

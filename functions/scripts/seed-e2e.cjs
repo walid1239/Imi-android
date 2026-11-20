@@ -61,6 +61,8 @@ async function main() {
       const b = 'imi-e2e-' + other + '-' + variant;
       await db.doc('users/' + a + '/friends/' + b).set({ uid: b, status: 'accepted', createdAt: FieldValue.serverTimestamp() }, { merge: true });
       await db.doc('users/' + b + '/friends/' + a).set({ uid: a, status: 'accepted', createdAt: FieldValue.serverTimestamp() }, { merge: true });
+      await db.doc('publicProfiles/' + a).set({ uid: a, displayName: 'تلميذ ألف ' + variant, city: 'الدار البيضاء', updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      await db.doc('publicProfiles/' + b).set({ uid: b, displayName: other === 'c' ? 'أستاذ اختبار موثّق ' + variant : other === 'd' ? 'تلميذ دال ' + variant : 'تلميذ هاء ' + variant, city: 'الدار البيضاء', updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     }
   }
 

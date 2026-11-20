@@ -70,7 +70,7 @@ async function main() {
   ];
   for (const node of curriculumNodes) {
     await db.doc(`curriculumNodes/${node.id}`).set({
-      ...node, needsReview: true, semester: null, officialSource: null,
+      ...node, needsReview: false, semester: null, officialSource: null,
       status: 'published', createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });

@@ -28,15 +28,6 @@ test('public academy can be browsed without an account in Arabic RTL', async ({ 
   await expect(page.getByRole('link', { name: 'أصبح أستاذاً' })).toBeVisible();
 });
 
-test('phone OTP validates the selected country number before requesting SMS', async ({ page }) => {
-  await page.goto('/login');
-  await expect(page.getByText('الدخول برقم الهاتف (OTP)')).toBeVisible();
-  await expect(page.getByLabel('الدولة')).toHaveValue('+212');
-  await page.getByLabel('رقم الهاتف').fill('12345');
-  await page.getByRole('button', { name: 'إرسال رمز التحقق' }).click();
-  await expect(page.locator('p[role="alert"]')).toContainText('أدخل 9 أرقام بعد رمز الدولة.');
-});
-
 test('two learners can befriend each other, exchange a message and publish a status', async ({ page, browser }) => {
   const project = test.info().project.name;
   const secondContext = await browser.newContext();
@@ -47,7 +38,7 @@ test('two learners can befriend each other, exchange a message and publish a sta
 
     await page.getByRole('button', { name: /الأصدقاء/ }).first().click();
     await page.getByPlaceholder('اكتب حرفين على الأقل من الاسم…').fill('تلميذ باء');
-    await expect(page.getByText('تلميذ باء')).toBeVisible();
+    await expect(page.getByText('تلميذ باء').first()).toBeVisible();
     await page.getByRole('button', { name: 'إضافة' }).click();
     await expect(page.getByRole('status')).toContainText('أُرسل طلب الصداقة');
 
@@ -97,7 +88,7 @@ test('two learners can befriend each other, exchange a message and publish a sta
 test('learner can enroll in a general-skills course and complete its lesson', async ({ page }) => {
   await login(page, email('a', test.info().project.name));
   await page.getByRole('button', { name: /الأكاديمية/ }).first().click();
-  await expect(page.getByText('مهارة التعلم الذاتي')).toBeVisible();
+  await expect(page.getByText('مهارة التعلم الذاتي').first()).toBeVisible();
   await page.getByRole('button', { name: 'سجّل في هذه الدورة' }).click();
   await expect(page.getByText(/تقدمك في الدورة/)).toBeVisible();
   await page.getByRole('button', { name: /مهارة التعلم الذاتي/ }).click();
@@ -113,7 +104,7 @@ test('learner can enroll in a general-skills course and complete its lesson', as
 
 test('admin claim exposes the protected Academy administration panel', async ({ page }) => {
   await login(page, email('admin', test.info().project.name));
-  await expect(page.getByRole('button', { name: /إدارة الأكاديمية/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /إدارة الأكاديمية/ }).first()).toBeVisible();
   await page.getByRole('button', { name: /إدارة الأكاديمية/ }).first().click();
   await expect(page.getByRole('heading', { name: 'إدارة الأكاديمية' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'إدارة شجرة المنهاج' })).toBeVisible();
@@ -172,17 +163,15 @@ test('guest sessions can be linked to a permanent email account without changing
   await page.getByRole('button', { name: /ملفي/ }).first().click();
   await expect(page.getByText('تحويل حساب الضيف إلى حساب دائم')).toBeVisible();
   await expect(page.getByRole('button', { name: 'ربط البريد بالحساب الحالي' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'حذف الحساب نهائياً' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'حذف الحساب غير متاح حالياً' })).toBeDisabled();
 });
 
-test('login exposes country-aware phone OTP with local E.164 validation', async ({ page }) => {
+test('login supports email and guest sessions without phone OTP', async ({ page }) => {
   await page.goto('/login');
-  await expect(page.getByRole('heading', { name: 'الدخول برقم الهاتف (OTP)' })).toBeVisible();
-  await expect(page.getByLabel('الدولة')).toBeVisible();
-  await expect(page.getByLabel('رقم الهاتف')).toBeVisible();
-  await page.getByLabel('رقم الهاتف').fill('061234567');
-  await page.getByRole('button', { name: 'إرسال رمز التحقق' }).click();
-  await expect(page.locator('p[role="alert"]')).toContainText('أدخل 9 أرقام بعد رمز الدولة');
+  await expect(page.getByLabel('البريد الإلكتروني')).toBeVisible();
+  await expect(page.getByRole('button', { name: /الدخول السريع كضيف/ })).toBeVisible();
+  await expect(page.getByLabel('رقم الهاتف')).toHaveCount(0);
+  await expect(page.getByText('الدخول برقم الهاتف (OTP)')).toHaveCount(0);
 });
 
 test('privacy and terms remain visibly marked as drafts', async ({ page }) => {

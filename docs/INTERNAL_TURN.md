@@ -15,7 +15,7 @@
 - `web/src/components/call-controls.tsx`: جلب الإعدادات، STUN fallback، retry، ومؤشر الجودة.
 
 ## الإعدادات والأسرار
-- السر في Firebase Secret Manager اسمه `TURN_SECRET`، ويُستخدم محلياً في `infra/coturn/.env` فقط. لا تضعه في Git أو المتصفح.
+- السر في Firebase Secret Manager اسمه `TURN_SECRET`، ويُستخدم محلياً في `infra/coturn/.env` فقط. لا تضعه في Git أو المتصفح. مالك المشروع هو من ينشئه بنفسه بالأمر أدناه.
 - أنشئه بنفسك بعد قرارك، بالأمر التفاعلي:
   ```powershell
   firebase functions:secrets:set TURN_SECRET
@@ -25,7 +25,9 @@
 - الضيف مرفوض افتراضياً. يمكن السماح به لاحقاً عبر `TURN_ALLOW_ANONYMOUS=true).
 - العمر الافتراضي ساعة واحدة كحد أقصى، واسم المستخدم `unixExpiry:uid` وكلمة المرور HMAC-SHA1.
 - المحدد الافتراضي 10 طلبات لكل مستخدم في الدقيقة. يمكن ضبطه، مع حد أقصى 60.
-- الاستجابة لا تحتوي السر مطلقاً؛ وعند عدم تهيئة TURN تعيد STUN فقط.
+- إذا كان `TURN_HOST` فارغاً أو غير مضبوط، فإن `getIceServers` لا يقرأ قيمة السر في مسار الاستجابة، ويعيد STUN فقط (`turnAvailable: false`) حتى لو كان السر موجوداً. لا يحتاج هذا الاختبار إلى خادم Coturn فعلي.
+- عند ضبط `TURN_HOST` صالح، تُضاف بيانات TURN المؤقتة الموقعة بـHMAC. الاستجابة لا تحتوي السر المشترك مطلقاً.
+- الدالة ما زالت تعلن `TURN_SECRET` ضمن secret bindings؛ لذلك أنشئ السر قبل أول نشر للدوال باستخدام الأمر أعلاه حتى لو لم تشغّل خادم TURN بعد. هذا لا يشغّل Coturn ولا يفتح منافذ.
 
 ## الحماية
 Coturn يستخدم `use-auth-secret` و`fingerprint` و`no-cli` وقيود quota وعرض النطاق، ويرفض نطاقات IPv4 الخاصة والـ loopback وlink-local كوجهات peer. لا تستخدم `no-auth` أو بيانات اعتماد ثابتة. TLS مؤجل حتى توفير شهادة صحيحة.

@@ -130,14 +130,14 @@ test('verified teachers cannot start private student chats or mixed private grou
   await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ باء ' + suffix(test.info().project.name));
   await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
   await page.getByRole('button', { name: 'مراسلة' }).click();
-  await expect(page.getByRole('alert')).toContainText('التواصل الخاص بين الأستاذ والتلميذ غير متاح');
+  await expect(page.locator('p[role="alert"]')).toContainText('التواصل الخاص بين الأستاذ والتلميذ غير متاح');
   await page.getByRole('button', { name: 'للمجموعة' }).click();
   await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ ألف ' + suffix(test.info().project.name));
   await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
   await page.getByRole('button', { name: 'للمجموعة' }).click();
   await page.getByPlaceholder('اسم المجموعة').fill('مجموعة مختلطة ممنوعة');
   await page.getByRole('button', { name: 'إنشاء مجموعة (3 أعضاء على الأقل)' }).click();
-  await expect(page.getByRole('alert')).toContainText('المجموعات الخاصة بين الأساتذة والتلاميذ غير متاحة');
+  await expect(page.locator('p[role="alert"]')).toContainText('المجموعات الخاصة بين الأساتذة والتلاميذ غير متاحة');
 });
 
 test('approved teacher content appears under its curriculum subject', async ({ page }) => {

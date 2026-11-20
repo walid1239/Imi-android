@@ -30,16 +30,18 @@ test('public academy can be browsed without an account in Arabic RTL', async ({ 
 
 test('two learners can befriend each other, exchange a message and publish a status', async ({ page, browser }) => {
   const project = test.info().project.name;
+  const fixtureBase = suffix(project);
+  const fixture = test.info().retry > 0 ? `${fixtureBase}-retry${test.info().retry}` : fixtureBase;
   const secondContext = await browser.newContext();
   const secondPage = await secondContext.newPage();
   try {
-    await login(page, email('a', project));
-    await login(secondPage, email('b', project));
+    await login(page, `e2e-a-${fixture}@imi.test`);
+    await login(secondPage, `e2e-b-${fixture}@imi.test`);
 
     await page.getByRole('button', { name: /الأصدقاء/ }).first().click();
-    await page.getByPlaceholder('اكتب حرفين على الأقل من الاسم…').fill('تلميذ باء ' + suffix(project));
-    await expect(page.getByText('تلميذ باء ' + suffix(project)).first()).toBeVisible();
-    const addFriend = page.getByTestId('add-friend-imi-e2e-b-' + suffix(project));
+    await page.getByPlaceholder('اكتب حرفين على الأقل من الاسم…').fill('تلميذ باء ' + fixture);
+    await expect(page.getByText('تلميذ باء ' + fixture).first()).toBeVisible();
+    const addFriend = page.getByTestId('add-friend-imi-e2e-b-' + fixture);
     await expect(addFriend).toBeVisible();
     await expect(addFriend).toBeEnabled();
     await addFriend.click();
@@ -51,25 +53,25 @@ test('two learners can befriend each other, exchange a message and publish a sta
     await expect(secondPage.getByRole('status')).toContainText('تم قبول طلب الصداقة');
 
     await page.getByRole('button', { name: /المحادثات/ }).first().click();
-    await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ باء ' + suffix(project));
+    await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ باء ' + fixture);
     await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
-    await expect(page.getByText('تلميذ باء ' + suffix(project))).toBeVisible()
+    await expect(page.getByText('تلميذ باء ' + fixture)).toBeVisible()
     await page.getByRole('button', { name: 'مراسلة' }).click();
     await page.getByPlaceholder('اكتب رسالتك…').fill('رسالة اختبار من IMI');
     await page.getByRole('button', { name: 'إرسال' }).click();
-    await expect(page.getByText('رسالة اختبار من IMI')).toBeVisible();
+    await expect(page.locator('article').getByText('رسالة اختبار من IMI')).toBeVisible();
 
     await secondPage.getByRole('button', { name: /المحادثات/ }).first().click();
-    await expect(secondPage.getByText('رسالة اختبار من IMI')).toBeVisible({ timeout: 15000 });
+    await expect(secondPage.locator('article').getByText('رسالة اختبار من IMI')).toBeVisible({ timeout: 15000 });
 
     page.once('dialog', dialog => dialog.accept());
     await page.getByRole('button', { name: 'حظر المستخدم' }).click();
     await expect(page.getByRole('status')).toContainText('تم حظر المستخدم وإيقاف المحادثة المباشرة');
 
-    await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ هاء ' + suffix(project));
+    await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ هاء ' + fixture);
     await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
     await page.getByRole('button', { name: 'للمجموعة' }).click();
-    await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ دال ' + suffix(project));
+    await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ دال ' + fixture);
     await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
     await page.getByRole('button', { name: 'للمجموعة' }).click();
     await page.getByPlaceholder('اسم المجموعة').fill('مجموعة اختبار');
@@ -77,7 +79,7 @@ test('two learners can befriend each other, exchange a message and publish a sta
     await expect(page.getByRole('heading', { name: 'مجموعة اختبار' })).toBeVisible();
     await page.getByPlaceholder('اكتب رسالتك…').fill('رسالة داخل مجموعة');
     await page.getByRole('button', { name: 'إرسال' }).click();
-    await expect(page.getByText('رسالة داخل مجموعة')).toBeVisible();
+    await expect(page.locator('article').getByText('رسالة داخل مجموعة')).toBeVisible();
 
     await page.getByRole('button', { name: /الحالات/ }).first().click();
     await page.getByPlaceholder('ماذا تريد أن تشارك؟').fill('حالة اختبار من IMI');

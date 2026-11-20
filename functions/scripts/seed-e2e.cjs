@@ -51,6 +51,7 @@ async function main() {
     await ensureUser('b', variant, 'تلميذ باء ' + variant);
     await ensureUser('c', variant, 'أستاذ اختبار موثّق ' + variant);
     await ensureUser('d', variant, 'تلميذ دال ' + variant);
+    await ensureUser('e', variant, 'تلميذ هاء ' + variant);
     await ensureUser('admin', variant, 'مشرف اختبار ' + variant, true);
   }
 

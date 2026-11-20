@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const password = 'IMI-Emulator-Password-2026!';
 const suffix = (project: string) => project.includes('mobile') ? 'mobile' : 'desktop';
-const email = (role: 'a' | 'b' | 'c' | 'd' | 'e' | 'admin', project: string) => `e2e-${role}-${suffix(project)}@imi.test`;
+const email = (role: 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'admin', project: string) => `e2e-${role}-${suffix(project)}@imi.test`;
 
 async function login(page: Page, address: string) {
   await page.goto('/login');
@@ -36,12 +36,12 @@ test('two learners can befriend each other, exchange a message and publish a sta
   const secondPage = await secondContext.newPage();
   try {
     await login(page, `e2e-a-${fixture}@imi.test`);
-    await login(secondPage, `e2e-b-${fixture}@imi.test`);
+    await login(secondPage, `e2e-f-${fixture}@imi.test`);
 
     await page.getByRole('button', { name: /الأصدقاء/ }).first().click();
-    await page.getByPlaceholder('اكتب حرفين على الأقل من الاسم…').fill('تلميذ باء ' + fixture);
-    await expect(page.getByText('تلميذ باء ' + fixture).first()).toBeVisible();
-    const addFriend = page.getByTestId('add-friend-imi-e2e-b-' + fixture);
+    await page.getByPlaceholder('اكتب حرفين على الأقل من الاسم…').fill('تلميذ فاء ' + fixture);
+    await expect(page.getByText('تلميذ فاء ' + fixture).first()).toBeVisible();
+    const addFriend = page.getByTestId('add-friend-imi-e2e-f-' + fixture);
     await expect(addFriend).toBeVisible();
     await expect(addFriend).toBeEnabled();
     await addFriend.click();
@@ -53,9 +53,9 @@ test('two learners can befriend each other, exchange a message and publish a sta
     await expect(secondPage.getByRole('status')).toContainText('تم قبول طلب الصداقة');
 
     await page.getByRole('button', { name: /المحادثات/ }).first().click();
-    await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ باء ' + fixture);
+    await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ فاء ' + fixture);
     await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
-    await expect(page.getByText('تلميذ باء ' + fixture)).toBeVisible()
+    await expect(page.getByText('تلميذ فاء ' + fixture)).toBeVisible()
     await page.getByRole('button', { name: 'مراسلة' }).click();
     await page.getByPlaceholder('اكتب رسالتك…').fill('رسالة اختبار من IMI');
     await page.getByRole('button', { name: 'إرسال' }).click();

@@ -877,6 +877,20 @@ export const respondToCall = onCall<CallActionInput & { decision?: unknown }>(as
     if (!snap.exists) throw new HttpsError("not-found", "المكالمة غير موجودة.");
     if (snap.get("calleeUid") !== uid) throw new HttpsError("permission-denied", "المتلقي فقط يمكنه الرد.");
     if (snap.get("status") !== "ringing") throw new HttpsError("failed-precondition", "لم تعد المكالمة في حالة رنين.");
+    const callerUid = String(snap.get("callerUid") ?? "");
+    const conversationId = String(snap.get("conversationId") ?? "");
+    const [callerBlock, calleeBlock, conversation] = await Promise.all([
+      tx.get(db.doc("users/" + callerUid + "/blockedUsers/" + uid)),
+      tx.get(db.doc("users/" + uid + "/blockedUsers/" + callerUid)),
+      tx.get(db.doc("conversations/" + conversationId)),
+    ]);
+    const participants = conversation.get("participants");
+    if (callerBlock.exists || calleeBlock.exists || !conversation.exists
+      || conversation.get("status") === "blocked" || !Array.isArray(participants)
+      || !participants.includes(callerUid) || !participants.includes(uid)) {
+      tx.update(ref, { status: "ended", endedBy: uid, endedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+      return;
+    }
     if ((snap.get("expiresAt") as Timestamp).toMillis() <= Date.now()) {
       tx.update(ref, { status: "missed", updatedAt: FieldValue.serverTimestamp() });
       return;
@@ -907,6 +921,15 @@ export const restartCallIce = onCall<RestartCallIceInput>(async (request) => {
     }
     if (snapshot.get("status") !== "accepted" || !snapshot.get("offer")) {
       throw new HttpsError("failed-precondition", "لا يمكن إعادة الاتصال قبل قبول المكالمة.");
+    }
+    const callerUid = String(snapshot.get("callerUid") ?? "");
+    const calleeUid = String(snapshot.get("calleeUid") ?? "");
+    const [callerBlock, calleeBlock] = await Promise.all([
+      transaction.get(db.doc("users/" + callerUid + "/blockedUsers/" + calleeUid)),
+      transaction.get(db.doc("users/" + calleeUid + "/blockedUsers/" + callerUid)),
+    ]);
+    if (callerBlock.exists || calleeBlock.exists) {
+      throw new HttpsError("permission-denied", "تم إيقاف المكالمة بسبب إعدادات الحظر.");
     }
     const nextCount = nextIceRestartCount(Number(snapshot.get("iceRestartCount") ?? 0));
     if (nextCount === null) {

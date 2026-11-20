@@ -377,7 +377,9 @@ export default function CallControls({
 
   useEffect(() => () => {
     const callId = activeCallIdRef.current;
-    if (callId) void endCallAction({ callId }).catch(() => {});
+    if (callId) {
+      void httpsCallable<{ callId: string }, { status: string }>(functions, 'endCall')({ callId }).catch(() => {});
+    }
     cleanupSession();
   }, []);
 

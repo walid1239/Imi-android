@@ -16,7 +16,7 @@ test('public academy can be browsed without an account in Arabic RTL', async ({ 
   await page.goto('/academy');
   await expect(page.getByRole('heading', { name: 'تعلّم وتقدّم' })).toBeVisible();
   await expect(page.locator('main')).toHaveAttribute('dir', 'rtl');
-  await expect(page.getByText('مهارة التعلم الذاتي')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'مهارة التعلم الذاتي' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'ابدأ من مستواك، وتقدّم خطوة بخطوة' })).toBeVisible();
   await expect(page.getByLabel('المستوى')).toBeVisible();
   await page.getByLabel('المستوى').selectOption('e2e-primary');
@@ -34,7 +34,7 @@ test('phone OTP validates the selected country number before requesting SMS', as
   await expect(page.getByLabel('الدولة')).toHaveValue('+212');
   await page.getByLabel('رقم الهاتف').fill('12345');
   await page.getByRole('button', { name: 'إرسال رمز التحقق' }).click();
-  await expect(page.getByRole('alert')).toContainText('أدخل 9 أرقام بعد رمز الدولة.');
+  await expect(page.locator('p[role="alert"]')).toContainText('أدخل 9 أرقام بعد رمز الدولة.');
 });
 
 test('two learners can befriend each other, exchange a message and publish a status', async ({ page, browser }) => {
@@ -182,7 +182,7 @@ test('login exposes country-aware phone OTP with local E.164 validation', async 
   await expect(page.getByLabel('رقم الهاتف')).toBeVisible();
   await page.getByLabel('رقم الهاتف').fill('061234567');
   await page.getByRole('button', { name: 'إرسال رمز التحقق' }).click();
-  await expect(page.getByRole('alert')).toContainText('أدخل 9 أرقام بعد رمز الدولة');
+  await expect(page.locator('p[role="alert"]')).toContainText('أدخل 9 أرقام بعد رمز الدولة');
 });
 
 test('privacy and terms remain visibly marked as drafts', async ({ page }) => {

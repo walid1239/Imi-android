@@ -8,13 +8,13 @@ env:
     value: "SET_IN_APP_HOSTING_CONSOLE"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
-    value: "imi-indroid"
+    value: "SET_IN_APP_HOSTING_CONSOLE"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
-    value: "imi-indroid.firebasestorage.app"
+    value: "SET_IN_APP_HOSTING_CONSOLE"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
-    value: "135769436246"
+    value: "SET_IN_APP_HOSTING_CONSOLE"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_APP_ID
     value: "SET_IN_APP_HOSTING_CONSOLE"

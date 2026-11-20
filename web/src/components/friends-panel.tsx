@@ -93,7 +93,7 @@ export default function FriendsPanel({ user }: { user: User }) {
           <div className="min-w-0"><p className="truncate text-sm font-semibold">{profile.displayName}</p><p className="mt-1 truncate text-xs text-slate-500">{profile.city || 'عضو في IMI'}</p></div>
           {friendIds.has(profile.uid)
             ? <span className="shrink-0 text-xs text-emerald-300">صديق</span>
-            : <button disabled={!!busy} onClick={() => call('sendFriendRequest', { toUid: profile.uid }, profile.uid, 'أُرسل طلب الصداقة.')} className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold disabled:opacity-40">{busy === profile.uid ? 'جارٍ الإرسال…' : 'إضافة'}</button>}
+            : <button aria-label="إضافة" data-testid={`add-friend-${profile.uid}`} disabled={!!busy} onClick={() => call('sendFriendRequest', { toUid: profile.uid }, profile.uid, 'أُرسل طلب الصداقة.')} className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold disabled:opacity-40">{busy === profile.uid ? 'جارٍ الإرسال…' : 'إضافة'}</button>}
         </div>)}
       </div>}
       {term.trim().length >= 2 && results.length === 0 && <p className="mt-3 text-xs text-slate-500">لا توجد نتائج مطابقة حالياً.</p>}

@@ -549,6 +549,7 @@ test('teacher applications and profiles are private and client writes cannot gra
     await setDoc(doc(db, 'teacherApplications/alice'), { uid: 'alice', status: 'pending', evidencePath: 'teacher-verification/alice/id.pdf' });
     await setDoc(doc(db, 'teacherProfiles/alice'), { uid: 'alice', published: true, profileComplete: true });
     await setDoc(doc(db, 'teacherProfiles/bob'), { uid: 'bob', published: false, profileComplete: false });
+    await setDoc(doc(db, 'teacherProfiles/carol'), { uid: 'carol', profileComplete: true });
     await setDoc(doc(db, 'teacherLiveSessions/mock-room'), { teacherUid: 'alice', status: 'mock_scheduled' });
     await setDoc(doc(db, 'teacherLiveSessions/real-room'), { teacherUid: 'alice', status: 'scheduled' });
     await setDoc(doc(db, 'moderationAudit/audit-1'), { actorUid: 'admin', action: 'teacher_application_approved' });

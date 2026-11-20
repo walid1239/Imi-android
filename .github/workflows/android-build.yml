@@ -17,7 +17,7 @@ concurrency:
 jobs:
   build:
     name: Build and test Android app
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Checkout source
@@ -48,34 +48,68 @@ jobs:
       - name: Configure Firebase Android app when secret is available
         id: firebase_config
         env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
           GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: |
-          if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
+          if [ -n "$GOOGLE_SERVICES_JSON" ] || [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
             mkdir -p app
-            printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > app/google-services.json
+            if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+              printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+            else
+              printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > app/google-services.json
+            fi
             test -s app/google-services.json
-            jq -e '
-              .project_info.project_id == "cosmic-altar-m6shk"
-              and any(.client[]; .client_info.android_client_info.package_name == "com.walid.chat")
-            ' app/google-services.json >/dev/null
-            echo "Firebase Android config validated for cosmic-altar-m6shk / com.walid.chat."
+            if [ -z "$FIREBASE_PROJECT_ID" ]; then
+              echo "::error::Set the FIREBASE_PROJECT_ID secret to the project you own before using Firebase config."
+              exit 1
+            fi
+            project_id="$(printf '%s' "$FIREBASE_PROJECT_ID" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+            if ! jq -e 'type == "object" and (.project_info | type == "object") and (.client | type == "array")' app/google-services.json >/dev/null; then
+              echo "::error::GOOGLE_SERVICES_JSON is not valid Firebase Android configuration JSON (or is missing project_info/client)."
+              exit 1
+            fi
+            actual_project_id="$(jq -r '.project_info.project_id // empty' app/google-services.json)"
+            if [ "$actual_project_id" != "$project_id" ]; then
+              echo "::error::Firebase project ID mismatch. JSON project_id='$actual_project_id'; FIREBASE_PROJECT_ID secret does not match after trimming whitespace."
+              exit 1
+            fi
+            if ! jq -e 'any(.client[]?; .client_info.android_client_info.package_name == "com.walid.chat")' app/google-services.json >/dev/null; then
+              echo "::error::Firebase JSON does not contain Android package com.walid.chat."
+              echo "::error::Configured package names: $(jq -r '[.client[]?.client_info.android_client_info.package_name // empty] | join(", ")' app/google-services.json)"
+              exit 1
+            fi
+            echo "Firebase Android config validated: project_id='$actual_project_id', package='com.walid.chat'."
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::GOOGLE_SERVICES_JSON_BASE64 is not configured. Build and tests may run, but no APK release artifact will be published."
+            echo "::warning::Neither GOOGLE_SERVICES_JSON nor GOOGLE_SERVICES_JSON_BASE64 is configured. The APK will be test-only and will not connect to Firebase."
           fi
 
       - name: Run unit tests and assemble debug APK
-        run: gradle --no-daemon testDebugUnitTest assembleDebug
+        id: android_build
+        run: gradle --no-daemon testDebugUnitTest assembleDebug assembleDebugAndroidTest
 
-      - name: Upload Firebase-configured APK
-        if: steps.firebase_config.outputs.configured == 'true'
+      - name: Upload debug APK for device verification
+        if: always() && steps.android_build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: IMI-firebase-configured-apk
+          name: ${{ steps.firebase_config.outputs.configured == 'true' && 'IMI-debug-apk-firebase-configured' || 'IMI-debug-apk-no-firebase-config' }}
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Run IMI on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          emulator-boot-timeout: 900
+          script: gradle --no-daemon connectedDebugAndroidTest
 
   security-rules:
     name: Firebase security rules tests
@@ -92,6 +126,11 @@ jobs:
 
       - name: Install security test dependencies
         run: npm install --no-audit --no-fund
+
+      - name: Build and unit-test trusted Firebase Functions
+        run: |
+          npm install --prefix functions --no-audit --no-fund
+          npm test --prefix functions
 
       - name: Run Firestore rules tests in emulator
         run: npx --yes firebase-tools@13.29.2 emulators:exec --only firestore,storage --project demo-imi-security "npm run test:rules"

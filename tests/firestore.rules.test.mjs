@@ -149,9 +149,9 @@ test('Reels storage accepts owner video uploads and rejects foreign or non-video
   await assertFails(getBytes(ref(env.unauthenticatedContext().storage(), 'reels/alice/test.mp4')));
 });
 
-test('a user can publish a status with text and an optional owned media path', async () => {
+test('clients cannot create statuses because trusted server time is required', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
-  await assertSucceeds(setDoc(doc(aliceDb, 'users/alice/statuses/status-1'), {
+  await assertFails(setDoc(doc(aliceDb, 'users/alice/statuses/status-1'), {
     ownerUid: 'alice',
     text: 'حالة تجريبية للاختبار',
     mediaPath: 'users/alice/statuses/status-1/status.jpg',
@@ -179,12 +179,13 @@ test('a user can publish a status with text and an optional owned media path', a
 });
 
 test('status media uploads require owner, are visible to accepted friends, and can be deleted by owner', async () => {
-  const aliceDb = env.authenticatedContext('alice').firestore();
-  await setDoc(doc(aliceDb, 'users/alice/statuses/status-storage'), {
-    ownerUid: 'alice',
-    text: 'صورة الحالة',
-    createdAt: serverTimestamp(),
-    expiresAt: Timestamp.fromDate(new Date(Date.now() + 27 * 60 * 60 * 1000))
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'users/alice/statuses/status-storage'), {
+      ownerUid: 'alice',
+      text: 'صورة الحالة',
+      createdAt: serverTimestamp(),
+      expiresAt: Timestamp.fromDate(new Date(Date.now() + 27 * 60 * 60 * 1000))
+    });
   });
   const aliceStorage = env.authenticatedContext('alice').storage();
   const bobStorage = env.authenticatedContext('bob').storage();
@@ -194,6 +195,7 @@ test('status media uploads require owner, are visible to accepted friends, and c
   await assertSucceeds(uploadBytes(aliceFile, new Blob(['image-data'], { type: 'image/jpeg' })));
   await assertSucceeds(getBytes(bobFile));
   await assertFails(uploadBytes(ref(bobStorage, 'users/alice/statuses/status-storage/attacker.jpg'), new Blob(['bad'], { type: 'image/jpeg' })));
+  await assertFails(uploadBytes(ref(aliceStorage, 'users/alice/statuses/status-storage/status.mp4'), new Blob(['video-data'], { type: 'video/mp4' })));
   await assertSucceeds(deleteObject(aliceFile));
 
   await env.withSecurityRulesDisabled(async (context) => {

@@ -456,48 +456,54 @@ private fun StoriesSection() {
                         loading = true
                         scope.launch {
                             runCatching {
-                                val id = java.util.UUID.randomUUID().toString()
-                                val expiry = com.google.firebase.Timestamp(
-                                    java.util.Date(System.currentTimeMillis() + 28L * 60L * 60L * 1000L)
-                                )
-                                val statusRef = db.collection("users").document(uid)
-                                    .collection("statuses").document(id)
-                                val data = mutableMapOf<String, Any>(
-                                    "ownerUid" to uid,
-                                    "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                                    "expiresAt" to expiry
-                                )
                                 val value = draft.trim().take(700)
-                                if (value.isNotEmpty()) data["text"] = value
-                                val pendingMedia = draftImageUri?.let { selectedUri ->
+                                val selectedMedia = draftImageUri?.let { selectedUri ->
                                     val uri = android.net.Uri.parse(selectedUri)
                                     val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
                                     require(mime in setOf("image/jpeg", "image/png", "image/webp")) { "صيغة الصورة غير مدعومة." }
-                                    val ext = when (mime) { "image/png" -> "png"; "image/webp" -> "webp"; else -> "jpg" }
-                                    val path = "users/$uid/statuses/$id/status.$ext"
-                                    data["mediaPath"] = path
-                                    Triple(uri, mime, path)
+                                    uri to mime
                                 }
-                                // Storage rules require an existing, active status document.
-                                statusRef.set(data).await()
+                                val requestData = mutableMapOf<String, Any>()
+                                if (value.isNotEmpty()) requestData["text"] = value
+                                selectedMedia?.let { requestData["mediaType"] = it.second }
+                                val callable = com.google.firebase.functions.FirebaseFunctions.getInstance()
+                                    .getHttpsCallable("createStatus")
+                                val response = callable.call(requestData).await()
+                                val result = response.getData() as? Map<*, *>
+                                    ?: error("استجابة خادم الحالات غير صالحة")
+                                val id = result["statusId"] as? String
+                                    ?: error("لم يُرجع الخادم معرّف الحالة")
+                                val expiryMillis = (result["expiresAtMillis"] as? Number)?.toLong()
+                                    ?: error("لم يُرجع الخادم وقت انتهاء الحالة")
+                                val path = result["mediaPath"] as? String
+                                val statusRef = db.collection("users").document(uid)
+                                    .collection("statuses").document(id)
                                 try {
-                                    pendingMedia?.let { (uri, mime, path) ->
+                                    selectedMedia?.let { (uri, mime) ->
+                                        require(!path.isNullOrBlank()) { "لم يُرجع الخادم مسار الصورة" }
                                         storage.reference.child(path).putFile(
                                             uri,
                                             com.google.firebase.storage.StorageMetadata.Builder().setContentType(mime).build()
                                         ).await()
                                     }
                                 } catch (uploadError: Exception) {
+                                    if (!path.isNullOrBlank()) {
+                                        runCatching { storage.reference.child(path).delete().await() }
+                                    }
                                     runCatching { statusRef.delete().await() }
                                     throw uploadError
                                 }
-                                data["__statusId"] = id
-                                data
+                                mapOf(
+                                    "__statusId" to id,
+                                    "text" to value,
+                                    "mediaPath" to path,
+                                    "expiresAtMillis" to expiryMillis
+                                )
                             }.onSuccess { data ->
                                 statusDocumentId = data["__statusId"] as? String
                                 statusText = data["text"] as? String
                                 statusMediaPath = data["mediaPath"] as? String
-                                expiresAt = (data["expiresAt"] as? com.google.firebase.Timestamp)?.toDate()?.time
+                                expiresAt = (data["expiresAtMillis"] as? Number)?.toLong()
                                 draft = ""
                                 draftImageUri = null
                                 showComposer = false

@@ -35,15 +35,15 @@ service firebase.storage {
       allow read: if signedIn()
         && statusIsActive()
         && (request.auth.uid == uid || acceptedFriend(uid));
-      // Require an active server-timestamped status document before accepting media.
-      // The client creates the status document first, then uploads the referenced file.
+      // Require an active status document created by the trusted callable before accepting media.
+      // The client uploads only after the callable returns the server-created status ID.
       allow create, update: if signedIn()
         && request.auth.uid == uid
         && statusIsActive()
         && firestore.get(/databases/(default)/documents/users/$(uid)/statuses/$(statusId)).data.ownerUid == uid
         && request.resource != null
         && request.resource.size < 20 * 1024 * 1024
-        && request.resource.contentType.matches('(image/(jpeg|png|webp)|video/(mp4|webm))');
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
       allow delete: if signedIn() && request.auth.uid == uid;
     }
 

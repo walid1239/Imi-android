@@ -1,0 +1,88 @@
+name: IMI Firebase Cloud Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: "Exact Firebase project ID (must match the protected environment allowlist)"
+        required: true
+        type: string
+      confirm_deploy:
+        description: "Type DEPLOY to authorize deploying Functions and Firebase rules"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: imi-firebase-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Validate, test, and deploy Firebase backend
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_deploy == 'DEPLOY' }}
+    runs-on: ubuntu-latest
+    environment: firebase-production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate project ID against protected allowlist
+        env:
+          PROJECT_ID: ${{ inputs.project_id }}
+          ALLOWED_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: |
+          if ! [[ "$PROJECT_ID" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]]; then
+            echo "::error::Invalid Firebase project ID format."
+            exit 1
+          fi
+          if [ -z "$ALLOWED_PROJECT_ID" ] || [ "$PROJECT_ID" != "$ALLOWED_PROJECT_ID" ]; then
+            echo "::error::Target project does not match the protected environment allowlist."
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up Java for Firebase Emulator Suite
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install security test dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build trusted Functions
+        run: |
+          npm install --prefix functions --no-audit --no-fund
+          npm run build --prefix functions
+
+      - name: Run Firestore and Storage rules tests before deployment
+        run: npx --yes firebase-tools@13.29.2 emulators:exec --only firestore,storage --project demo-imi-security "npm run test:rules"
+
+      - name: Authenticate to Google Cloud using GitHub OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@13.29.2
+
+      - name: Deploy Functions and security rules
+        env:
+          PROJECT_ID: ${{ inputs.project_id }}
+        run: |
+          firebase deploy --project "$PROJECT_ID" --only functions,firestore:rules,storage
+
+      - name: Report deployed target
+        if: success()
+        env:
+          PROJECT_ID: ${{ inputs.project_id }}
+        run: echo "Firebase deployment completed for explicitly selected project: $PROJECT_ID"

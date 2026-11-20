@@ -66,7 +66,7 @@ test('two learners can befriend each other, exchange a message and publish a sta
     await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ جيم');
     await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
     await page.getByRole('button', { name: 'للمجموعة' }).click();
-    await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ دال');
+    await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ دال ' + suffix(project));
     await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
     await page.getByRole('button', { name: 'للمجموعة' }).click();
     await page.getByPlaceholder('اسم المجموعة').fill('مجموعة اختبار');
@@ -128,7 +128,7 @@ test('verified teachers cannot start private student chats or mixed private grou
   await page.getByRole('button', { name: 'مراسلة' }).click();
   await expect(page.getByRole('alert')).toContainText('التواصل الخاص بين الأستاذ والتلميذ غير متاح');
   await page.getByRole('button', { name: 'للمجموعة' }).click();
-  await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ دال');
+  await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ باء ' + suffix(test.info().project.name));
   await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
   await page.getByRole('button', { name: 'للمجموعة' }).click();
   await page.getByPlaceholder('اسم المجموعة').fill('مجموعة مختلطة ممنوعة');

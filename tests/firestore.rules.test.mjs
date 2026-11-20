@@ -8,12 +8,17 @@ import {
 } from '@firebase/rules-unit-testing';
 import { ref, uploadBytes, getBytes, deleteObject } from 'firebase/storage';
 import {
+  collection,
   doc,
   getDoc,
+  getDocs,
+  orderBy,
+  query,
   setDoc,
   deleteDoc,
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  where
 } from 'firebase/firestore';
 
 let env;
@@ -289,6 +294,22 @@ test('clients cannot create conversations directly; trusted callable owns creati
     ...base,
     participants: ['alice', 'unknown-user']
   }));
+});
+
+test('conversation members can list only conversations containing their UID', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  const malloryDb = env.authenticatedContext('mallory').firestore();
+  const aliceQuery = query(collection(aliceDb, 'conversations'), where('participants', 'array-contains', 'alice'), orderBy('lastMessageAt', 'desc'));
+  const bobQuery = query(collection(bobDb, 'conversations'), where('participants', 'array-contains', 'bob'), orderBy('lastMessageAt', 'desc'));
+  const aliceChats = await getDocs(aliceQuery);
+  const bobChats = await getDocs(bobQuery);
+  assert.equal(aliceChats.size, 1);
+  assert.equal(bobChats.size, 1);
+  assert.equal(aliceChats.docs[0].id, 'chat-1');
+  assert.equal(bobChats.docs[0].id, 'chat-1');
+  const unauthorizedQuery = query(collection(malloryDb, 'conversations'), where('participants', 'array-contains', 'alice'), orderBy('lastMessageAt', 'desc'));
+  await assertFails(getDocs(unauthorizedQuery));
 });
 
 test('conversation preview updates must reference a message created in the same batch by the sender', async () => {

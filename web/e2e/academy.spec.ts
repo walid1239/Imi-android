@@ -39,7 +39,10 @@ test('two learners can befriend each other, exchange a message and publish a sta
     await page.getByRole('button', { name: /الأصدقاء/ }).first().click();
     await page.getByPlaceholder('اكتب حرفين على الأقل من الاسم…').fill('تلميذ باء ' + suffix(project));
     await expect(page.getByText('تلميذ باء ' + suffix(project)).first()).toBeVisible();
-    await page.getByRole('button', { name: 'إضافة' }).click();
+    const addFriend = page.getByTestId('add-friend-imi-e2e-b-' + suffix(project));
+    await expect(addFriend).toBeVisible();
+    await expect(addFriend).toBeEnabled();
+    await addFriend.click();
     await expect(page.getByRole('status')).toContainText('أُرسل طلب الصداقة');
 
     await secondPage.getByRole('button', { name: /الأصدقاء/ }).first().click();
@@ -124,12 +127,12 @@ test('verified teachers cannot start private student chats or mixed private grou
   await login(page, email('c', test.info().project.name));
   await page.goto('/app');
   await page.getByRole('button', { name: /المحادثات/ }).first().click();
-  await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ ألف ' + suffix(test.info().project.name));
+  await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ باء ' + suffix(test.info().project.name));
   await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
   await page.getByRole('button', { name: 'مراسلة' }).click();
   await expect(page.getByRole('alert')).toContainText('التواصل الخاص بين الأستاذ والتلميذ غير متاح');
   await page.getByRole('button', { name: 'للمجموعة' }).click();
-  await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ باء ' + suffix(test.info().project.name));
+  await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ ألف ' + suffix(test.info().project.name));
   await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
   await page.getByRole('button', { name: 'للمجموعة' }).click();
   await page.getByPlaceholder('اسم المجموعة').fill('مجموعة مختلطة ممنوعة');
@@ -144,7 +147,7 @@ test('approved teacher content appears under its curriculum subject', async ({ p
   await page.getByRole('button', { name: /الرياضيات - اختبار/ }).click();
   const contentTitle = 'درس أستاذ اختبار منشور ' + suffix(test.info().project.name);
   await expect(page.getByText(contentTitle)).toBeVisible();
-  await expect(page.getByText(/هذا نص تجريبي طويل بما يكفي/)).toBeVisible();
+  await expect(page.locator('article').filter({ hasText: contentTitle }).getByText(/هذا نص تجريبي طويل بما يكفي/)).toBeVisible();
 });
 
 test('teacher application and studio routes explain verification gate', async ({ page }) => {

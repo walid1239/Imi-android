@@ -42,7 +42,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ github.event_name }}
+  group: android-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:

@@ -55,7 +55,7 @@ export const blockUser = onCall<UidInput>(async request => {
   batch.delete(db.doc("users/" + target + "/friends/" + actor));
   batch.delete(db.doc("friendRequests/" + encodeURIComponent(actor) + "__" + encodeURIComponent(target)));
   batch.delete(db.doc("friendRequests/" + encodeURIComponent(target) + "__" + encodeURIComponent(actor)));
-  if (direct.exists) batch.update(directRef, { status: "blocked", updatedAt: FieldValue.serverTimestamp() });
+  if (direct.exists) batch.update(directRef, { status: "blocked", lastMessage: "", updatedAt: FieldValue.serverTimestamp() });
   await batch.commit();
   return { status: "blocked" };
 });

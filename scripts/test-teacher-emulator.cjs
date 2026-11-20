@@ -70,6 +70,10 @@ async function main() {
   await auth.createUser({ uid: adminUid, email: adminUid + '@example.invalid' });
   await auth.setCustomUserClaims(adminUid, { admin: true });
   const applicantToken = await tokenFor(applicantUid);
+  const iceConfig = await call('getIceServers', {}, applicantToken);
+  assert.equal(iceConfig.turnAvailable, false);
+  assert.equal(iceConfig.expiresAt, null);
+  assert.deepEqual(iceConfig.iceServers, [{ urls: ['stun:stun.l.google.com:19302'] }]);
   await db.doc('curriculumNodes/level-primary').set({
     id: 'level-primary', parentId: null, type: 'level', nameAr: 'مستوى اختبار',
     nameFr: 'Niveau test', language: 'ar', order: 1, needsReview: false, status: 'published',

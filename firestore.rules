@@ -240,6 +240,13 @@ service cloud.firestore {
           || get(/databases/$(database)/documents/calls/$(callId)).data.calleeUid == request.auth.uid);
     }
 
+    function canSignalCall(callId) {
+      let call = get(/databases/$(database)/documents/calls/$(callId)).data;
+      return isCallParticipant(callId)
+        && call.status in ['ringing', 'accepted']
+        && !isBlockedBetween(call.callerUid, call.calleeUid);
+    }
+
     // Call identity and lifecycle are server-owned. Clients exchange SDP and ICE only.
     match /calls/{callId} {
       allow read: if signedIn()
@@ -247,7 +254,7 @@ service cloud.firestore {
           || resource.data.calleeUid == request.auth.uid);
       allow create, delete: if false;
       allow update: if (
-        isCallParticipant(callId)
+        canSignalCall(callId)
         && resource.data.status in ['ringing', 'accepted']
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['offer'])
         && resource.data.callerUid == request.auth.uid
@@ -276,8 +283,8 @@ service cloud.firestore {
       );
 
       match /callerCandidates/{candidateId} {
-        allow read: if isCallParticipant(callId);
-        allow create: if isCallParticipant(callId)
+        allow read: if canSignalCall(callId);
+        allow create: if canSignalCall(callId)
           && get(/databases/$(database)/documents/calls/$(callId)).data.status in ['ringing', 'accepted']
           && get(/databases/$(database)/documents/calls/$(callId)).data.callerUid == request.auth.uid
           && request.resource.data.keys().hasOnly(['candidate', 'sdpMid', 'sdpMLineIndex'])

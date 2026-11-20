@@ -55,8 +55,8 @@ test('two learners can befriend each other, exchange a message and publish a sta
     await page.getByRole('button', { name: /المحادثات/ }).first().click();
     await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ فاء ' + fixture);
     await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
-    await expect(page.getByText('تلميذ فاء ' + fixture)).toBeVisible()
-    await page.getByRole('button', { name: 'مراسلة' }).click();
+    await expect(page.getByText('تلميذ فاء ' + fixture, { exact: true })).toBeVisible()
+    await page.getByTestId('start-chat-imi-e2e-f-' + fixture).click();
     await page.getByPlaceholder('اكتب رسالتك…').fill('رسالة اختبار من IMI');
     await page.getByRole('button', { name: 'إرسال' }).click();
     await expect(page.locator('article').getByText('رسالة اختبار من IMI')).toBeVisible();
@@ -70,10 +70,10 @@ test('two learners can befriend each other, exchange a message and publish a sta
 
     await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ هاء ' + fixture);
     await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
-    await page.getByRole('button', { name: 'للمجموعة' }).click();
+    await page.getByTestId('toggle-group-member-imi-e2e-e-' + fixture).click();
     await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ دال ' + fixture);
     await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
-    await page.getByRole('button', { name: 'للمجموعة' }).click();
+    await page.getByTestId('toggle-group-member-imi-e2e-d-' + fixture).click();
     await page.getByPlaceholder('اسم المجموعة').fill('مجموعة اختبار');
     await page.getByRole('button', { name: 'إنشاء مجموعة (3 أعضاء على الأقل)' }).click();
     await expect(page.getByRole('heading', { name: 'مجموعة اختبار' })).toBeVisible();
@@ -116,8 +116,8 @@ test('admin claim exposes the protected Academy administration panel', async ({ 
   const variant = suffix(test.info().project.name);
   const teacherUid = 'imi-e2e-a-' + variant;
   const contentTitle = 'درس أستاذ اختبار منشور ' + variant;
-  await expect(page.getByText(contentTitle)).toBeVisible();
-  await page.locator('article').filter({ hasText: contentTitle }).getByRole('button', { name: 'اعتماد ونشر' }).click();
+  await expect(page.getByText(contentTitle, { exact: true })).toBeVisible();
+  await page.locator('article').filter({ has: page.getByText(contentTitle, { exact: true }) }).getByRole('button', { name: 'اعتماد ونشر' }).click();
   await expect(page.getByRole('status')).toContainText('تم نشر المحتوى بعد المراجعة');
   await page.locator('article').filter({ hasText: teacherUid }).getByRole('button', { name: 'اعتماد التوثيق' }).click();
   await expect(page.getByRole('status')).toContainText('تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق');
@@ -131,12 +131,12 @@ test('verified teachers cannot start private student chats or mixed private grou
   await page.getByRole('button', { name: /المحادثات/ }).first().click();
   await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ باء ' + suffix(test.info().project.name));
   await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
-  await page.getByRole('button', { name: 'مراسلة' }).click();
+  await page.getByTestId('start-chat-imi-e2e-b-' + suffix(test.info().project.name)).click();
   await expect(page.locator('p[role="alert"]')).toContainText('التواصل الخاص بين الأستاذ والتلميذ غير متاح');
-  await page.getByRole('button', { name: 'للمجموعة' }).click();
+  await page.getByTestId('toggle-group-member-imi-e2e-b-' + suffix(test.info().project.name)).click();
   await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ ألف ' + suffix(test.info().project.name));
   await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
-  await page.getByRole('button', { name: 'للمجموعة' }).click();
+  await page.getByTestId('toggle-group-member-imi-e2e-a-' + suffix(test.info().project.name)).click();
   await page.getByPlaceholder('اسم المجموعة').fill('مجموعة مختلطة ممنوعة');
   await page.getByRole('button', { name: 'إنشاء مجموعة (3 أعضاء على الأقل)' }).click();
   await expect(page.locator('p[role="alert"]')).toContainText('المجموعات الخاصة بين الأساتذة والتلاميذ غير متاحة');
@@ -148,7 +148,7 @@ test('approved teacher content appears under its curriculum subject', async ({ p
   await page.getByLabel('الشعبة أو المسلك').selectOption('e2e-primary-track');
   await page.getByRole('button', { name: /الرياضيات - اختبار/ }).click();
   const contentTitle = 'درس أستاذ اختبار منشور ' + suffix(test.info().project.name);
-  await expect(page.getByText(contentTitle)).toBeVisible();
+  await expect(page.getByText(contentTitle, { exact: true })).toBeVisible();
   await expect(page.locator('article').filter({ hasText: contentTitle }).getByText(/هذا نص تجريبي طويل بما يكفي/)).toBeVisible();
 });
 

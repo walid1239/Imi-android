@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 const fs = require('node:fs');
 const path = require('node:path');
-const { initializeApp, getApps } = require('../functions/node_modules/firebase-admin/app');
-const { getFirestore, FieldValue } = require('../functions/node_modules/firebase-admin/firestore');
+const { createRequire } = require('node:module');
+const requireFunctions = createRequire(require.resolve('../functions/package.json'));
+const { initializeApp, getApps } = requireFunctions('firebase-admin/app');
+const { getFirestore, FieldValue } = requireFunctions('firebase-admin/firestore');
 function arg(name){const p=`--${name}=`;const x=process.argv.find(v=>v.startsWith(p));return x?x.slice(p.length):'';}
 const mode=process.argv[2], projectId=arg('project')||process.env.GCLOUD_PROJECT||'';
 const file=path.resolve(__dirname,'../data/curriculum.json');

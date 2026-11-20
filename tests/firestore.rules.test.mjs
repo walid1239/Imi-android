@@ -1006,6 +1006,20 @@ test('WebRTC signaling is limited to call participants and each side owns its SD
   await assertFails(setDoc(doc(alice, 'calls/call-1/callerCandidates/late'), {
     candidate: 'candidate:late', sdpMid: '0', sdpMLineIndex: 0
   }));
+
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'users/alice/blockedUsers/bob'), { uid: 'bob' });
+    await (await import('firebase/firestore')).updateDoc(doc(context.firestore(), 'calls/call-1'), {
+      status: 'accepted'
+    });
+  });
+  await assertFails(getDoc(doc(alice, 'calls/call-1/calleeCandidates/b1')));
+  await assertFails(setDoc(doc(bob, 'calls/call-1/calleeCandidates/blocked'), {
+    candidate: 'candidate:blocked', sdpMid: '0', sdpMLineIndex: 0
+  }));
+  await assertFails((await import('firebase/firestore')).updateDoc(call, {
+    offer: { type: 'offer', sdp: 'v=blocked\\r\\n' }
+  }));
 });
 
 test('Storage claim checks deny access when admin or teacherVerified claim is absent', async () => {

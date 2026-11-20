@@ -122,7 +122,7 @@ test('admin claim exposes the protected Academy administration panel', async ({ 
   await expect(page.getByText(contentTitle, { exact: true })).toBeVisible();
   await page.locator('article').filter({ has: page.getByText(contentTitle, { exact: true }) }).getByRole('button', { name: 'اعتماد ونشر' }).click();
   await expect(page.getByRole('status')).toContainText('تم نشر المحتوى بعد المراجعة');
-  await page.locator('article').filter({ has: page.getByText(teacherUid, { exact: true }) }).getByRole('button', { name: 'اعتماد التوثيق' }).click();
+  await page.locator('article').filter({ has: page.getByText('UID: ' + teacherUid, { exact: true }) }).getByRole('button', { name: 'اعتماد التوثيق' }).click();
   await expect(page.getByRole('status')).toContainText('تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق');
 });
 
@@ -152,7 +152,7 @@ test('approved teacher content appears under its curriculum subject', async ({ p
   await page.getByRole('button', { name: /الرياضيات - اختبار/ }).click();
   const contentTitle = 'درس أستاذ اختبار منشور ' + suffix(test.info().project.name);
   await expect(page.getByText(contentTitle, { exact: true })).toBeVisible();
-  await expect(page.locator('article').filter({ hasText: contentTitle }).getByText(/هذا نص تجريبي طويل بما يكفي/)).toBeVisible();
+  await expect(page.locator('article').filter({ has: page.getByText(contentTitle, { exact: true }) }).getByText(/هذا نص تجريبي طويل بما يكفي/, { exact: false })).toBeVisible();
 });
 
 test('teacher application and studio routes explain verification gate', async ({ page }) => {

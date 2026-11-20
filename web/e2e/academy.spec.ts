@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const password = 'IMI-Emulator-Password-2026!';
 const suffix = (project: string) => project.includes('mobile') ? 'mobile' : 'desktop';
-const email = (role: 'a' | 'b' | 'c' | 'd' | 'admin', project: string) => `e2e-${role}-${suffix(project)}@imi.test`;
+const email = (role: 'a' | 'b' | 'c' | 'd' | 'e' | 'admin', project: string) => `e2e-${role}-${suffix(project)}@imi.test`;
 
 async function login(page: Page, address: string) {
   await page.goto('/login');
@@ -37,8 +37,8 @@ test('two learners can befriend each other, exchange a message and publish a sta
     await login(secondPage, email('b', project));
 
     await page.getByRole('button', { name: /الأصدقاء/ }).first().click();
-    await page.getByPlaceholder('اكتب حرفين على الأقل من الاسم…').fill('تلميذ باء');
-    await expect(page.getByText('تلميذ باء').first()).toBeVisible();
+    await page.getByPlaceholder('اكتب حرفين على الأقل من الاسم…').fill('تلميذ باء ' + suffix(project));
+    await expect(page.getByText('تلميذ باء ' + suffix(project)).first()).toBeVisible();
     await page.getByRole('button', { name: 'إضافة' }).click();
     await expect(page.getByRole('status')).toContainText('أُرسل طلب الصداقة');
 
@@ -48,9 +48,9 @@ test('two learners can befriend each other, exchange a message and publish a sta
     await expect(secondPage.getByRole('status')).toContainText('تم قبول طلب الصداقة');
 
     await page.getByRole('button', { name: /المحادثات/ }).first().click();
-    await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ باء');
+    await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ باء ' + suffix(project));
     await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
-    await expect(page.getByText('تلميذ باء')).toBeVisible();
+    await expect(page.getByText('تلميذ باء ' + suffix(project))).toBeVisible()
     await page.getByRole('button', { name: 'مراسلة' }).click();
     await page.getByPlaceholder('اكتب رسالتك…').fill('رسالة اختبار من IMI');
     await page.getByRole('button', { name: 'إرسال' }).click();
@@ -63,7 +63,7 @@ test('two learners can befriend each other, exchange a message and publish a sta
     await page.getByRole('button', { name: 'حظر المستخدم' }).click();
     await expect(page.getByRole('status')).toContainText('تم حظر المستخدم وإيقاف المحادثة المباشرة');
 
-    await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ جيم');
+    await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ هاء ' + suffix(project));
     await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
     await page.getByRole('button', { name: 'للمجموعة' }).click();
     await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ دال ' + suffix(project));
@@ -122,8 +122,9 @@ test('admin claim exposes the protected Academy administration panel', async ({ 
 
 test('verified teachers cannot start private student chats or mixed private groups', async ({ page }) => {
   await login(page, email('c', test.info().project.name));
-  await page.goto('/messages');
-  await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ جيم');
+  await page.goto('/app');
+  await page.getByRole('button', { name: /المحادثات/ }).first().click();
+  await page.getByPlaceholder('ابحث بالاسم…').fill('تلميذ ألف ' + suffix(test.info().project.name));
   await page.getByRole('button', { name: 'بحث عن مستخدمين' }).click();
   await page.getByRole('button', { name: 'مراسلة' }).click();
   await expect(page.getByRole('alert')).toContainText('التواصل الخاص بين الأستاذ والتلميذ غير متاح');

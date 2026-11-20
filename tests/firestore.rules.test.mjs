@@ -47,8 +47,10 @@ before(async () => {
     await setDoc(doc(db, 'calls/call-1'), { callerUid: 'alice', calleeUid: 'bob', conversationId: 'chat-1', kind: 'video', status: 'ringing', offerRevision: 0, answerRevision: -1, iceRestartCount: 0, createdAt: new Date(), expiresAt: Timestamp.fromDate(new Date(Date.now() + 60000)) });
     await setDoc(doc(db, 'conversations/chat-1'), {
       participants: ['alice', 'bob'],
+      type: 'direct',
       createdBy: 'alice',
-      createdAt: new Date()
+      createdAt: new Date(),
+      lastMessageAt: new Date()
     });
     await setDoc(doc(db, 'conversations/chat-1/messages/receipt-target'), {
       senderUid: 'bob',

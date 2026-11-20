@@ -20,6 +20,8 @@ This document is a release runbook. No command in this document has been execute
 
 Use Node.js 22 and JDK 21 or later for Firebase Emulator Suite (Android Gradle build continues to use JDK 17). The root, functions/, and web/ lockfiles are committed (lockfileVersion 3) and generated with npm 22. Use npm ci from each package root for reproducible installs.
 
+**Billing gate:** Firebase requires the Blaze plan / a linked Cloud Billing account to deploy Cloud Functions and to upgrade the Functions runtime. The free usage quota does not remove this requirement; Spark cannot deploy new or existing Functions. Under the current no-billing constraint, Node 22 Functions can be typechecked and emulator-tested, but production deployment is blocked. Do not enable billing or run the deploy workflow without the owner's separate explicit approval.
+
 Run from the repository root:
 
 ```powershell
@@ -63,7 +65,7 @@ After that gate is resolved, and only after the owner explicitly authorizes depl
 
 2. **Cloud Functions**
    ```powershell
-   firebase deploy --only functions --project imi-indroid
+   firebase deploy --only functions --project imi-indroid  # requires Blaze; owner approval only
    ```
 
 3. **Web hosting** — select a provider first; there is no Firebase Hosting target in firebase.json, so firebase deploy --only hosting is currently invalid. No Hosting backend or deployment is configured by this repository.

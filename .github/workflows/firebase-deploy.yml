@@ -75,14 +75,14 @@ jobs:
       - name: Install Firebase CLI
         run: npm install --global firebase-tools@15.37.0
 
-      - name: Deploy Functions and security rules
+      - name: Deploy Cloud Functions only
         env:
           PROJECT_ID: ${{ inputs.project_id }}
         run: |
-          firebase deploy --project "$PROJECT_ID" --only functions,firestore:rules,firestore:indexes,storage
+          firebase deploy --project "$PROJECT_ID" --only functions
 
       - name: Report deployed target
         if: success()
         env:
           PROJECT_ID: ${{ inputs.project_id }}
-        run: echo "Firebase deployment completed for explicitly selected project: $PROJECT_ID"
+        run: echo "Cloud Functions deployment completed for explicitly selected project: $PROJECT_ID"

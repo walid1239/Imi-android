@@ -83,6 +83,8 @@ npx --yes firebase-tools@15.37.0 deploy --only firestore:rules,firestore:indexes
 
 ## 5. نشر Cloud Functions بعد القواعد
 
+**قيد خطة مجانية مهم:** Firebase يشترط خطة Blaze وربط حساب فوترة لنشر Cloud Functions؛ حصص الاستخدام المجانية لا تعني أن النشر متاح على Spark. وثائق Firebase تشترط Blaze قبل ترقية Node runtime، وتمنع نشر الدوال على Spark. بما أن شرط المشروع الحالي عدم ربط فوترة، فهذه الخطوة متوقفة ولا يجوز تشغيل أمر النشر أو Workflow حتى يقرر المالك صراحة قبول Blaze ومخاطر الفوترة.
+
 تأكد من بناء Functions واختبارها:
 
 ```powershell
@@ -126,12 +128,12 @@ npm run test:health --prefix web
 
 ## 7. تفعيل Workflow النشر بعد وجوده على main
 
-ملف `.github/workflows/firebase-deploy.yml` مصمم ليعمل يدوياً (`workflow_dispatch`) فقط. بعد مراجعة التغييرات ودمجها إلى `main` بموافقة المالك، ومن دون تفعيل تلقائي:
+ملف `.github/workflows/firebase-deploy.yml` مصمم ليعمل يدوياً (`workflow_dispatch`) فقط، وينشر **Cloud Functions فقط**. لا ينشر Firestore Rules أو Storage Rules أو indexes. يجب أن تبقى القواعد خارج هذا الـWorkflow إلى أن يُصلح تعارض `users/{uid}` مع Android وتنجح اختبارات العقد الفعلي ويوافق المالك على نشر القواعد منفصلاً. كما أن نشر Functions يتطلب Blaze؛ لذلك لا تشغّل الـWorkflow مع بقاء شرط Spark/عدم ربط الفوترة. بعد مراجعة التغييرات ودمجها إلى `main` بموافقة المالك، ومن دون تفعيل تلقائي:
 1. افتح GitHub → Actions → **IMI Firebase Cloud Deployment**.
 2. اختر **Run workflow** على فرع `main`.
 3. أدخل `project_id=imi-indroid`.
 4. اكتب `DEPLOY` حرفياً في خانة التأكيد.
-5. تأكد من إعداد GitHub Environment باسم `firebase-production`، مع allowlist للمشروع `FIREBASE_PROJECT_ID`، وOIDC provider وservice account بأقل صلاحيات لازمة، ومراجعة/موافقة Environment عند تفعيلها.
+5. لا تتابع إلا بعد موافقة مستقلة على Blaze؛ وتأكد من إعداد GitHub Environment باسم `firebase-production`، مع allowlist للمشروع `FIREBASE_PROJECT_ID`، وOIDC provider وservice account بأقل صلاحيات لازمة، ومراجعة/موافقة Environment عند تفعيلها.
 6. راجع SHA واسم كل Job وكل Step قبل متابعة أي إجراء.
 
 لا تفعّل Workflow أو تشغّله أثناء وضع الأمان الحالي.

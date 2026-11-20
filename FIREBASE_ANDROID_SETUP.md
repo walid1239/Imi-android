@@ -10,8 +10,8 @@
 2. سجّل معرّف المشروع الحقيقي من Project settings. لا تفترض أن `cosmic-altar-m6shk` هو المشروع الصحيح؛ يجب أن تؤكد ذلك من حسابك.
 3. أضف تطبيق Android بمعرّف الحزمة الدقيق `com.walid.chat`.
 4. نزّل `google-services.json` الخاص بهذا التطبيق.
-5. فعّل Firebase Authentication > Anonymous مؤقتًا للاختبار فقط.
-6. أنشئ Firestore Database وStorage في المنطقة التي تختارها. راجع قواعد الأمان قبل أي بيانات إنتاجية.
+5. هيّئ Firebase Authentication وفعّل فقط طرق الدخول التي ستُختبر فعليًا: Anonymous مؤقتًا، وEmail/Password وGoogle عند الحاجة. وجود `google-services.json` في بناء CI لا يثبت أن أي مزوّد دخول مفعّل في Firebase Console.
+6. أنشئ Firestore Database في المنطقة التي تختارها، وراجع قواعد الأمان قبل أي بيانات إنتاجية. لا تُنشئ ولا تستخدم Firebase Storage ضمن شرط Spark المجاني؛ وصول Storage إلى الـbucket يتطلب Blaze منذ 3 فبراير 2026. لذلك رفع الصور والفيديو والملفات عبر Firebase Storage غير متاح على Spark. لا تفعّل Blaze أو تربط وسيلة دفع. يلزم اعتماد مزوّد تخزين بديل مجاني/مناسب أو موافقة مستقلة على الفوترة قبل تفعيل الوسائط.
 7. لا تضع مفاتيح Admin أو Meta في التطبيق أو المستودع.
 
 ## 2. إعداد بناء Android في GitHub

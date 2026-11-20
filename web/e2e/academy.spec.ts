@@ -23,7 +23,7 @@ test('public academy can be browsed without an account in Arabic RTL', async ({ 
   await page.getByLabel('الشعبة أو المسلك').selectOption('e2e-primary-track');
   await expect(page.getByRole('button', { name: /الرياضيات - اختبار/ })).toBeVisible();
   await page.getByRole('button', { name: /الرياضيات - اختبار/ }).click();
-  await expect(page.getByText('لا دروس بعد. سيضيفها أساتذتنا قريباً')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'الرياضيات - اختبار' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'تسجيل الدخول لحفظ التقدم سحابياً' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'أصبح أستاذاً' })).toBeVisible();
 });
@@ -119,7 +119,7 @@ test('admin claim exposes the protected Academy administration panel', async ({ 
   await expect(page.getByText(contentTitle, { exact: true })).toBeVisible();
   await page.locator('article').filter({ has: page.getByText(contentTitle, { exact: true }) }).getByRole('button', { name: 'اعتماد ونشر' }).click();
   await expect(page.getByRole('status')).toContainText('تم نشر المحتوى بعد المراجعة');
-  await page.locator('article').filter({ hasText: teacherUid }).getByRole('button', { name: 'اعتماد التوثيق' }).click();
+  await page.locator('article').filter({ has: page.getByText(teacherUid, { exact: true }) }).getByRole('button', { name: 'اعتماد التوثيق' }).click();
   await expect(page.getByRole('status')).toContainText('تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق');
 });
 

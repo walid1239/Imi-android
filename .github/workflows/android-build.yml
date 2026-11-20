@@ -1,5 +1,5 @@
 name: IMI Android CI
-# npm ci is intentionally deferred until the three tracked package-lock.json files exist.
+# Root, Functions, and Web lockfiles are committed; CI uses npm ci for reproducible installs.
 # Firebase Emulator commands use the exact firebase-tools@15.37.0 pin and Node.js 22.
 # Keep manual dispatch and PR/push validation available on the feature branch; emulator checks run in Web CI.
 

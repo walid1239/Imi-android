@@ -18,12 +18,12 @@ This document is a release runbook. No command in this document has been execute
 
 ## 2. Local verification commands
 
-Use Node.js 22. The repository lockfiles are a required precondition for npm ci; do not claim reproducible installs until the root, functions/, and web/ lockfiles are committed and verified. Until then, use npm install only for local diagnostic work.
+Use Node.js 22. The root, functions/, and web/ lockfiles are committed (lockfileVersion 3) and generated with npm 22. Use npm ci from each package root for reproducible installs.
 
 Run from the repository root:
 
 ```powershell
-npm install
+npm ci
 npm run emulators:test
 ```
 
@@ -31,7 +31,7 @@ Run Functions tests:
 
 ```powershell
 cd functions
-npm install
+npm ci
 npm test
 cd ..
 ```
@@ -40,7 +40,7 @@ Run Web checks:
 
 ```powershell
 cd web
-npm install
+npm ci
 npm run typecheck
 npm run lint
 npm run build

@@ -1,5 +1,7 @@
-const { initializeApp, getApps } = require('../functions/node_modules/firebase-admin/app');
-const { getFirestore } = require('../functions/node_modules/firebase-admin/firestore');
+const { createRequire } = require('node:module');
+const requireFunctions = createRequire(require.resolve('../functions/package.json'));
+const { initializeApp, getApps } = requireFunctions('firebase-admin/app');
+const { getFirestore } = requireFunctions('firebase-admin/firestore');
 const projectId = process.env.GCLOUD_PROJECT || 'demo-imi-academy';
 if (!process.env.FIRESTORE_EMULATOR_HOST || !projectId.startsWith('demo-')) throw new Error('Verification is Emulator-only.');
 if (!getApps().length) initializeApp({ projectId });

@@ -27,7 +27,6 @@ export default function ProfilePanel({ user }: { user: User }) {
   const [notice, setNotice] = useState('');
   const [linkEmail, setLinkEmail] = useState('');
   const [linkPassword, setLinkPassword] = useState('');
-  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [accountBusy, setAccountBusy] = useState(false);
 
   useEffect(() => {
@@ -140,18 +139,7 @@ export default function ProfilePanel({ user }: { user: User }) {
     } finally { setAccountBusy(false); }
   }
 
-  async function deleteAccount() {
-    if (deleteConfirmation !== 'DELETE') { setError('اكتب DELETE حرفياً لتأكيد الحذف.'); return; }
-    if (!window.confirm('سيُحذف الحساب والملف الشخصي والبيانات والملفات المرتبطة به. هل تريد المتابعة؟')) return;
-    setAccountBusy(true); setError(''); setNotice('');
-    try {
-      await httpsCallable(getFunctions(), 'deleteMyAccount')({ confirmation: 'DELETE' });
-      await signOut(auth);
-      router.replace('/login');
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'تعذر حذف الحساب. قد تحتاج إلى تسجيل الدخول من جديد.');
-    } finally { setAccountBusy(false); }
-  }
+
 
   return <section dir="rtl" className="mx-auto max-w-2xl space-y-5">
     <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5">
@@ -195,9 +183,8 @@ export default function ProfilePanel({ user }: { user: User }) {
       </form> : <p className="text-xs leading-6 text-slate-500">حسابك مرتبط بطريقة دخول دائمة. استخدم «نسيت كلمة المرور؟» من شاشة الدخول لاستعادتها.</p>}
       <div className="space-y-3 rounded-xl border border-red-400/20 p-4">
         <p className="text-sm font-bold text-red-200">حذف الحساب والبيانات</p>
-        <p className="text-xs leading-6 text-slate-500">يتطلب تأكيداً صريحاً وتسجيل دخول حديثاً. يحذف الملف الشخصي وملفات الحساب ومحتوى الأستاذ والعضويات. قد تبقى سجلات إشراف مجمّعة إذا كان الاحتفاظ بها مطلوباً قانونياً.</p>
-        <label className="block text-sm">اكتب DELETE للتأكيد<input value={deleteConfirmation} onChange={e=>setDeleteConfirmation(e.target.value)} className="mt-2 w-full rounded-xl bg-slate-900 p-3" /></label>
-        <button type="button" onClick={deleteAccount} disabled={accountBusy||deleteConfirmation!=='DELETE'} className="rounded-xl border border-red-400/30 px-4 py-3 text-sm font-bold text-red-200 disabled:opacity-40">{accountBusy?'جارٍ التنفيذ…':'حذف الحساب نهائياً'}</button>
+        <p className="text-xs leading-6 text-amber-200">الحذف معطّل مؤقتاً. لن نعرض زر تنفيذ حتى يثبت اختبار المحاكي إزالة كل البيانات والملفات والمراجع التابعة للحساب دون ترك بيانات يتيمة.</p>
+        <button type="button" disabled className="cursor-not-allowed rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-500 opacity-60">حذف الحساب غير متاح حالياً</button>
       </div>
     </section>
   </section>;

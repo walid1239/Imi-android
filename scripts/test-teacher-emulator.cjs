@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 const assert = require('node:assert/strict');
-const { initializeApp, getApps } = require('../functions/node_modules/firebase-admin/app');
-const { getAuth } = require('../functions/node_modules/firebase-admin/auth');
-const { getFirestore, Timestamp } = require('../functions/node_modules/firebase-admin/firestore');
-const { getStorage } = require('../functions/node_modules/firebase-admin/storage');
+const { createRequire } = require('node:module');
+const requireFunctions = createRequire(require.resolve('../functions/package.json'));
+const { initializeApp, getApps } = requireFunctions('firebase-admin/app');
+const { getAuth } = requireFunctions('firebase-admin/auth');
+const { getFirestore, Timestamp } = requireFunctions('firebase-admin/firestore');
+const { getStorage } = requireFunctions('firebase-admin/storage');
 
 const projectId = process.env.GCLOUD_PROJECT || 'demo-imi-teacher';
 if (!projectId.startsWith('demo-')

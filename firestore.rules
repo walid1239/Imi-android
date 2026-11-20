@@ -301,7 +301,7 @@ service cloud.firestore {
       }
       match /calleeCandidates/{candidateId} {
         allow read: if canSignalCall(callId);
-        allow create: if isCallParticipant(callId)
+        allow create: if canSignalCall(callId)
           && get(/databases/$(database)/documents/calls/$(callId)).data.status in ['ringing', 'accepted']
           && get(/databases/$(database)/documents/calls/$(callId)).data.calleeUid == request.auth.uid
           && request.resource.data.keys().hasOnly(['candidate', 'sdpMid', 'sdpMLineIndex'])

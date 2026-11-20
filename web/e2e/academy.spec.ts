@@ -37,9 +37,9 @@ test('two learners can befriend each other, exchange a message and publish a sta
     await login(secondPage, email('b', project));
 
     await page.getByRole('button', { name: /الأصدقاء/ }).first().click();
-    await page.getByPlaceholder('اكتب حرفين على الأقل من الاسم…').fill('تلميذ باء ' + suffix(project));
+    await page.getByPlaceholder('اكتب حرفين على الأقل من الاسم…').fill('تلميذ ألف ' + suffix(project));
     await expect(page.getByText('تلميذ باء ' + suffix(project)).first()).toBeVisible();
-    const addFriend = page.getByTestId('add-friend-imi-e2e-b-' + suffix(project));
+    const addFriend = page.getByTestId('add-friend-imi-e2e-a-' + suffix(project));
     await expect(addFriend).toBeVisible();
     await expect(addFriend).toBeEnabled();
     await addFriend.click();

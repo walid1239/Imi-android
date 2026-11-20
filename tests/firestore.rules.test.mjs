@@ -1003,8 +1003,21 @@ test('users root document allows only profile fields and rejects self-escalation
   await assertSucceeds((await import('firebase/firestore')).updateDoc(doc(aliceDb, 'users/alice'), {
     displayName: 'Alice Updated',
     city: 'Casablanca',
+    bio: 'نبذة خاصة للاختبار',
+    languages: ['ar', 'fr'],
     updatedAt: serverTimestamp()
   }));
+  await assertFails((await import('firebase/firestore')).updateDoc(doc(aliceDb, 'users/alice'), {
+    bio: 'x'.repeat(301), updatedAt: serverTimestamp()
+  }));
+  await assertFails((await import('firebase/firestore')).updateDoc(doc(aliceDb, 'users/alice'), {
+    languages: Array.from({ length: 11 }, (_, index) => `lang-${index}`), updatedAt: serverTimestamp()
+  }));
+  const newUserDb = env.authenticatedContext('new-user').firestore();
+  await assertSucceeds(setDoc(doc(newUserDb, 'users/new-user'), {
+    displayName: 'مستخدم جديد', city: 'Casablanca', bio: 'نبذة خاصة', languages: ['ar'], updatedAt: serverTimestamp()
+  }));
+  await assertFails(getDoc(doc(malloryDb, 'users/new-user')));
 
   await assertFails((await import('firebase/firestore')).updateDoc(doc(aliceDb, 'users/alice'), {
     admin: true,

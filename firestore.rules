@@ -47,24 +47,32 @@ service cloud.firestore {
       // verification, moderation, and all other account fields remain server-owned.
       allow read: if isSelf(uid);
       allow create: if isSelf(uid)
-        && request.resource.data.keys().hasOnly(['displayName', 'city', 'photoPath', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['displayName', 'city', 'photoPath', 'bio', 'languages', 'updatedAt'])
         && request.resource.data.displayName is string
         && request.resource.data.displayName.size() >= 2
         && request.resource.data.displayName.size() <= 60
         && (!('city' in request.resource.data)
           || (request.resource.data.city is string && request.resource.data.city.size() <= 80))
+        && (!('bio' in request.resource.data)
+          || (request.resource.data.bio is string && request.resource.data.bio.size() <= 300))
+        && (!('languages' in request.resource.data)
+          || (request.resource.data.languages is list && request.resource.data.languages.size() <= 10))
         && (!('photoPath' in request.resource.data)
           || (request.resource.data.photoPath is string
             && request.resource.data.photoPath.matches('users/' + uid + '/avatars/.*')))
         && request.resource.data.updatedAt == request.time;
       allow update: if isSelf(uid)
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['displayName', 'city', 'photoPath', 'updatedAt'])
+          .hasOnly(['displayName', 'city', 'photoPath', 'bio', 'languages', 'updatedAt'])
         && request.resource.data.displayName is string
         && request.resource.data.displayName.size() >= 2
         && request.resource.data.displayName.size() <= 60
         && request.resource.data.city is string
         && request.resource.data.city.size() <= 80
+        && (!('bio' in request.resource.data)
+          || (request.resource.data.bio is string && request.resource.data.bio.size() <= 300))
+        && (!('languages' in request.resource.data)
+          || (request.resource.data.languages is list && request.resource.data.languages.size() <= 10))
         && (!('photoPath' in request.resource.data)
           || (request.resource.data.photoPath is string
             && request.resource.data.photoPath.matches('users/' + uid + '/avatars/.*')))

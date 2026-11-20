@@ -153,7 +153,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install security test dependencies
         run: npm install --no-audit --no-fund
@@ -164,4 +164,4 @@ jobs:
           npm test --prefix functions
 
       - name: Run Firestore rules tests in emulator
-        run: npx --yes firebase-tools@13.29.2 emulators:exec --only firestore,storage --project demo-imi-security "npm run test:rules"
+        run: npx --yes firebase-tools@15.37.0 emulators:exec --only firestore,storage --project demo-imi-security "npm run test:rules"

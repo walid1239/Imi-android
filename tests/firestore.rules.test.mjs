@@ -566,7 +566,8 @@ test('teacher applications and profiles are private and client writes cannot gra
   await assertSucceeds(getDoc(doc(mallory, 'teacherProfiles/alice')));
   await assertFails(getDoc(doc(mallory, 'teacherProfiles/bob')));
   await assertFails(getDoc(doc(mallory, 'teacherProfiles/carol')));
-  await assertSucceeds(getDoc(doc(alice, 'teacherProfiles/bob')));
+  await assertSucceeds(getDoc(doc(alice, 'teacherProfiles/alice')));
+  await assertSucceeds(getDoc(doc(admin, 'teacherProfiles/bob')));
   await assertFails(setDoc(doc(alice, 'teacherProfiles/alice'), { published: true, verified: true }));
   await assertFails(getDoc(doc(guest, 'teacherLiveSessions/real-room')));
   await assertSucceeds(getDoc(doc(mallory, 'teacherLiveSessions/real-room')));

@@ -6,6 +6,9 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 export const deleteMyAccount = onCall<{ confirmation?: unknown }>({ timeoutSeconds: 540, memory: "512MiB" }, async request => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  // Deletion remains disabled until every owned collection, subcollection,
+  // cross-user reference, and Storage object has an Emulator-proven cleanup path.
+  throw new HttpsError("failed-precondition", "حذف الحساب معطّل مؤقتاً حتى اكتمال تدقيق الحذف واختبارات عدم بقاء البيانات.");
   if (request.data?.confirmation !== "DELETE") {
     throw new HttpsError("invalid-argument", "اكتب DELETE لتأكيد حذف الحساب وبياناته.");
   }

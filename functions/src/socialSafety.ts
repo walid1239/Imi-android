@@ -125,15 +125,41 @@ export const addGroupParticipants = onCall<GroupInput & { conversationId?: unkno
   const conversation = await ref.get();
   if (!conversation.exists || conversation.get("type") !== "group") throw new HttpsError("not-found", "المجموعة غير موجودة.");
   const admins = conversation.get("admins"), current = conversation.get("participants");
-  if (!Array.isArray(admins) || !admins.includes(actor) || !Array.isArray(current)) {
+  if (!Array.isArray(admins) || !admins.includes(actor) || !Array.isArray(current)
+    || !current.every(uid => typeof uid === "string") || new Set(current).size !== current.length) {
     throw new HttpsError("permission-denied", "مشرفو المجموعة فقط يمكنهم إضافة أعضاء.");
   }
+  const currentSnapshot = [...current].sort();
   const fresh = additions.filter(uid => !current.includes(uid));
   if (current.length + fresh.length > 50) throw new HttpsError("resource-exhausted", "الحد الأقصى للمجموعة 50 عضواً.");
+  if (fresh.length === 0) return { participantCount: current.length };
   await assertSamePrivateChatRole([...current, ...fresh]);
   await Promise.all(fresh.map(async uid => { await ensureNoBlock(db, actor, uid); await ensureFriends(db, actor, uid); }));
   const profiles = await Promise.all(fresh.map(uid => db.doc("publicProfiles/" + uid).get()));
   if (profiles.some(profile => !profile.exists)) throw new HttpsError("not-found", "تعذر العثور على ملف أحد الأعضاء.");
-  await ref.update({ participants: [...current, ...fresh].sort(), updatedAt: FieldValue.serverTimestamp() });
+
+  // Revalidate the membership snapshot transactionally. Without this guard, two
+  // concurrent admin requests can overwrite each other's participant additions.
+  await db.runTransaction(async transaction => {
+    const latest = await transaction.get(ref);
+    if (!latest.exists || latest.get("type") !== "group") {
+      throw new HttpsError("not-found", "المجموعة غير موجودة.");
+    }
+    const latestAdmins = latest.get("admins");
+    const latestParticipants = latest.get("participants");
+    if (!Array.isArray(latestAdmins) || !latestAdmins.includes(actor)) {
+      throw new HttpsError("permission-denied", "مشرفو المجموعة فقط يمكنهم إضافة أعضاء.");
+    }
+    if (!Array.isArray(latestParticipants)
+      || latestParticipants.length !== currentSnapshot.length
+      || !latestParticipants.every(uid => typeof uid === "string")
+      || [...latestParticipants].sort().some((uid, index) => uid !== currentSnapshot[index])) {
+      throw new HttpsError("aborted", "تغيرت عضوية المجموعة أثناء العملية؛ أعد المحاولة.");
+    }
+    transaction.update(ref, {
+      participants: [...currentSnapshot, ...fresh].sort(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
   return { participantCount: current.length + fresh.length };
 });

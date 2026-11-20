@@ -570,7 +570,7 @@ private fun ReelsScreen() {
     val storage = remember(configured) { if (configured) FirebaseStorage.getInstance() else null }
 
     fun loadReels() {
-        if (db == null || auth?.currentUser == null) {
+        if (db == null || storage == null || auth?.currentUser == null) {
             error = "خدمة Firebase غير مهيأة؛ لن نعرض مقاطع تجريبية."
             reels = emptyList()
             return
@@ -579,12 +579,13 @@ private fun ReelsScreen() {
             busy = true
             runCatching {
                 db.collection("reels")
+                    .whereEqualTo("status", "approved")
                     .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
                     .limit(50)
                     .get().await().documents.mapNotNull { doc ->
-                        val url = doc.getString("videoUrl") ?: return@mapNotNull null
                         val owner = doc.getString("ownerUid") ?: return@mapNotNull null
                         val path = doc.getString("storagePath") ?: return@mapNotNull null
+                        val url = storage.reference.child(path).downloadUrl.await().toString()
                         CloudReel(
                             id = doc.id,
                             ownerUid = owner,
@@ -597,9 +598,9 @@ private fun ReelsScreen() {
             }.onSuccess {
                 reels = it
                 if (selected?.id !in it.map { reel -> reel.id }) selected = it.firstOrNull()
-                error = if (it.isEmpty()) "لا توجد مقاطع منشورة بعد. أضف أول مقطع حقيقي إلى موجز IMI." else null
+                error = if (it.isEmpty()) "لا توجد مقاطع وافق عليها المشرف بعد." else null
             }.onFailure {
-                error = "تعذر تحميل موجز Reels من السحابة: ${it.localizedMessage ?: "خطأ غير معروف"}"
+                error = "تعذر تحميل موجز Reels المعتمدة من السحابة: ${it.localizedMessage ?: "خطأ غير معروف"}"
             }
             busy = false
         }
@@ -622,22 +623,22 @@ private fun ReelsScreen() {
                         require(mime in listOf("video/mp4", "video/webm")) { "الصيغة المدعومة حالياً MP4 أو WebM فقط." }
                         val id = db.collection("reels").document().id
                         val extension = if (mime == "video/webm") "webm" else "mp4"
-                        val path = "reels/$uid/$id.$extension"
+                        val path = "reels/$uid/$id/video.$extension"
                         val ref = storage.reference.child(path)
                         val metadata = StorageMetadata.Builder().setContentType(mime).build()
                         ref.putFile(uri, metadata).await()
-                        val url = ref.downloadUrl.await().toString()
-                        db.collection("reels").document(id).set(
-                            mapOf(
-                                "ownerUid" to uid,
-                                "caption" to caption.trim().take(300),
-                                "videoUrl" to url,
-                                "storagePath" to path,
-                                "contentType" to mime,
-                                "createdAt" to FieldValue.serverTimestamp()
-                            )
-                        ).await()
+                        com.google.firebase.functions.FirebaseFunctions.getInstance()
+                            .getHttpsCallable("submitReel")
+                            .call(
+                                mapOf(
+                                    "reelId" to id,
+                                    "caption" to caption.trim().take(300),
+                                    "storagePath" to path,
+                                    "contentType" to mime
+                                )
+                            ).await()
                         caption = ""
+                        Toast.makeText(context, "تم رفع المقطع وإرساله للمراجعة؛ سيظهر بعد موافقة المشرف.", Toast.LENGTH_LONG).show()
                     }.onFailure {
                         error = "فشل رفع المقطع أو نشره: ${it.localizedMessage ?: "خطأ غير معروف"}"
                     }

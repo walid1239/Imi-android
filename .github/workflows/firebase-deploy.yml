@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       confirm_deploy:
-        description: "Type DEPLOY to authorize deploying Functions and Firebase rules"
+        description: "Type DEPLOY to authorize deploying Cloud Functions only (Firebase Rules are not deployed)"
         required: true
         type: string
 

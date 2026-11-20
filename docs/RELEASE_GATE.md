@@ -18,7 +18,7 @@ This document is a release runbook. No command in this document has been execute
 
 ## 2. Local verification commands
 
-Use Node.js 22. The root, functions/, and web/ lockfiles are committed (lockfileVersion 3) and generated with npm 22. Use npm ci from each package root for reproducible installs.
+Use Node.js 22 and JDK 21 or later for Firebase Emulator Suite (Android Gradle build continues to use JDK 17). The root, functions/, and web/ lockfiles are committed (lockfileVersion 3) and generated with npm 22. Use npm ci from each package root for reproducible installs.
 
 Run from the repository root:
 

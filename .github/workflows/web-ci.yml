@@ -69,6 +69,7 @@ jobs:
       - run: npm run build
       - run: npm run test:health
 
+  # Firebase CLI 15.37.0 Emulator Suite requires JDK 21+.
   functions:
     runs-on: ubuntu-latest
     defaults:

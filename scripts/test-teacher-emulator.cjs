@@ -64,6 +64,7 @@ async function main() {
   await auth.createUser({ uid: applicantUid, email: applicantUid + '@example.invalid' });
   await auth.createUser({ uid: adminUid, email: adminUid + '@example.invalid' });
   await auth.setCustomUserClaims(adminUid, { admin: true });
+  const applicantToken = await tokenFor(applicantUid);
   await db.doc('curriculumNodes/level-primary').set({
     id: 'level-primary', parentId: null, type: 'level', nameAr: 'مستوى اختبار',
     nameFr: 'Niveau test', language: 'ar', order: 1, needsReview: false, status: 'published',
@@ -98,7 +99,6 @@ async function main() {
   assert.equal((await db.collection('moderationAudit').doc(curriculumReview.operationId).get()).get('action'), 'curriculum_node_approved');
 
   await assert.rejects(call('submitTeacherApplication', {}, null), error => error.code === 'UNAUTHENTICATED');
-  const applicantToken = await tokenFor(applicantUid);
   const submitted = await call('submitTeacherApplication', {
     fullName: 'أستاذ اختبار',
     levelIds: ['level-primary'],

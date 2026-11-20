@@ -5,6 +5,7 @@
 ## بوابات إلزامية قبل البدء
 
 - تأكد أن Node.js 22 مثبت محلياً: `node --version`.
+- ثبّت JDK 21 أو أحدث لتشغيل Firebase Emulator Suite مع firebase-tools 15.37.0؛ Gradle build Android يبقى على JDK 17 كما هو.
 - استخدم مشروع Firebase الصحيح فقط: `imi-indroid`.
 - ملفات القفل الثلاثة ملتزمة في المستودع ومولّدة بـ npm 22: `package-lock.json` و`functions/package-lock.json` و`web/package-lock.json`. استخدم `npm ci` ولا تعدّلها يدوياً.
 - **لا تنشر Firestore rules الحالية الآن.** يجب أولاً حل تعارض/عدم تطابق عقد `users/{uid}` بين كتابة Android وحقول السماح في `firestore.rules`، ثم إضافة/اجتياز Emulator tests التي تغطي كتابة Android الفعلية. لا يكفي نجاح الاختبارات الحالية وحده.
@@ -143,6 +144,7 @@ npm run test:health --prefix web
 | `HTTP 403` أو `Permission denied` | حساب المالك أو service account يفتقد صلاحية | راجع IAM بأقل صلاحية؛ لا توسع الأدوار عشوائياً |
 | `Project not found` أو مشروع نشط غير متوقع | اختيار مشروع خاطئ أو لا توجد صلاحية | أوقف العملية وتحقق من `.firebaserc` و`firebase projects:list` |
 | `Secret does not exist` أو مطالبة بإنشاء السر | السر غير موجود أو غير مربوط بالدالة | أنشئه المالك بالأمر التفاعلي أعلاه؛ لا تضع القيمة في Git |
+| `firebase-tools no longer supports Java version before 21` | Firebase CLI 15.37.0 يرفض JDK أقدم من 21 | ثبّت JDK 21 أو أحدث واجعل JAVA_HOME وPATH يشيران إليه ثم أعد الاختبار |
 | `EADDRINUSE` عند تشغيل Emulator | المنفذ مستخدم | أوقف العملية المالكة للمنفذ أو اضبط منفذاً محلياً مختلفاً |
 | `npm ci` يقول إن lockfile غير متزامن | package.json تغير دون تحديث lockfile | أعد إنشاء lockfile باستخدام npm 22، راجعه، ثم أعد الاختبار |
 | فشل اختبار `users/{uid}` | اختلاف بين شكل كتابة Android وقواعد Firestore | لا تنشر القواعد؛ أصلح العقد واختبر العمليات نفسها في Emulator |

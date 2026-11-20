@@ -43,7 +43,33 @@ service cloud.firestore {
 
     // Private account data: only the account owner can access it.
     match /users/{uid} {
-      allow read, create, update, delete: if isSelf(uid);
+      // Clients may edit only the public profile projection. Identity, roles,
+      // verification, moderation, and all other account fields remain server-owned.
+      allow read: if isSelf(uid);
+      allow create: if isSelf(uid)
+        && request.resource.data.keys().hasOnly(['displayName', 'city', 'photoPath', 'updatedAt'])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 2
+        && request.resource.data.displayName.size() <= 60
+        && (!('city' in request.resource.data)
+          || (request.resource.data.city is string && request.resource.data.city.size() <= 80))
+        && (!('photoPath' in request.resource.data)
+          || (request.resource.data.photoPath is string
+            && request.resource.data.photoPath.matches('users/' + uid + '/avatars/.*')))
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isSelf(uid)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['displayName', 'city', 'photoPath', 'updatedAt'])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 2
+        && request.resource.data.displayName.size() <= 60
+        && request.resource.data.city is string
+        && request.resource.data.city.size() <= 80
+        && (!('photoPath' in request.resource.data)
+          || (request.resource.data.photoPath is string
+            && request.resource.data.photoPath.matches('users/' + uid + '/avatars/.*')))
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
 
       match /blockedUsers/{targetUid} {
         allow read: if isSelf(uid);
@@ -143,7 +169,7 @@ service cloud.firestore {
     // Published Academy content is read-only for clients; publishing is an admin workflow.
     match /courses/{courseId} {
     // Published course catalog is public and read-only; drafts remain admin-only.
-      allow read: if resource.data.get('published', false) == true || (signedIn() && isAdmin());
+      allow read: if ('published' in resource.data && resource.data.published == true) || (signedIn() && isAdmin());
       allow create, update, delete: if false;
 
       match /lessons/{lessonId} {
@@ -432,13 +458,13 @@ service cloud.firestore {
 
     // A teacher profile becomes public only after the verified-teacher callable completes it.
     match /teacherProfiles/{uid} {
-      allow read: if signedIn() && (isSelf(uid) || isAdmin() || resource.data.get('published', false) == true);
+      allow read: if signedIn() && (isSelf(uid) || isAdmin() || ('published' in resource.data && resource.data.published == true));
       allow create, update, delete: if false;
     }
 
     // Mock sessions are private to their teacher/admin; real scheduled/live sessions can be public.
     match /teacherContent/{contentId} {
-      allow read: if signedIn() && (resource.data.get('published', false) == true
+      allow read: if signedIn() && (('published' in resource.data && resource.data.published == true)
         || isAdmin()
         || resource.data.ownerUid == request.auth.uid);
       allow create, update, delete: if false;

@@ -86,7 +86,7 @@ Official references:
 - Vercel plan pricing: https://vercel.com/pricing
 - Next.js 15 Route Handlers: https://nextjs.org/docs/15/app/getting-started/route-handlers-and-middleware
 
-Do not create an App Hosting backend, Firebase Hosting site, Vercel project, domain, or DNS records as part of this preparation-only change. web/apphosting.yaml is only a non-secret template: three Firebase web settings and the optional VAPID key contain placeholder values. Replace them with the real public Firebase Web App configuration in the App Hosting environment before any rollout; the Firebase Console values override file values. Never place TURN_SECRET or service-account credentials there.
+Do not create an App Hosting backend, Firebase Hosting site, Vercel project, domain, or DNS records as part of this preparation-only change. web/apphosting.yaml is only a non-secret template: all six required Firebase web settings and the optional VAPID key contain placeholder values. Replace them with the real public Firebase Web App configuration in the App Hosting environment before any rollout; the Firebase Console values override file values. Never place TURN_SECRET or service-account credentials there.
 
 ### Region decision — pending owner approval
 

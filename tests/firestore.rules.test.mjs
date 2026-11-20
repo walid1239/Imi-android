@@ -991,3 +991,31 @@ test('Storage claim checks deny access when admin or teacherVerified claim is ab
     contentType: 'video/mp4'
   }));
 });
+
+test('users root document allows only profile fields and rejects self-escalation or protected-field edits', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const malloryDb = env.authenticatedContext('mallory').firestore();
+
+  await assertSucceeds((await import('firebase/firestore')).updateDoc(doc(aliceDb, 'users/alice'), {
+    displayName: 'Alice Updated',
+    city: 'Casablanca',
+    updatedAt: serverTimestamp()
+  }));
+
+  await assertFails((await import('firebase/firestore')).updateDoc(doc(aliceDb, 'users/alice'), {
+    admin: true,
+    updatedAt: serverTimestamp()
+  }));
+  await assertFails((await import('firebase/firestore')).updateDoc(doc(aliceDb, 'users/alice'), {
+    teacherVerified: true,
+    updatedAt: serverTimestamp()
+  }));
+  await assertFails((await import('firebase/firestore')).updateDoc(doc(aliceDb, 'users/alice'), {
+    privateEmail: 'attacker@example.invalid',
+    updatedAt: serverTimestamp()
+  }));
+  await assertFails(setDoc(doc(malloryDb, 'users/mallory'), {
+    displayName: 'Mallory', city: 'Casa', admin: true, updatedAt: serverTimestamp()
+  }));
+  await assertFails(deleteDoc(doc(aliceDb, 'users/alice')));
+});

@@ -29,6 +29,7 @@ test("falls back to public STUN only when TURN settings are absent or invalid", 
   for (const result of [
     createIceServerConfiguration("user-123", undefined, "turn.example.test", "3478", undefined),
     createIceServerConfiguration("user-123", "secret", undefined, "3478", undefined),
+    createIceServerConfiguration("user-123", "owner-created-secret", "  ", "3478", undefined),
     createIceServerConfiguration("user-123", "secret", "https://evil.example", "3478", undefined),
   ]) {
     assert.equal(result.configured, false);

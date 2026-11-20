@@ -22,7 +22,7 @@ if (!process.env.STORAGE_EMULATOR_HOST) {
 if (!getApps().length) initializeApp({ projectId, storageBucket: projectId + '.firebasestorage.app' });
 const auth = getAuth();
 const db = getFirestore();
-const bucket = getStorage().bucket();
+const bucket = getStorage().bucket(projectId + '.firebasestorage.app');
 const baseUrl = 'http://127.0.0.1:5001/' + projectId + '/us-central1/';
 
 async function tokenFor(uid) {

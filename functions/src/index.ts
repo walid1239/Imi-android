@@ -17,7 +17,7 @@ import {
   validateStatusInput,
 } from "./statusLogic";
 
-const configuredStorageBucket = process.env.FIREBASE_STORAGE_BUCKET?.trim();
+const configuredStorageBucket = process.env.IMI_STORAGE_BUCKET?.trim();
 initializeApp(configuredStorageBucket ? { storageBucket: configuredStorageBucket } : undefined);
 const db = getFirestore();
 

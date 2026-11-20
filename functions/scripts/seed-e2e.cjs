@@ -47,11 +47,11 @@ async function ensureUser(role, variant, displayName, admin = false) {
 
 async function main() {
   for (const variant of ['desktop', 'mobile']) {
-    await ensureUser('a', variant, 'تلميذ ألف');
-    await ensureUser('b', variant, 'تلميذ باء');
-    await ensureUser('c', variant, 'أستاذ اختبار موثّق');
-    await ensureUser('d', variant, 'تلميذ دال');
-    await ensureUser('admin', variant, 'مشرف اختبار', true);
+    await ensureUser('a', variant, 'تلميذ ألف ' + variant);
+    await ensureUser('b', variant, 'تلميذ باء ' + variant);
+    await ensureUser('c', variant, 'أستاذ اختبار موثّق ' + variant);
+    await ensureUser('d', variant, 'تلميذ دال ' + variant);
+    await ensureUser('admin', variant, 'مشرف اختبار ' + variant, true);
   }
 
   for (const variant of ['desktop', 'mobile']) {

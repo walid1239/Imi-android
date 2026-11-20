@@ -72,14 +72,11 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
 
-      - name: Install Firebase CLI
-        run: npm install --global firebase-tools@15.37.0
-
       - name: Deploy Cloud Functions only
         env:
           PROJECT_ID: ${{ inputs.project_id }}
         run: |
-          firebase deploy --project "$PROJECT_ID" --only functions
+          npx --yes firebase-tools@15.37.0 deploy --project "$PROJECT_ID" --only functions
 
       - name: Report deployed target
         if: success()

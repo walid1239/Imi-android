@@ -6,13 +6,11 @@ service firebase.storage {
     }
 
     function isAdmin() {
-      return signedIn() && ('admin' in request.auth.token) && request.auth.token.admin == true;
+      return signedIn() && request.auth.token.get('admin', false) == true;
     }
 
     function isVerifiedTeacher() {
-      return signedIn()
-        && ('teacherVerified' in request.auth.token)
-        && request.auth.token.teacherVerified == true;
+      return signedIn() && request.auth.token.get('teacherVerified', false) == true;
     }
 
     function isBlockedBetween(uidA, uidB) {

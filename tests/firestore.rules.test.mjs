@@ -616,7 +616,7 @@ test('teacher content drafts stay private until server publication', async () =>
   await assertSucceeds(getDoc(doc(alice, 'teacherContent/draft-1')));
   await assertFails(getDoc(doc(bob, 'teacherContent/draft-1')));
   await assertFails(getDoc(doc(guest, 'teacherContent/draft-1')));
-  await assertFails(getDoc(doc(guest, 'teacherContent/published-1')));
+  await assertSucceeds(getDoc(doc(guest, 'teacherContent/published-1')));
   await assertSucceeds(getDoc(doc(bob, 'teacherContent/published-1')));
   await assertSucceeds(getDoc(doc(admin, 'teacherContent/draft-1')));
   await assertFails(setDoc(doc(alice, 'teacherContent/forged'), { ownerUid: 'alice', published: true }));

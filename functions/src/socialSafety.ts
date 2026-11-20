@@ -46,17 +46,30 @@ export const blockUser = onCall<UidInput>(async request => {
   const profile = await db.doc("publicProfiles/" + target).get();
   if (!profile.exists) throw new HttpsError("not-found", "الحساب غير موجود.");
   const directRef = db.collection("conversations").doc(directConversationId(actor, target));
-  const direct = await directRef.get();
-  const batch = db.batch();
-  batch.set(db.doc("users/" + actor + "/blockedUsers/" + target), {
-    uid: target, blockedAt: FieldValue.serverTimestamp(),
+  const blockRef = db.doc("users/" + actor + "/blockedUsers/" + target);
+  const outgoingCalls = db.collection("calls").where("callerUid", "==", actor)
+    .where("calleeUid", "==", target).where("status", "in", ["ringing", "accepted"]);
+  const incomingCalls = db.collection("calls").where("callerUid", "==", target)
+    .where("calleeUid", "==", actor).where("status", "in", ["ringing", "accepted"]);
+  await db.runTransaction(async transaction => {
+    const [direct, outgoing, incoming] = await Promise.all([
+      transaction.get(directRef), transaction.get(outgoingCalls), transaction.get(incomingCalls),
+    ]);
+    transaction.set(blockRef, { uid: target, blockedAt: FieldValue.serverTimestamp() });
+    transaction.delete(db.doc("users/" + actor + "/friends/" + target));
+    transaction.delete(db.doc("users/" + target + "/friends/" + actor));
+    transaction.delete(db.doc("friendRequests/" + encodeURIComponent(actor) + "__" + encodeURIComponent(target)));
+    transaction.delete(db.doc("friendRequests/" + encodeURIComponent(target) + "__" + encodeURIComponent(actor)));
+    if (direct.exists) transaction.update(directRef, {
+      status: "blocked", lastMessage: "", updatedAt: FieldValue.serverTimestamp(),
+    });
+    for (const call of [...outgoing.docs, ...incoming.docs]) {
+      transaction.update(call.ref, {
+        status: "ended", endedBy: actor, endReason: "blocked",
+        endedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
   });
-  batch.delete(db.doc("users/" + actor + "/friends/" + target));
-  batch.delete(db.doc("users/" + target + "/friends/" + actor));
-  batch.delete(db.doc("friendRequests/" + encodeURIComponent(actor) + "__" + encodeURIComponent(target)));
-  batch.delete(db.doc("friendRequests/" + encodeURIComponent(target) + "__" + encodeURIComponent(actor)));
-  if (direct.exists) batch.update(directRef, { status: "blocked", lastMessage: "", updatedAt: FieldValue.serverTimestamp() });
-  await batch.commit();
   return { status: "blocked" };
 });
 

@@ -574,7 +574,7 @@ test('block records are owner-readable, server-managed, and block direct convers
   await env.withSecurityRulesDisabled(async context => {
     const db = context.firestore();
     await setDoc(doc(db, 'users/carol/blockedUsers/dave'), { uid: 'dave', blockedAt: new Date() });
-    await setDoc(doc(db, 'conversations/blocked-direct'), { participants: ['carol', 'dave'], createdBy: 'carol' });
+    await setDoc(doc(db, 'conversations/blocked-direct'), { participants: ['carol', 'dave'], type: 'direct', status: 'blocked', lastMessage: '', createdBy: 'carol' });
     await setDoc(doc(db, 'conversations/blocked-group'), { type: 'group', participants: ['carol', 'dave', 'alice'], createdBy: 'carol' });
   });
   const carol = env.authenticatedContext('carol').firestore();

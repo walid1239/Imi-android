@@ -967,6 +967,9 @@ test('Storage claim checks deny access when admin or teacherVerified claim is ab
     await setDoc(doc(context.firestore(), 'teacherProfiles/alice'), {
       uid: 'alice', profileComplete: true, published: true
     });
+    await setDoc(doc(context.firestore(), 'teacherProfiles/alice-verified'), {
+      uid: 'alice-verified', profileComplete: true, published: true
+    });
   });
 
   const noClaims = env.authenticatedContext('mallory').storage();

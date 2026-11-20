@@ -14,6 +14,11 @@ if (!projectId.startsWith('demo-')
   || !process.env.FIREBASE_STORAGE_EMULATOR_HOST) {
   throw new Error('Teacher integration tests require Auth, Firestore and Storage Emulators with a demo-* project.');
 }
+// firebase-admin/storage (Google Cloud Storage SDK) reads STORAGE_EMULATOR_HOST,
+// while the Firebase CLI exposes FIREBASE_STORAGE_EMULATOR_HOST.
+if (!process.env.STORAGE_EMULATOR_HOST) {
+  process.env.STORAGE_EMULATOR_HOST = process.env.FIREBASE_STORAGE_EMULATOR_HOST;
+}
 if (!getApps().length) initializeApp({ projectId, storageBucket: projectId + '.firebasestorage.app' });
 const auth = getAuth();
 const db = getFirestore();

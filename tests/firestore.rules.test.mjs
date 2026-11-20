@@ -1014,6 +1014,7 @@ test('WebRTC signaling is limited to call participants and each side owns its SD
     });
   });
   await assertFails(getDoc(doc(alice, 'calls/call-1/calleeCandidates/b1')));
+  await assertFails(getDoc(doc(bob, 'calls/call-1/callerCandidates/a1')));
   await assertFails(setDoc(doc(bob, 'calls/call-1/calleeCandidates/blocked'), {
     candidate: 'candidate:blocked', sdpMid: '0', sdpMLineIndex: 0
   }));

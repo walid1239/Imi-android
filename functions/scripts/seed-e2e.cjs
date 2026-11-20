@@ -57,6 +57,19 @@ async function main() {
 
   for (const variant of ['desktop', 'mobile']) {
     const a = 'imi-e2e-a-' + variant;
+    const b = 'imi-e2e-b-' + variant;
+    // Keep the friendship E2E deterministic even when an emulator is reused.
+    await Promise.all([
+      db.doc('users/' + a + '/friends/' + b).delete(),
+      db.doc('users/' + b + '/friends/' + a).delete(),
+    ]);
+    const outgoing = await db.collection('friendRequests').where('fromUid', '==', a).get();
+    const incoming = await db.collection('friendRequests').where('toUid', '==', a).get();
+    const staleRequests = [
+      ...outgoing.docs.filter(item => item.get('toUid') === b),
+      ...incoming.docs.filter(item => item.get('fromUid') === b),
+    ];
+    await Promise.all(staleRequests.map(item => item.ref.delete()));
     for (const other of ['c', 'd', 'e']) {
       const b = 'imi-e2e-' + other + '-' + variant;
       await db.doc('users/' + a + '/friends/' + b).set({ uid: b, status: 'accepted', createdAt: FieldValue.serverTimestamp() }, { merge: true });

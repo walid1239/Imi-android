@@ -86,7 +86,7 @@ Official references:
 - Vercel plan pricing: https://vercel.com/pricing
 - Next.js 15 Route Handlers: https://nextjs.org/docs/15/app/getting-started/route-handlers-and-middleware
 
-Do not create an App Hosting backend, Firebase Hosting site, Vercel project, domain, or DNS records as part of this preparation-only change. The apphosting.yaml schema requires concrete value fields for standard variables; empty strings and bare variable names are not valid substitutes. Add that file only after a hosting decision and with real public Firebase configuration values. Required variable names are listed in web/.env.example.
+Do not create an App Hosting backend, Firebase Hosting site, Vercel project, domain, or DNS records as part of this preparation-only change. web/apphosting.yaml is only a non-secret template: three Firebase web settings and the optional VAPID key contain placeholder values. Replace them with the real public Firebase Web App configuration in the App Hosting environment before any rollout; the Firebase Console values override file values. Never place TURN_SECRET or service-account credentials there.
 
 ### Region decision — pending owner approval
 
@@ -106,7 +106,7 @@ The proposed Cloud Functions region is europe-west1, but **no region change has 
   git checkout <previous-known-good-commit> -- functions
   firebase deploy --only functions --project imi-indroid
   ```
-- If Hosting regresses, use Firebase Hosting Console → Hosting → Release history → select the previous known-good release → Roll back. Verify the restored release URL before changing DNS.
+- If the selected web host regresses, use that provider's deployment history to restore the previous known-good release. Firebase Hosting is not configured in this repository; App Hosting rollback is available only after an owner separately creates and approves an App Hosting backend.
 - Do not roll back Firestore data by deleting documents. Data migrations require a separately reviewed, non-destructive recovery plan.
 - Re-run the smoke tests after rollback and record the exact release/commit.
 

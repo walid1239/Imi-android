@@ -313,6 +313,9 @@ export default function CallControls({
       setBusy(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'تعذر الرد على المكالمة.');
+      await endCallAction({ callId: call.id }).catch(() => {});
+      cleanupSession();
+      setIncomingCall(null);
       setBusy(false);
     }
   }
@@ -372,7 +375,11 @@ export default function CallControls({
     };
   }, [activeCallId, callStatus]);
 
-  useEffect(() => () => cleanupSession(), []);
+  useEffect(() => () => {
+    const callId = activeCallIdRef.current;
+    if (callId) void endCallAction({ callId }).catch(() => {});
+    cleanupSession();
+  }, []);
 
   return <>
     <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-4 py-2">

@@ -8,19 +8,25 @@ This document is a release runbook. No command in this document has been execute
 - [ ] Confirm the exact production Firebase project is `imi-indroid`.
 - [ ] Resolve `CONFIGURATION_NOT_FOUND` in Firebase Console. Enable only the authentication providers actually implemented and tested. Phone OTP is not yet implemented in this branch; do not promise or enable it as an IMI feature yet.
 - [ ] Set all six NEXT_PUBLIC_FIREBASE_* web values in the selected host's build environment. Add NEXT_PUBLIC_FIREBASE_VAPID_KEY only after FCM web configuration is complete. NEXT_PUBLIC_* values are public browser configuration, never secrets. Never place service-account JSON, TURN_SECRET, or private keys in NEXT_PUBLIC_*.
-- [ ] Confirm the Firebase Storage bucket is provisioned and the intended region is selected.
-- [ ] Review Firestore and Storage rules with the Emulator security tests. Do not deploy the current rules until the users/{uid} client-write contract is reconciled with Android and the exact diff is approved.
+- [ ] Do not provision/use Firebase Storage under Spark: Firebase Storage now requires Blaze for bucket access. Media uploads remain blocked unless a separate storage provider is approved or billing is explicitly authorized.
+- [ ] Review Firestore and Storage rules with the Emulator security tests. The Android users/{uid} contract is now aligned for displayName, city, photoPath, bio, languages, and updatedAt; Emulator tests cover private fields. This is not a production deployment. Review the exact diff and obtain the owner's explicit approval before deploying Firestore rules.
 - [ ] Provision the TURN host and secret only after a separate owner decision. Coturn is not running and cross-network calling has not been accepted on physical devices.
 - [ ] Run the full Web and Functions CI, Android CI, Emulator suite, accessibility checks, and physical-device acceptance matrix on the exact release commit.
 - [ ] Complete legal review of `/privacy` and `/terms`; both pages are drafts and explicitly disclose incomplete account deletion/retention policy.
 - [ ] Configure App Check and production rate limits. These are not confirmed as enabled in production by this repository audit.
 - [ ] Confirm that no admin or teacher role is granted until the owner verifies the UID and authorization.
 
+
+### Authentication identity and provider configuration
+
+- `CONFIGURATION_NOT_FOUND` means Firebase Auth has no identity-provider configuration for the attempted sign-in. The repository cannot read or change Firebase Console provider settings; the real project must have Authentication initialized and the intended providers enabled (Anonymous, Email/Password, Google). For Google Android sign-in, add the app's SHA-1 fingerprint and download the updated `google-services.json`.
+- Android currently calls `signInAnonymously()` only. Anonymous users on separate devices receive separate UIDs, so cross-device identity is not unified. Web supports guest-to-permanent credential linking, but the native Android client does not yet expose email/Google linking. Do not claim cross-device account sync until that Android flow is implemented and tested. No OTP is required or enabled by this plan.
+
 ## 2. Local verification commands
 
 Use Node.js 22 and JDK 21 or later for Firebase Emulator Suite (Android Gradle build continues to use JDK 17). The root, functions/, and web/ lockfiles are committed (lockfileVersion 3) and generated with npm 22. Use npm ci from each package root for reproducible installs.
 
-**Billing gate:** Firebase requires the Blaze plan / a linked Cloud Billing account to deploy Cloud Functions and to upgrade the Functions runtime. The free usage quota does not remove this requirement; Spark cannot deploy new or existing Functions. Under the current no-billing constraint, Node 22 Functions can be typechecked and emulator-tested, but production deployment is blocked. Do not enable billing or run the deploy workflow without the owner's separate explicit approval.
+**Billing gate:** Firebase requires Blaze / linked Cloud Billing to deploy Cloud Functions. Firebase Storage also requires Blaze for bucket access as of 2026-02-03, so Spark cannot be used for project media uploads even when a bucket name is present. Under the no-billing constraint, Functions can be typechecked and emulator-tested but not deployed; Storage-backed uploads are blocked. Authentication (Email/Password, Google, Anonymous), Firestore within Spark quotas, and Firebase Hosting within its free quotas remain possible. Phone Auth/SMS and Blaze services are not approved. Do not enable billing.
 
 Run from the repository root:
 
@@ -54,14 +60,15 @@ Run Android checks using the repository's Android CI workflow or Android Studio 
 
 ## 3. Backend deployment order — requires explicit owner approval
 
-**Do not deploy the current Firestore rules yet.** The reviewed Android users/{uid} document shape and the current rules' client-write allowlist must first be reconciled and tested together. A green rules test alone does not prove Android compatibility. The owner must review the exact rule diff and approve it separately.
+**Firestore contract status:** Android writes `displayName`, `city`, `photoPath`, `bio`, `languages`, and `updatedAt` to its private `users/{uid}` document. The rules now allow the private `bio` and `languages` fields with size/type limits; avatar creation writes the required base profile fields. Emulator tests cover allowed and denied cases. This remains source-level/Emulator evidence only; no production rules have been deployed.
 
 After that gate is resolved, and only after the owner explicitly authorizes deployment:
 
-1. **Firestore and Storage rules/indexes** (only after Android users/{uid} compatibility is fixed and emulator tests pass)
+1. **Firestore rules/indexes only** (possible on Spark; only after the final rules tests pass and the owner authorizes it)
    ```powershell
-   firebase deploy --only firestore:rules,firestore:indexes,storage --project imi-indroid
+   firebase deploy --only firestore:rules,firestore:indexes --project imi-indroid
    ```
+   Storage rules and bucket access are excluded under the no-Blaze constraint.
 
 2. **Cloud Functions**
    ```powershell
@@ -121,7 +128,7 @@ The proposed Cloud Functions region is europe-west1, but **no region change has 
 - [ ] Authentication providers work with real test accounts. Guest-to-permanent linking and phone OTP must not be claimed until separately implemented and tested.
 - [ ] Two independent accounts can find each other, send/accept a friend request, and exchange text/media messages.
 - [ ] Unauthorized users cannot read another conversation, forge sender identity, alter receipts, access another user's FCM tokens, or write their own admin claim.
-- [ ] Storage rejects wrong MIME declarations, oversized files, non-member reads, and unauthorized writes. Metadata checks are not equivalent to malware or file-signature scanning.
+- [ ] Storage-backed media tests are BLOCKED under Spark because Firebase Storage requires Blaze. Do not claim upload safety or media functionality until an approved storage provider is available. Metadata checks are not equivalent to malware or file-signature scanning.
 - [ ] Reels upload/playback, likes/comments/follows/views/shares, reporting, and moderation are tested before enabling those controls publicly; several of these features remain unimplemented.
 - [ ] Calls pass the two-physical-device matrix across Wi-Fi and cellular, with relay candidate verification and audio/video checks.
 - [ ] Teacher verification, live rooms, recording, moderated chat, child-safety controls, and account deletion pass dedicated tests before enabling.

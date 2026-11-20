@@ -91,7 +91,9 @@ test('two learners can befriend each other, exchange a message and publish a sta
 });
 
 test('learner can enroll in a general-skills course and complete its lesson', async ({ page }) => {
-  await login(page, email('a', test.info().project.name));
+  const project = test.info().project.name;
+  const fixture = test.info().retry > 0 ? `${suffix(project)}-retry${test.info().retry}` : suffix(project);
+  await login(page, `e2e-a-${fixture}@imi.test`);
   await page.getByRole('button', { name: /الأكاديمية/ }).first().click();
   await expect(page.getByText('مهارة التعلم الذاتي').first()).toBeVisible();
   await page.getByRole('button', { name: 'سجّل في هذه الدورة' }).click();
@@ -108,14 +110,15 @@ test('learner can enroll in a general-skills course and complete its lesson', as
 });
 
 test('admin claim exposes the protected Academy administration panel', async ({ page }) => {
-  await login(page, email('admin', test.info().project.name));
+  const project = test.info().project.name;
+  const fixture = test.info().retry > 0 ? `${suffix(project)}-retry${test.info().retry}` : suffix(project);
+  await login(page, `e2e-admin-${fixture}@imi.test`);
   await expect(page.getByRole('button', { name: /إدارة الأكاديمية/ }).first()).toBeVisible();
   await page.getByRole('button', { name: /إدارة الأكاديمية/ }).first().click();
   await expect(page.getByRole('heading', { name: 'إدارة الأكاديمية' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'إدارة شجرة المنهاج' })).toBeVisible();
-  const variant = suffix(test.info().project.name);
-  const teacherUid = 'imi-e2e-a-' + variant;
-  const contentTitle = 'درس أستاذ اختبار منشور ' + variant;
+  const teacherUid = 'imi-e2e-a-' + fixture;
+  const contentTitle = 'درس أستاذ اختبار منشور ' + fixture;
   await expect(page.getByText(contentTitle, { exact: true })).toBeVisible();
   await page.locator('article').filter({ has: page.getByText(contentTitle, { exact: true }) }).getByRole('button', { name: 'اعتماد ونشر' }).click();
   await expect(page.getByRole('status')).toContainText('تم نشر المحتوى بعد المراجعة');

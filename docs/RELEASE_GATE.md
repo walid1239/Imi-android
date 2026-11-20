@@ -1,15 +1,15 @@
 # IMI final release gate (preparation only)
 
-**Status on 2026-11-19: NOT APPROVED FOR PRODUCTION DEPLOYMENT.**
+**Status on 2026-11-20: NOT APPROVED FOR PRODUCTION DEPLOYMENT.**
 This document is a release runbook. No command in this document has been executed against the production Firebase project.
 
 ## 1. Preflight — all must pass
 
 - [ ] Confirm the exact production Firebase project is `imi-indroid`.
 - [ ] Resolve `CONFIGURATION_NOT_FOUND` in Firebase Console. Enable only the authentication providers actually implemented and tested. Phone OTP is not yet implemented in this branch; do not promise or enable it as an IMI feature yet.
-- [ ] Set all six `NEXT_PUBLIC_FIREBASE_*` web values in the chosen Hosting build environment. Add the public VAPID key only after FCM web configuration is complete. Never place service-account JSON or private keys in `NEXT_PUBLIC_*`.
+- [ ] Set all six NEXT_PUBLIC_FIREBASE_* web values in the selected host's build environment. Add NEXT_PUBLIC_FIREBASE_VAPID_KEY only after FCM web configuration is complete. NEXT_PUBLIC_* values are public browser configuration, never secrets. Never place service-account JSON, TURN_SECRET, or private keys in NEXT_PUBLIC_*.
 - [ ] Confirm the Firebase Storage bucket is provisioned and the intended region is selected.
-- [ ] Review Firestore and Storage rules with the Emulator security tests. Never deploy the current rules without reviewing the exact diff against production.
+- [ ] Review Firestore and Storage rules with the Emulator security tests. Do not deploy the current rules until the users/{uid} client-write contract is reconciled with Android and the exact diff is approved.
 - [ ] Provision the TURN host and secret only after a separate owner decision. Coturn is not running and cross-network calling has not been accepted on physical devices.
 - [ ] Run the full Web and Functions CI, Android CI, Emulator suite, accessibility checks, and physical-device acceptance matrix on the exact release commit.
 - [ ] Complete legal review of `/privacy` and `/terms`; both pages are drafts and explicitly disclose incomplete account deletion/retention policy.
@@ -17,6 +17,8 @@ This document is a release runbook. No command in this document has been execute
 - [ ] Confirm that no admin or teacher role is granted until the owner verifies the UID and authorization.
 
 ## 2. Local verification commands
+
+Use Node.js 22. The repository lockfiles are a required precondition for npm ci; do not claim reproducible installs until the root, functions/, and web/ lockfiles are committed and verified. Until then, use npm install only for local diagnostic work.
 
 Run from the repository root:
 
@@ -48,13 +50,15 @@ cd ..
 
 Run Android checks using the repository's Android CI workflow or Android Studio with the configured JDK/SDK. A CI APK is a debug artifact, not a signed release APK.
 
-## 3. Production deployment order — requires the explicit owner phrase "نفّذ النشر"
+## 3. Backend deployment order — requires explicit owner approval
 
-Do not run any of these commands before the owner gives that exact approval and the preflight is green.
+**Do not deploy the current Firestore rules yet.** The reviewed Android users/{uid} document shape and the current rules' client-write allowlist must first be reconciled and tested together. A green rules test alone does not prove Android compatibility. The owner must review the exact rule diff and approve it separately.
 
-1. **Firestore and Storage rules**
+After that gate is resolved, and only after the owner explicitly authorizes deployment:
+
+1. **Firestore and Storage rules/indexes** (only after Android users/{uid} compatibility is fixed and emulator tests pass)
    ```powershell
-   firebase deploy --only firestore:rules,storage --project imi-indroid
+   firebase deploy --only firestore:rules,firestore:indexes,storage --project imi-indroid
    ```
 
 2. **Cloud Functions**
@@ -62,24 +66,31 @@ Do not run any of these commands before the owner gives that exact approval and 
    firebase deploy --only functions --project imi-indroid
    ```
 
-3. **Hosting**
-   ```powershell
-   firebase deploy --only hosting --project imi-indroid
-   ```
+3. **Web hosting** — select a provider first; there is no Firebase Hosting target in firebase.json, so firebase deploy --only hosting is currently invalid. No Hosting backend or deployment is configured by this repository.
 
-4. **Domain and TLS**
-   - Add the chosen domain in Firebase Hosting Console.
-   - Copy the exact DNS records shown by Firebase into the domain registrar; do not guess A/AAAA/TXT records.
-   - Wait for Firebase's domain verification and managed SSL certificate status to become active.
-   - Recheck both apex and `www` hostnames if both are configured.
-   - Set `NEXT_PUBLIC_SITE_URL` to the canonical HTTPS origin in the build environment, then rebuild and deploy Hosting only after approval.
+### Firebase App Hosting vs Vercel for Next.js 15
 
-5. **Secrets**
-   If the owner chooses and provisions Coturn, create the secret interactively (the secret value must be entered locally at the prompt and never pasted into Git, chat, logs, or this document):
-   ```powershell
-   firebase functions:secrets:set TURN_SECRET --project imi-indroid
-   ```
-   This command is deliberately not executed. Do not create a TURN secret until the TURN host and network have been tested.
+| Topic | Firebase App Hosting | Vercel |
+|---|---|---|
+| Next.js 15 / App Router | Official framework support for Next.js 13.5+; supports SSR and framework routing | First-class Next.js platform; supports App Router and Route Handlers |
+| API endpoints | Next.js Route Handlers/API routes run in the server runtime | Next.js Route Handlers/API routes run as Functions |
+| Git integration | GitHub-connected backend and managed Cloud Run rollout | Git-connected automatic CI/CD |
+| Billing | Requires Blaze / a linked Cloud Billing account, even though usage has no-cost quotas | Hobby is $0 for eligible personal projects, with quotas and plan terms; Pro is paid |
+| Fit with strict no-billing requirement | Not eligible: Blaze requires a billing account | Better for a no-cost prototype if Hobby terms/limits fit; do not assume unlimited production use |
+
+**Recommendation:** Do not create Firebase App Hosting resources while the project must remain free of billing. For a prototype, Vercel Hobby is the lower-friction $0 option if the project's use is eligible and stays within its limits. Before a public/commercial social-network launch, verify Vercel plan eligibility and usage limits; a production-scale deployment may not remain free. Keep Firebase Functions as the separate backend unless the architecture is deliberately changed.
+
+Official references:
+- Firebase App Hosting framework support: https://firebase.google.com/docs/app-hosting/about-app-hosting
+- Firebase App Hosting billing requirement and quotas: https://firebase.google.com/docs/app-hosting/costs
+- Vercel plan pricing: https://vercel.com/pricing
+- Next.js 15 Route Handlers: https://nextjs.org/docs/15/app/getting-started/route-handlers-and-middleware
+
+Do not create an App Hosting backend, Firebase Hosting site, Vercel project, domain, or DNS records as part of this preparation-only change. The apphosting.yaml schema requires concrete value fields for standard variables; empty strings and bare variable names are not valid substitutes. Add that file only after a hosting decision and with real public Firebase configuration values. Required variable names are listed in web/.env.example.
+
+### Region decision — pending owner approval
+
+The proposed Cloud Functions region is europe-west1, but **no region change has been made**. Before changing it, confirm the Firestore database location and compare expected latency/egress. A regional callable must use the same region in the web SDK (getFunctions(app, "europe-west1")) and Android SDK (FirebaseFunctions.getInstance("europe-west1")). The current clients use the default region; changing only the backend would break callable discovery. The current Android client does call createStatus, so Android region parity is required. Wait for explicit approval before changing function deployment options or either client.
 
 ## 4. Rollback plan
 
@@ -87,7 +98,7 @@ Do not run any of these commands before the owner gives that exact approval and 
 - If Firestore/Storage rules cause access regressions, redeploy the previously reviewed rules from the previous known-good commit:
   ```powershell
   git checkout <previous-known-good-commit> -- firestore.rules storage.rules
-  firebase deploy --only firestore:rules,storage --project imi-indroid
+  firebase deploy --only firestore:rules,firestore:indexes,storage --project imi-indroid
   ```
   Restore the working tree to the intended feature branch after the operator confirms the rollback. Do not force-push or rewrite history.
 - If a Function release regresses, check out the previous known-good Functions source and redeploy:

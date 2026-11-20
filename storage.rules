@@ -6,7 +6,13 @@ service firebase.storage {
     }
 
     function isAdmin() {
-      return signedIn() && request.auth.token.get('admin', false) == true;
+      return signedIn() && ('admin' in request.auth.token) && request.auth.token.admin == true;
+    }
+
+    function isVerifiedTeacher() {
+      return signedIn()
+        && ('teacherVerified' in request.auth.token)
+        && request.auth.token.teacherVerified == true;
     }
 
     function isBlockedBetween(uidA, uidB) {
@@ -129,7 +135,7 @@ service firebase.storage {
         || contentIsPublished();
       allow create: if signedIn()
         && request.auth.uid == uid
-        && request.auth.token.get('teacherVerified', false) == true
+        && isVerifiedTeacher()
         && teacherProfileIsComplete()
         && request.resource != null
         && (
@@ -159,7 +165,7 @@ service firebase.storage {
           && firestore.get(/databases/(default)/documents/teacherProfiles/$(uid)).data.published == true);
       allow create: if signedIn()
         && request.auth.uid == uid
-        && request.auth.token.get('teacherVerified', false) == true
+        && isVerifiedTeacher()
         && request.resource != null
         && request.resource.size > 0
         && request.resource.size <= 5 * 1024 * 1024

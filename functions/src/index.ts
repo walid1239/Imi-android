@@ -898,7 +898,12 @@ export const respondToCall = onCall<CallActionInput & { decision?: unknown }>(as
     tx.update(ref, { status: decision, updatedAt: FieldValue.serverTimestamp(), respondedAt: FieldValue.serverTimestamp() });
   });
   const latest = await ref.get();
-  return { status: latest.get("status") === "missed" ? "missed" : decision };
+  const finalStatus = latest.get("status");
+  if (finalStatus === "missed") return { status: "missed" };
+  if (finalStatus !== decision) {
+    throw new HttpsError("permission-denied", "تم إنهاء المكالمة أو منعها بسبب الحظر.");
+  }
+  return { status: decision };
 });
 
 type RestartCallIceInput = { callId?: unknown; sdp?: unknown };

@@ -158,11 +158,11 @@ jobs:
           node-version: '22'
 
       - name: Install security test dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Build and unit-test trusted Firebase Functions
         run: |
-          npm install --prefix functions --no-audit --no-fund
+          npm ci --prefix functions --no-audit --no-fund
           npm test --prefix functions
 
       - name: Run Firestore rules tests in emulator

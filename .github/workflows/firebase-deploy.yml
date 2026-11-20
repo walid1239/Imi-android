@@ -56,11 +56,11 @@ jobs:
           java-version: "17"
 
       - name: Install security test dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Build trusted Functions
         run: |
-          npm install --prefix functions --no-audit --no-fund
+          npm ci --prefix functions --no-audit --no-fund
           npm run build --prefix functions
 
       - name: Run Firestore and Storage rules tests before deployment

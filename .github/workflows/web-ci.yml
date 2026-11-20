@@ -62,7 +62,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - name: Audit web dependencies (high and critical block CI)
         run: npm audit --audit-level=high
       - run: npm run typecheck
@@ -79,7 +79,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - name: Audit Cloud Functions dependencies (high and critical block CI)
         run: npm audit --audit-level=high
       - run: npm test
@@ -123,9 +123,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - name: Install Functions Admin SDK dependencies for Emulator-only seed scripts
-        run: npm install --prefix functions --no-audit --no-fund
+        run: npm ci --prefix functions --no-audit --no-fund
       - run: npm run emulators:test
       - name: Verify curriculum and legacy lesson seeds in a disposable Firestore Emulator
         run: >-
@@ -162,9 +162,9 @@ jobs:
       - name: Install and compile Functions for the emulator
         working-directory: .
         run: |
-          npm install --prefix functions --no-audit --no-fund
+          npm ci --prefix functions --no-audit --no-fund
           npm run build --prefix functions
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - name: Run browser E2E against disposable Auth, Firestore and Functions emulators
         working-directory: .

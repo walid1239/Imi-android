@@ -171,6 +171,8 @@ jobs:
           npm run build --prefix functions
       - run: npm ci --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
+      - name: Build production web app for browser tests
+        run: npm run build
       - name: Run browser E2E against disposable Auth, Firestore and Functions emulators
         working-directory: .
         run: >-

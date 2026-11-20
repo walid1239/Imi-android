@@ -101,4 +101,5 @@ jobs:
         if: success()
         env:
           PROJECT_ID: ${{ inputs.project_id }}
-        run: echo "Cloud Functions deployment completed for explicitly selected project: $PROJECT_ID"
+        run: |
+          echo "Cloud Functions deployment completed for explicitly selected project: $PROJECT_ID"

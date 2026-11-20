@@ -965,10 +965,13 @@ export const getIceServers = onCall({ secrets: [TURN_SECRET] }, async (request) 
     });
   });
 
+  const turnHost = TURN_HOST.value().trim();
+  // Do not read TURN credentials when TURN is not configured; this is STUN-only mode.
+  const turnSecret = turnHost ? (TURN_SECRET.value() || undefined) : undefined;
   const configuration = createIceServerConfiguration(
     uid,
-    TURN_SECRET.value() || undefined,
-    TURN_HOST.value(),
+    turnSecret,
+    turnHost,
     TURN_PORT.value(),
     STUN_URLS.value(),
     nowMs,

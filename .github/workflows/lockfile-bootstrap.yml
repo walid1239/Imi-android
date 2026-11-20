@@ -1,0 +1,51 @@
+name: Bootstrap deterministic npm lockfiles
+
+on:
+  push:
+    branches:
+      - feature/imi-web-foundation
+    paths:
+      - .github/workflows/lockfile-bootstrap.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: imi-lockfile-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  generate-lockfiles:
+    name: Generate npm lockfiles with Node 22
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Generate root, Functions, and Web lockfiles
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          npm install --package-lock-only --prefix functions --ignore-scripts --no-audit --no-fund
+          npm install --package-lock-only --prefix web --ignore-scripts --no-audit --no-fund
+          test -s package-lock.json
+          test -s functions/package-lock.json
+          test -s web/package-lock.json
+
+      - name: Commit generated lockfiles to this feature branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json functions/package-lock.json web/package-lock.json
+          if git diff --cached --quiet; then
+            echo "All three npm lockfiles already match package manifests."
+            exit 0
+          fi
+          git commit -m "build: add npm lockfiles generated with Node 22"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

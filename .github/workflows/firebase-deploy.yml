@@ -24,7 +24,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: imi-firebase-production-deploy
@@ -32,18 +31,20 @@ concurrency:
 
 jobs:
   no-deploy:
-    name: Skip deployment without explicit manual authorization
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.confirm_deploy != 'DEPLOY' }}
+    name: Non-deploying safety gate
     runs-on: ubuntu-latest
     steps:
-      - name: Explain that no deployment was requested
-        run: echo "::notice::No Firebase deployment was performed. Use manual dispatch and type DEPLOY to authorize the protected job."
+      - name: Explain the deployment boundary
+        run: echo "::notice::This job never deploys. The separate deploy job requires workflow_dispatch, the exact DEPLOY confirmation, and protected-environment approval."
 
   deploy:
     name: Validate, test, and deploy Firebase backend
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_deploy == 'DEPLOY' }}
     runs-on: ubuntu-latest
     environment: firebase-production
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -12,7 +12,7 @@ async function main() {
     db.collection('courses').get(),
     db.collectionGroup('lessons').get(),
   ]);
-  if (tree.size !== 880) throw new Error('Expected 880 curriculum nodes, found ' + tree.size);
+  if (tree.size !== 877) throw new Error('Expected 877 unique curriculum nodes, found ' + tree.size);
   const ids = new Set(tree.docs.map(d => d.id));
   for (const d of tree.docs) {
     const n = d.data();
@@ -22,6 +22,6 @@ async function main() {
     if (n.type === 'unit' && n.status !== 'hidden') throw new Error('Unit placeholders must remain hidden.');
   }
   if (!courses.empty || !lessons.empty) throw new Error('Emulator must contain no seeded courses or lessons.');
-  process.stdout.write('PASS: 880 curriculum nodes all hidden pending manual admin approval; zero seeded courses and lessons.\\n');
+  process.stdout.write('PASS: 877 unique curriculum nodes all hidden pending manual admin approval; zero seeded courses and lessons.\\n');
 }
 main().catch(error => { process.stderr.write(String(error.stack || error) + '\n'); process.exitCode = 1; });

@@ -86,6 +86,9 @@ async function main() {
   await bucket.file(evidencePath).save(Buffer.from('%PDF-1.4 emulator-only evidence'), {
     metadata: { contentType: 'application/pdf' },
   });
+  const [uploadedEvidence] = await bucket.file(evidencePath).getMetadata();
+  assert.equal(uploadedEvidence.contentType, 'application/pdf');
+  assert.ok(Number(uploadedEvidence.size) > 0);
 
   await db.doc('curriculumNodes/unreviewed-unit').set({
     id: 'unreviewed-unit', parentId: 'subject-math', type: 'unit', nameAr: 'وحدة تنتظر المراجعة',

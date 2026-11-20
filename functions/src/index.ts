@@ -17,7 +17,8 @@ import {
   validateStatusInput,
 } from "./statusLogic";
 
-initializeApp();
+const configuredStorageBucket = process.env.FIREBASE_STORAGE_BUCKET?.trim();
+initializeApp(configuredStorageBucket ? { storageBucket: configuredStorageBucket } : undefined);
 const db = getFirestore();
 
 async function assertNoTeacherStudentPrivateChat(firstUid: string, secondUid: string) {

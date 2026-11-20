@@ -961,3 +961,33 @@ test('WebRTC signaling is limited to call participants and each side owns its SD
     candidate: 'candidate:late', sdpMid: '0', sdpMLineIndex: 0
   }));
 });
+
+test('Storage claim checks deny access when admin or teacherVerified claim is absent', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'teacherProfiles/alice'), {
+      uid: 'alice', profileComplete: true, published: true
+    });
+  });
+
+  const noClaims = env.authenticatedContext('mallory').storage();
+  const admin = env.authenticatedContext('admin', { admin: true }).storage();
+  const unverified = env.authenticatedContext('alice').storage();
+  const verified = env.authenticatedContext('alice-verified', { teacherVerified: true }).storage();
+
+  const evidencePath = 'teacher-verification/alice/identity.pdf';
+  await env.withSecurityRulesDisabled(async context => {
+    await uploadBytes(ref(context.storage(), evidencePath), new Uint8Array([1, 2, 3]), {
+      contentType: 'application/pdf'
+    });
+  });
+  await assertFails(getBytes(ref(noClaims, evidencePath)));
+  await assertSucceeds(getBytes(ref(admin, evidencePath)));
+
+  const mediaPath = 'teacher-content/alice-verified/content-1/lesson.mp4';
+  await assertFails(uploadBytes(ref(unverified, mediaPath), new Uint8Array([1, 2, 3]), {
+    contentType: 'video/mp4'
+  }));
+  await assertSucceeds(uploadBytes(ref(verified, mediaPath), new Uint8Array([1, 2, 3]), {
+    contentType: 'video/mp4'
+  }));
+});

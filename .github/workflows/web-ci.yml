@@ -78,7 +78,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: npm install --no-audit --no-fund
       - name: Audit Cloud Functions dependencies (high and critical block CI)
         run: npm audit --audit-level=high
@@ -86,7 +86,7 @@ jobs:
       - name: Run teacher application, review, claims, agreements and mock-live Emulator integration
         working-directory: .
         run: >-
-          npx --yes firebase-tools@13.29.2 emulators:exec
+          npx --yes firebase-tools@15.37.0 emulators:exec
           --only auth,firestore,storage,functions
           --project demo-imi-teacher
           "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIREBASE_STORAGE_EMULATOR_HOST=127.0.0.1:9199 node scripts/test-teacher-emulator.cjs"
@@ -118,7 +118,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -129,7 +129,7 @@ jobs:
       - run: npm run emulators:test
       - name: Verify curriculum and legacy lesson seeds in a disposable Firestore Emulator
         run: >-
-          npx --yes firebase-tools@13.29.2 emulators:exec
+          npx --yes firebase-tools@15.37.0 emulators:exec
           --only firestore --project demo-imi-academy
           "node scripts/seed-curriculum.cjs --emulator --project=demo-imi-academy &&
           node scripts/verify-academy-seed.cjs"
@@ -158,7 +158,7 @@ jobs:
           java-version: "17"
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install and compile Functions for the emulator
         working-directory: .
         run: |
@@ -169,7 +169,7 @@ jobs:
       - name: Run browser E2E against disposable Auth, Firestore and Functions emulators
         working-directory: .
         run: >-
-          npx --yes firebase-tools@13.29.2 emulators:exec
+          npx --yes firebase-tools@15.37.0 emulators:exec
           --only auth,firestore,functions,storage
           --project demo-imi-playwright
           "curl -fsS http://127.0.0.1:9099/emulator/v1/projects/demo-imi-playwright/accounts >/dev/null &&

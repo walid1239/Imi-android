@@ -21,6 +21,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  no-deploy:
+    name: Skip deployment without explicit manual authorization
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.confirm_deploy != 'DEPLOY' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain that no deployment was requested
+        run: echo "::notice::No Firebase deployment was performed. Use manual dispatch and type DEPLOY to authorize the protected job."
+
   deploy:
     name: Validate, test, and deploy Firebase backend
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_deploy == 'DEPLOY' }}

@@ -1065,7 +1065,12 @@ private fun ProfileScreen() {
                                 photoPath?.let { path ->
                                     com.google.firebase.firestore.FirebaseFirestore.getInstance()
                                         .collection("users").document(uid)
-                                        .set(mapOf("photoPath" to path), com.google.firebase.firestore.SetOptions.merge())
+                                        .set(mapOf(
+                                            "displayName" to displayName.trim().take(60),
+                                            "city" to city.trim().take(80),
+                                            "photoPath" to path,
+                                            "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                                        ), com.google.firebase.firestore.SetOptions.merge())
                                         .await()
                                 }
                                 uid

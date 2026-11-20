@@ -47,7 +47,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Set up Java for Firebase Emulator Suite
         uses: actions/setup-java@v4
@@ -64,7 +64,7 @@ jobs:
           npm run build --prefix functions
 
       - name: Run Firestore and Storage rules tests before deployment
-        run: npx --yes firebase-tools@13.29.2 emulators:exec --only firestore,storage --project demo-imi-security "npm run test:rules"
+        run: npx --yes firebase-tools@15.37.0 emulators:exec --only firestore,storage --project demo-imi-security "npm run test:rules"
 
       - name: Authenticate to Google Cloud using GitHub OIDC
         uses: google-github-actions/auth@v2
@@ -73,7 +73,7 @@ jobs:
           service_account: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Install Firebase CLI
-        run: npm install --global firebase-tools@13.29.2
+        run: npm install --global firebase-tools@15.37.0
 
       - name: Deploy Functions and security rules
         env:

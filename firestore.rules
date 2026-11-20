@@ -300,7 +300,7 @@ service cloud.firestore {
         allow update, delete: if false;
       }
       match /calleeCandidates/{candidateId} {
-        allow read: if isCallParticipant(callId);
+        allow read: if canSignalCall(callId);
         allow create: if isCallParticipant(callId)
           && get(/databases/$(database)/documents/calls/$(callId)).data.status in ['ringing', 'accepted']
           && get(/databases/$(database)/documents/calls/$(callId)).data.calleeUid == request.auth.uid

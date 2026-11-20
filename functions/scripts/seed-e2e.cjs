@@ -46,7 +46,7 @@ async function ensureUser(role, variant, displayName, admin = false) {
 }
 
 async function main() {
-  for (const variant of ['desktop', 'mobile']) {
+  for (const variant of ['desktop', 'mobile', 'desktop-retry1', 'mobile-retry1']) {
     await ensureUser('a', variant, 'تلميذ ألف ' + variant);
     await ensureUser('b', variant, 'تلميذ باء ' + variant);
     await ensureUser('c', variant, 'أستاذ اختبار موثّق ' + variant);
@@ -55,7 +55,7 @@ async function main() {
     await ensureUser('admin', variant, 'مشرف اختبار ' + variant, true);
   }
 
-  for (const variant of ['desktop', 'mobile']) {
+  for (const variant of ['desktop', 'mobile', 'desktop-retry1', 'mobile-retry1']) {
     const a = 'imi-e2e-a-' + variant;
     const b = 'imi-e2e-b-' + variant;
     // Keep the friendship E2E deterministic even when an emulator is reused.
@@ -92,7 +92,7 @@ async function main() {
     }, { merge: true });
   }
 
-  for (const variant of ['desktop', 'mobile']) {
+  for (const variant of ['desktop', 'mobile', 'desktop-retry1', 'mobile-retry1']) {
     const teacherUid = 'imi-e2e-a-' + variant;
     await db.doc('teacherApplications/' + teacherUid).set({
       uid: teacherUid, fullName: 'أستاذ اختبار آلي ' + variant,

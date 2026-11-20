@@ -266,7 +266,7 @@ service cloud.firestore {
         && request.resource.data.offer.sdp.size() > 0
         && request.resource.data.offer.sdp.size() <= 200000
       ) || (
-        isCallParticipant(callId)
+        canSignalCall(callId)
         && resource.data.status in ['ringing', 'accepted']
         && 'offer' in resource.data
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answer', 'answerRevision'])

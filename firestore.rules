@@ -18,29 +18,22 @@ service cloud.firestore {
         || exists(/databases/$(database)/documents/users/$(uidB)/blockedUsers/$(uidA));
     }
 
-    function canReadConversationData(conversation) {
+    function isConversationListMember(conversation) {
       return signedIn()
         && conversation.participants is list
-        && request.auth.uid in conversation.participants
-        && (
-          conversation.type == 'group'
-          || conversation.participants.size() != 2
-          || !isBlockedBetween(conversation.participants[0], conversation.participants[1])
-        );
+        && request.auth.uid in conversation.participants;
+    }
+
+    function canReadConversationData(conversation) {
+      return isConversationListMember(conversation)
+        && (!('status' in conversation) || conversation.status != 'blocked');
     }
 
     function isConversationMember(conversationId) {
       return signedIn()
         && exists(/databases/$(database)/documents/conversations/$(conversationId))
-        && get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants is list
-        && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
-        && (
-          get(/databases/$(database)/documents/conversations/$(conversationId)).data.type == 'group'
-          || get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.size() != 2
-          || !isBlockedBetween(
-            get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants[0],
-            get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants[1]
-          )
+        && canReadConversationData(
+          get(/databases/$(database)/documents/conversations/$(conversationId)).data
         );
     }
 
@@ -322,7 +315,8 @@ service cloud.firestore {
       // Conversation creation is server-only. The callable enforces role,
       // block, profile and deterministic-ID policy consistently for Web and Android.
       allow create: if false;
-      allow read: if canReadConversationData(resource.data);
+      allow get: if canReadConversationData(resource.data);
+      allow list: if isConversationListMember(resource.data);
       allow update: if signedIn()
         && request.auth.uid in resource.data.participants
         && request.resource.data.participants == resource.data.participants

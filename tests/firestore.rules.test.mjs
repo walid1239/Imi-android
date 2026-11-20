@@ -314,6 +314,28 @@ test('conversation members can list only conversations containing their UID', as
   await assertFails(getDocs(unauthorizedQuery));
 });
 
+test('blocked conversations keep participant-only list access but hide the document and messages', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'conversations/blocked-chat'), {
+      participants: ['alice', 'bob'], type: 'direct', status: 'blocked',
+      lastMessage: '', createdAt: new Date(), lastMessageAt: new Date()
+    });
+    await setDoc(doc(db, 'conversations/blocked-chat/messages/hidden-message'), {
+      senderUid: 'alice', type: 'text', text: 'يجب ألا تظهر بعد الحظر', createdAt: new Date()
+    });
+  });
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const malloryDb = env.authenticatedContext('mallory').firestore();
+  await assertFails(getDoc(doc(aliceDb, 'conversations/blocked-chat')));
+  await assertFails(getDoc(doc(aliceDb, 'conversations/blocked-chat/messages/hidden-message')));
+  const memberQuery = query(collection(aliceDb, 'conversations'), where('participants', 'array-contains', 'alice'));
+  const memberResults = await getDocs(memberQuery);
+  assert.equal(memberResults.docs.some(item => item.id === 'blocked-chat'), true);
+  const outsiderQuery = query(collection(malloryDb, 'conversations'), where('participants', 'array-contains', 'alice'));
+  await assertFails(getDocs(outsiderQuery));
+});
+
 test('conversation preview updates must reference a message created in the same batch by the sender', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const conversation = doc(aliceDb, 'conversations/chat-1');

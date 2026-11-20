@@ -177,6 +177,5 @@ jobs:
           npx --yes firebase-tools@15.37.0 emulators:exec
           --only auth,firestore,functions,storage
           --project demo-imi-playwright
-          "curl -fsS http://127.0.0.1:9099/emulator/v1/projects/demo-imi-playwright/accounts >/dev/null &&
-          cd functions && node scripts/seed-e2e.cjs &&
+          "cd functions && node scripts/seed-e2e.cjs &&
           cd ../web && npm run e2e"

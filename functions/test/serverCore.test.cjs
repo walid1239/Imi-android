@@ -121,7 +121,7 @@ test("blockUser removes friendship, closes direct chat and active calls", async 
   const store = makeStore({
     "publicProfiles/b": {},
     "users/a/friends/b": { status: "accepted" }, "users/b/friends/a": { status: "accepted" },
-    "conversations/a__b": { participants: ["a", "b"], status: "active" },
+    [`conversations/${directConversationId("a", "b")}`]: { participants: ["a", "b"], status: "active" },
     "friendRequests/a__b": { status: "pending" },
   });
   assert.equal((await blockUser(store, "a", { targetUid: "b" })).status, "blocked");

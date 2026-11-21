@@ -472,12 +472,20 @@ private fun ProfileScreen() {
                         scope.launch {
                             runCatching {
                                 val uid = auth.currentUser?.uid ?: error("انتهت جلسة الدخول. سجّل الدخول مجدداً.")
-                                FirebaseFirestore.getInstance().collection("users").document(uid).set(
-                                    mapOf("displayName" to name.trim().take(60), "city" to city.trim().take(80), "bio" to bio.trim().take(300),
-                                        "languages" to languages.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(10),
-                                        "updatedAt" to FieldValue.serverTimestamp()),
-                                    com.google.firebase.firestore.SetOptions.merge()
-                                ).await()
+                                val firestore = FirebaseFirestore.getInstance()
+                                val profile = mapOf(
+                                    "displayName" to name.trim().take(60),
+                                    "city" to city.trim().take(80),
+                                    "bio" to bio.trim().take(300),
+                                    "languages" to languages.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(10),
+                                    "updatedAt" to FieldValue.serverTimestamp()
+                                )
+                                val batch = firestore.batch()
+                                batch.set(firestore.collection("users").document(uid), profile,
+                                    com.google.firebase.firestore.SetOptions.merge())
+                                batch.set(firestore.collection("publicProfiles").document(uid), profile + ("uid" to uid),
+                                    com.google.firebase.firestore.SetOptions.merge())
+                                batch.commit().await()
                             }.onSuccess { message = "تم حفظ معلومات الحساب النصية." }
                                 .onFailure { message = it.localizedMessage ?: "تعذر حفظ معلومات الحساب" }
                             saving = false

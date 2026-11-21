@@ -476,8 +476,23 @@ service cloud.firestore {
 
     // Teacher identity evidence is private; only the applicant and trusted admins can read metadata.
     match /teacherApplications/{uid} {
+      function validUploadDraft() {
+        return request.resource.data.uid == uid
+          && request.resource.data.evidencePath is string
+          && request.resource.data.evidencePath.matches('teacher-verification/' + uid + '/[^/]+')
+          && request.resource.data.status == 'uploading'
+          && request.resource.data.createdAt == request.time;
+      }
       allow read: if isSelf(uid) || isAdmin();
-      allow create, update, delete: if false;
+      allow create: if isSelf(uid)
+        && request.resource.data.keys().hasOnly(['uid', 'evidencePath', 'status', 'createdAt'])
+        && validUploadDraft();
+      allow update: if isSelf(uid)
+        && resource.data.status in ['uploading', 'rejected']
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['uid', 'evidencePath', 'status', 'createdAt'])
+        && validUploadDraft();
+      allow delete: if false;
     }
 
     // A teacher profile becomes public only after the verified-teacher callable completes it.

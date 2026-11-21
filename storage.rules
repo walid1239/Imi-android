@@ -82,9 +82,17 @@ service firebase.storage {
           && firestore.get(/databases/(default)/documents/reels/$(reelId)).data.storagePath == 'reels/' + uid + '/' + reelId + '/' + fileName;
       }
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin() || reelApproved());
+      function uploadIsPrepared() {
+        return firestore.exists(/databases/(default)/documents/reels/$(reelId))
+          && firestore.get(/databases/(default)/documents/reels/$(reelId)).data.ownerUid == uid
+          && firestore.get(/databases/(default)/documents/reels/$(reelId)).data.status == 'uploading'
+          && firestore.get(/databases/(default)/documents/reels/$(reelId)).data.storagePath == 'reels/' + uid + '/' + reelId + '/' + fileName
+          && firestore.get(/databases/(default)/documents/reels/$(reelId)).data.contentType == request.resource.contentType;
+      }
       allow create: if signedIn()
         && resource == null
         && request.auth.uid == uid
+        && uploadIsPrepared()
         && request.resource.size > 0
         && request.resource.size <= 100 * 1024 * 1024
         && request.resource.contentType.matches('video/(mp4|webm)');
@@ -128,9 +136,11 @@ service firebase.storage {
           && firestore.get(/databases/(default)/documents/teacherProfiles/$(uid)).data.profileComplete == true
           && firestore.get(/databases/(default)/documents/teacherProfiles/$(uid)).data.published == true;
       }
-      allow read: if (signedIn() && request.auth.uid == uid)
+      allow read: if (
+        (signedIn() && request.auth.uid == uid)
         || isAdmin()
-        || contentIsPublished();
+        || contentIsPublished()
+      );
       allow create: if signedIn()
         && request.auth.uid == uid
         && isVerifiedTeacher()
@@ -146,9 +156,15 @@ service firebase.storage {
 
     // Identity documents are write-only for the applicant and readable only by admins.
     match /teacher-verification/{uid}/{fileName} {
+      function applicationPrepared() {
+        return firestore.exists(/databases/(default)/documents/teacherApplications/$(uid))
+          && firestore.get(/databases/(default)/documents/teacherApplications/$(uid)).data.status == 'uploading'
+          && firestore.get(/databases/(default)/documents/teacherApplications/$(uid)).data.evidencePath == 'teacher-verification/' + uid + '/' + fileName;
+      }
       allow read: if isAdmin();
       allow create: if signedIn()
         && request.auth.uid == uid
+        && applicationPrepared()
         && request.resource != null
         && request.resource.size > 0
         && request.resource.size <= 10 * 1024 * 1024
@@ -158,9 +174,11 @@ service firebase.storage {
 
     // Verified teachers may upload a small profile image; published profile images are public.
     match /teachers/{uid}/avatar/{fileName} {
-      allow read: if signedIn() && request.auth.uid == uid
+      allow read: if (
+        (signedIn() && request.auth.uid == uid)
         || (firestore.exists(/databases/(default)/documents/teacherProfiles/$(uid))
-          && firestore.get(/databases/(default)/documents/teacherProfiles/$(uid)).data.published == true);
+          && firestore.get(/databases/(default)/documents/teacherProfiles/$(uid)).data.published == true)
+      );
       allow create: if signedIn()
         && request.auth.uid == uid
         && isVerifiedTeacher()

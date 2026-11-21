@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useState} from 'react';
 import {onAuthStateChanged,User} from 'firebase/auth';
-import {collection,getDocs,query,where} from 'firebase/firestore';
+import {collection,doc,getDocs,query,serverTimestamp,setDoc,where} from 'firebase/firestore';
 import {getFunctions,httpsCallable} from 'firebase/functions';
 import {ref,uploadBytes} from 'firebase/storage';
 import {auth,db,storage,firebaseConfigured} from '@/lib/firebase/client';
@@ -21,6 +21,7 @@ export default function TeacherApplicationPanel(){
   try{
    const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_').slice(-80);
    const evidencePath='teacher-verification/'+user.uid+'/'+Date.now()+'-'+safeName;
+   await setDoc(doc(db,'teacherApplications',user.uid),{uid:user.uid,evidencePath,status:'uploading',createdAt:serverTimestamp()});
    await uploadBytes(ref(storage,evidencePath),file,{contentType:file.type});
    await httpsCallable(getFunctions(),'submitTeacherApplication')({fullName:name,levelIds,subjectIds,evidencePath});
    setNotice('تم إرسال طلب التوثيق. ستراجعه إدارة IMI؛ لا تُمنح شارة الأستاذ تلقائياً.');

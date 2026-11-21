@@ -13,7 +13,7 @@ import {
 } from "../../../../functions/src/shared/serverCore";
 import { authenticateBearer, publicErrorMessage } from "../../../../functions/src/shared/serverAuth";
 
-type Operation = "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend" | "blockUser" | "unblockUser" | "createGroupConversation" | "addGroupParticipants" | "submitReel" | "reviewReel";
+type Operation = "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend" | "blockUser" | "unblockUser" | "createGroupConversation" | "addGroupParticipants" | "prepareReel" | "submitReel" | "reviewReel";
 const limits: Record<Operation, { count: number; windowMs: number }> = {
   createStatus: { count: 2, windowMs: 60_000 },
   sendFriendRequest: { count: 10, windowMs: 60 * 60_000 },
@@ -25,6 +25,7 @@ const limits: Record<Operation, { count: number; windowMs: number }> = {
   unblockUser: { count: 20, windowMs: 60_000 },
   createGroupConversation: { count: 5, windowMs: 60_000 },
   addGroupParticipants: { count: 10, windowMs: 60_000 },
+  prepareReel: { count: 3, windowMs: 60 * 60_000 },
   submitReel: { count: 3, windowMs: 60 * 60_000 },
   reviewReel: { count: 60, windowMs: 60_000 },
 };
@@ -161,6 +162,26 @@ export async function handleImiPost(request: Request, operation: Operation): Pro
       unblockUser: () => unblockUser(store, uid, body),
       createGroupConversation: () => createGroupConversation(store, uid, body),
       addGroupParticipants: () => addGroupParticipants(store, uid, body),
+      prepareReel: async () => {
+        const reelId = typeof body.reelId === "string" ? body.reelId.trim() : "";
+        const caption = typeof body.caption === "string" ? body.caption.trim() : "";
+        const contentType = body.contentType;
+        if (!/^[A-Za-z0-9_-]{8,128}$/.test(reelId)) throw new CoreError("invalid-argument", "معرّف المقطع غير صالح.");
+        if (caption.length > 300) throw new CoreError("invalid-argument", "الوصف يتجاوز 300 حرف.");
+        if (contentType !== "video/mp4" && contentType !== "video/webm") throw new CoreError("invalid-argument", "صيغة الفيديو غير مدعومة.");
+        const extension = contentType === "video/webm" ? "webm" : "mp4";
+        const storagePath = `reels/${uid}/${reelId}/video.${extension}`;
+        const reelRef = getFirestore(app).collection("reels").doc(reelId);
+        await getFirestore(app).runTransaction(async transaction => {
+          const existing = await transaction.get(reelRef);
+          if (existing.exists) throw new CoreError("already-exists", "هذا المقطع مسجل مسبقاً.");
+          transaction.create(reelRef, {
+            ownerUid: uid, caption, storagePath, contentType,
+            status: "uploading", createdAt: FieldValue.serverTimestamp(), reviewedAt: null, reviewedBy: null,
+          });
+        });
+        return { reelId, status: "uploading", storagePath };
+      },
       submitReel: async () => {
         const reelId = typeof body.reelId === "string" ? body.reelId.trim() : "";
         const caption = typeof body.caption === "string" ? body.caption.trim() : "";
@@ -185,10 +206,14 @@ export async function handleImiPost(request: Request, operation: Operation): Pro
         const reelRef = getFirestore(app).collection("reels").doc(reelId);
         await getFirestore(app).runTransaction(async transaction => {
           const existing = await transaction.get(reelRef);
-          if (existing.exists) throw new CoreError("already-exists", "هذا المقطع مسجل مسبقاً.");
-          transaction.create(reelRef, {
-            ownerUid: uid, caption, storagePath: expectedPath, contentType,
-            status: "pending", createdAt: FieldValue.serverTimestamp(), reviewedAt: null, reviewedBy: null,
+          if (!existing.exists || existing.get("ownerUid") !== uid
+            || existing.get("status") !== "uploading"
+            || existing.get("storagePath") !== expectedPath
+            || existing.get("contentType") !== contentType) {
+            throw new CoreError("failed-precondition", "لم يتم تجهيز مستند المقطع أو لا تطابق بياناته الملف.");
+          }
+          transaction.update(reelRef, {
+            caption, status: "pending", updatedAt: FieldValue.serverTimestamp(),
           });
         });
         return { reelId, status: "pending" };

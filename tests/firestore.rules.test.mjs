@@ -626,6 +626,19 @@ test('teacher applications and profiles are private and client writes cannot gra
   await assertFails(getDoc(doc(mallory, 'teacherApplications/alice')));
   await assertSucceeds(getDoc(doc(admin, 'teacherApplications/alice')));
   await assertFails(setDoc(doc(alice, 'teacherApplications/alice'), { uid: 'alice', status: 'approved' }));
+  const newApplicant = env.authenticatedContext('charlie').firestore();
+  await assertSucceeds(setDoc(doc(newApplicant, 'teacherApplications/charlie'), {
+    uid: 'charlie',
+    evidencePath: 'teacher-verification/charlie/identity.pdf',
+    status: 'uploading',
+    createdAt: serverTimestamp()
+  }));
+  await assertFails(setDoc(doc(newApplicant, 'teacherApplications/forged'), {
+    uid: 'forged',
+    evidencePath: 'teacher-verification/forged/identity.pdf',
+    status: 'uploading',
+    createdAt: serverTimestamp()
+  }));
   await assertFails(getDoc(doc(guest, 'teacherProfiles/alice')));
   await assertSucceeds(getDoc(doc(mallory, 'teacherProfiles/alice')));
   await assertFails(getDoc(doc(mallory, 'teacherProfiles/bob')));
@@ -647,6 +660,13 @@ test('teacher verification evidence is readable only by administrators', async (
   const otherUser = env.authenticatedContext('bob').storage();
   const admin = env.authenticatedContext('admin', { admin: true }).storage();
   const content = new Blob(['%PDF-1.4 test evidence'], { type: 'application/pdf' });
+  await assertFails(uploadBytes(ref(applicant, 'teacher-verification/alice/unprepared.pdf'), content, { contentType: 'application/pdf' }));
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'teacherApplications/alice'), {
+      uid: 'alice', evidencePath: path, status: 'uploading', createdAt: new Date()
+    });
+  });
+  await assertFails(uploadBytes(ref(applicant, 'teacher-verification/alice/not-the-declared-file.pdf'), content, { contentType: 'application/pdf' }));
   await assertSucceeds(uploadBytes(ref(applicant, path), content, { contentType: 'application/pdf' }));
   await assertFails(getBytes(ref(applicant, path)));
   await assertFails(getBytes(ref(otherUser, path)));
@@ -715,7 +735,13 @@ test('teacher verification files are write-only for applicant and readable only 
   const aliceStorage = env.authenticatedContext('alice').storage();
   const malloryStorage = env.authenticatedContext('mallory').storage();
   const adminStorage = env.authenticatedContext('admin', { admin: true }).storage();
-  const evidence = ref(aliceStorage, 'teacher-verification/alice/identity.pdf');
+  const evidencePath = 'teacher-verification/alice/identity.pdf';
+  const evidence = ref(aliceStorage, evidencePath);
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'teacherApplications/alice'), {
+      uid: 'alice', evidencePath, status: 'uploading', createdAt: new Date()
+    });
+  });
   await assertSucceeds(uploadBytes(evidence, new Blob(['pdf-data'], { type: 'application/pdf' })));
   await assertFails(getBytes(evidence));
   await assertFails(getBytes(ref(malloryStorage, 'teacher-verification/alice/identity.pdf')));
@@ -726,13 +752,20 @@ test('teacher verification files are write-only for applicant and readable only 
 
 test('only verified teachers can upload avatars and published teacher avatars are public', async () => {
   const verifiedStorage = env.authenticatedContext('alice', { teacherVerified: true }).storage();
+  const unpublishedTeacherStorage = env.authenticatedContext('carol', { teacherVerified: true }).storage();
   const unverifiedStorage = env.authenticatedContext('bob').storage();
   await env.withSecurityRulesDisabled(async context => {
     await setDoc(doc(context.firestore(), 'teacherProfiles/alice'), { uid: 'alice', published: true });
+    await setDoc(doc(context.firestore(), 'teacherProfiles/carol'), { uid: 'carol', published: false });
   });
   const avatar = ref(verifiedStorage, 'teachers/alice/avatar/profile.png');
   await assertSucceeds(uploadBytes(avatar, new Blob(['png-data'], { type: 'image/png' })));
   await assertFails(uploadBytes(ref(unverifiedStorage, 'teachers/bob/avatar/profile.png'), new Blob(['png-data'], { type: 'image/png' })));
+  const privateAvatar = ref(unpublishedTeacherStorage, 'teachers/carol/avatar/private.png');
+  await assertSucceeds(uploadBytes(privateAvatar, new Blob(['png-data'], { type: 'image/png' })));
+  await assertSucceeds(getBytes(privateAvatar));
+  await assertFails(getBytes(ref(env.authenticatedContext('alice').storage(), 'teachers/carol/avatar/private.png')));
+  await assertFails(getBytes(ref(env.unauthenticatedContext().storage(), 'teachers/carol/avatar/private.png')));
   await assertSucceeds(getBytes(ref(env.unauthenticatedContext().storage(), 'teachers/alice/avatar/profile.png')));
 });
 
@@ -819,16 +852,18 @@ test('Reels storage keeps uploads private until server approval', async () => {
   await env.withSecurityRulesDisabled(async context => {
     const db = context.firestore();
     await setDoc(doc(db, 'reels/pending02'), {
-      ownerUid: 'alice', status: 'pending',
+      ownerUid: 'alice', status: 'uploading', contentType: 'video/mp4',
       storagePath: 'reels/alice/pending02/video.mp4'
     });
     await setDoc(doc(db, 'reels/approved2'), {
-      ownerUid: 'alice', status: 'approved',
+      ownerUid: 'alice', status: 'uploading', contentType: 'video/mp4',
       storagePath: 'reels/alice/approved2/video.mp4'
     });
   });
 
   const pendingVideo = ref(aliceStorage, 'reels/alice/pending02/video.mp4');
+  await assertFails(uploadBytes(ref(aliceStorage, 'reels/alice/unprepared01/video.mp4'), new Blob(['video-data'], { type: 'video/mp4' })));
+  await assertFails(uploadBytes(ref(aliceStorage, 'reels/alice/pending02/not-the-declared-file.mp4'), new Blob(['video-data'], { type: 'video/mp4' })));
   await assertSucceeds(uploadBytes(pendingVideo, new Blob(['video-data'], { type: 'video/mp4' })));
   await assertSucceeds(getBytes(pendingVideo));
   await assertFails(getBytes(ref(bobStorage, 'reels/alice/pending02/video.mp4')));
@@ -837,6 +872,9 @@ test('Reels storage keeps uploads private until server approval', async () => {
     ref(aliceStorage, 'reels/alice/approved2/video.mp4'),
     new Blob(['approved-video'], { type: 'video/mp4' })
   ));
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'reels/approved2'), { status: 'approved' }, { merge: true });
+  });
   await assertSucceeds(getBytes(ref(bobStorage, 'reels/alice/approved2/video.mp4')));
   await assertFails(uploadBytes(
     ref(bobStorage, 'reels/alice/attacker01/video.mp4'),

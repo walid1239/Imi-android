@@ -46,6 +46,9 @@
 |---|---|---|
 | `createStatus` | `POST /api/v1/status` | Preserve server timestamp, 28-hour expiry and cooldown. Media upload is disabled on Spark; text-only status is MVP. |
 | `sendFriendRequest` | `POST /api/v1/friends/requests` | Preserve mutual-block, profile, existing-friend and pending-request checks in a transaction. |
+| `acceptFriendRequest` | `POST /api/v1/friends/requests/accept` | Verify recipient, reject blocked/inconsistent relationships, and create reciprocal friend edges transactionally. |
+| `rejectFriendRequest` | `POST /api/v1/friends/requests/reject` | Verify recipient and update only a pending request; repeat rejection is idempotent. |
+| `removeFriend` | `POST /api/v1/friends/remove` | Verify reciprocal accepted edges, delete both, and mark accepted request records removed transactionally. |
 | `createOrGetDirectConversation` | `POST /api/v1/conversations/direct` | Preserve deterministic ID, profile existence, mutual-block and teacher/student restrictions. |
 | `acceptFriendRequest`, `rejectFriendRequest`, `removeFriend` | Later authenticated route handlers | Keep all relationship writes server-only; do not replace with direct client writes. |
 | `createGroupConversation`, `addGroupParticipants` | Later route handlers | Preserve role checks, membership caps and block checks. |

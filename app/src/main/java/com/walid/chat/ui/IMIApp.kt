@@ -20,7 +20,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
-import org.json.JSONArray
 import com.walid.chat.ui.theme.IMITheme
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -334,90 +333,131 @@ private fun ReelsScreen() {
         }
     }
 }
+private data class AndroidAcademyCourse(val id: String, val title: String, val description: String, val category: String)
+private data class AndroidAcademyLesson(val id: String, val title: String, val content: String, val order: Int)
+
 @Composable
 private fun AcademyScreen() {
-    val context = LocalContext.current
-    val progressPrefs = remember(context) {
-        context.getSharedPreferences("imi_academy_progress", android.content.Context.MODE_PRIVATE)
+    val firestore = remember { FirebaseFirestore.getInstance() }
+    var courses by remember { mutableStateOf<List<AndroidAcademyCourse>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var selectedCourse by remember { mutableStateOf<AndroidAcademyCourse?>(null) }
+    var lessons by remember { mutableStateOf<List<AndroidAcademyLesson>>(emptyList()) }
+    var lessonsLoading by remember { mutableStateOf(false) }
+    var lessonsError by remember { mutableStateOf<String?>(null) }
+
+    DisposableEffect(firestore) {
+        val registration = firestore.collection("courses")
+            .whereEqualTo("published", true)
+            .addSnapshotListener { snapshot, exception ->
+                if (exception != null) {
+                    error = exception.localizedMessage ?: "تعذر تحميل الدورات المنشورة."
+                    loading = false
+                } else {
+                    courses = snapshot?.documents?.map { document ->
+                        AndroidAcademyCourse(
+                            id = document.id,
+                            title = document.getString("title") ?: "دورة بلا عنوان",
+                            description = document.getString("description") ?: "",
+                            category = document.getString("category") ?: ""
+                        )
+                    }?.sortedBy { it.title } ?: emptyList()
+                    error = null
+                    loading = false
+                }
+            }
+        onDispose { registration.remove() }
     }
-    val courses = listOf(
-        Triple("التعلّم الذاتي", "خطوات عملية لبناء عادة تعلّم مستمرة", "حدّد هدفاً صغيراً وواضحاً، وقسّمه إلى جلسات قصيرة. خصّص وقتاً ثابتاً للتعلّم، واكتب في نهاية كل جلسة ما فهمته وما يحتاج إلى مراجعة. الاستمرارية أهم من طول الجلسة."),
-        Triple("اللغة الإنجليزية", "ابدأ بالمفردات والجمل اليومية", "تعلّم خمس كلمات جديدة يومياً ضمن جمل مفيدة. استمع إلى نطقها، ثم كوّن جملتين من عندك. راجع الكلمات بعد يوم ثم بعد أسبوع لتثبيتها في الذاكرة."),
-        Triple("أساسيات البرمجة", "افهم المتغيرات والشروط والحلقات", "المتغير يخزّن قيمة يمكن استعمالها لاحقاً. الشرط يختار مسار التنفيذ حسب نتيجة اختبار، والحلقة تكرّر مجموعة تعليمات. ابدأ بأمثلة صغيرة وجرّب تغيير القيم ولاحظ النتيجة.")
-    )
-    var completed by remember(progressPrefs) {
-        mutableStateOf(
-            runCatching {
-                val array = JSONArray(progressPrefs.getString("completed", "[]"))
-                List(array.length()) { array.getString(it) }.toSet()
-            }.getOrDefault(emptySet())
-        )
-    }
-    var selectedCourse by remember { mutableStateOf<Int?>(null) }
-    Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        PageHeader("IMI Academy", "تعلّم مهارات جديدة")
-        Surface(color = ImiSurface, shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(Icons.Filled.School, null, tint = ImiPurple, modifier = Modifier.size(34.dp))
-                Text("بوابتك إلى المعرفة", color = ImiText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("دروس قصيرة يمكنك قراءتها دون اتصال. تقدّمك يُحفظ على هذا الجهاز.", color = ImiMuted, fontSize = 13.sp, lineHeight = 20.sp)
-                Text("${completed.size} من ${courses.size} دروس مكتملة", color = ImiBlue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                LinearProgressIndicator(
-                    progress = { completed.size.toFloat() / courses.size.toFloat() },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = ImiBlue,
-                    trackColor = ImiSurface2
+
+    LaunchedEffect(selectedCourse?.id) {
+        val course = selectedCourse
+        if (course == null) {
+            lessons = emptyList()
+            return@LaunchedEffect
+        }
+        lessonsLoading = true
+        lessonsError = null
+        try {
+            val snapshot = firestore.collection("courses").document(course.id)
+                .collection("lessons")
+                .whereEqualTo("published", true)
+                .get().await()
+            lessons = snapshot.documents.map { document ->
+                AndroidAcademyLesson(
+                    id = document.id,
+                    title = document.getString("title") ?: "درس بلا عنوان",
+                    content = document.getString("content") ?: "",
+                    order = (document.getLong("order") ?: 0L).toInt()
                 )
+            }.sortedBy { it.order }
+        } catch (failure: Exception) {
+            lessons = emptyList()
+            lessonsError = failure.localizedMessage ?: "تعذر تحميل دروس الدورة."
+        } finally {
+            lessonsLoading = false
+        }
+    }
+
+    Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        PageHeader("IMI Academy", "الدورات المنشورة من خادم IMI")
+        Surface(color = ImiSurface, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Filled.School, null, tint = ImiPurple, modifier = Modifier.size(30.dp))
+                Text("محتوى حقيقي متزامن", color = ImiText, fontWeight = FontWeight.Bold)
+                Text("تظهر هنا الدورات والدروس التي اعتمدها المشرف ونشرها. لا نعرض دروساً تجريبية ثابتة.", color = ImiMuted, fontSize = 12.sp, lineHeight = 19.sp)
+                Text("التسجيل في الدورات وحفظ التقدم السحابي قيد ربط تطبيق Android بخادم الأكاديمية.", color = ImiMuted, fontSize = 11.sp, lineHeight = 18.sp)
             }
         }
-        courses.forEachIndexed { index, course ->
-            val isDone = index.toString() in completed
-            Surface(
-                color = ImiSurface,
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth().clickable { selectedCourse = index }
-            ) {
-                Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(ImiPurple.copy(alpha = .16f)), contentAlignment = Alignment.Center) {
-                        if (isDone) Icon(Icons.Filled.CheckCircle, null, tint = ImiGreen)
-                        else Text("${index + 1}", color = Color(0xFFB69BFF), fontWeight = FontWeight.Bold)
+        when {
+            loading -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                CircularProgressIndicator(color = ImiBlue)
+            }
+            error != null -> Text(error!!, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+            courses.isEmpty() -> Text("لا توجد دورات منشورة حالياً. ستظهر الدورات هنا بعد اعتمادها.", color = ImiMuted, fontSize = 13.sp)
+            else -> LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                items(courses, key = { it.id }) { course ->
+                    Surface(
+                        color = ImiSurface,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth().clickable { selectedCourse = course }
+                    ) {
+                        Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Text(course.title, color = ImiText, fontWeight = FontWeight.SemiBold)
+                            if (course.category.isNotBlank()) Text(course.category, color = ImiBlue, fontSize = 10.sp)
+                            if (course.description.isNotBlank()) Text(course.description, color = ImiMuted, fontSize = 11.sp, maxLines = 3, lineHeight = 17.sp)
+                            Text("عرض الدروس ←", color = ImiBlue, fontSize = 11.sp)
+                        }
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(course.first, color = ImiText, fontWeight = FontWeight.SemiBold)
-                        Text(course.second, color = ImiMuted, fontSize = 11.sp)
-                    }
-                    Icon(Icons.Filled.ChevronLeft, null, tint = ImiMuted)
                 }
             }
         }
-        Text("هذه دروس تأسيسية محلية وليست محتوى منشوراً من خادم أو مدرسين.", color = ImiMuted, fontSize = 11.sp)
     }
-    selectedCourse?.let { index ->
-        val course = courses[index]
-        val isDone = index.toString() in completed
+
+    selectedCourse?.let { course ->
         AlertDialog(
             onDismissRequest = { selectedCourse = null },
-            title = { Text(course.first) },
+            title = { Text(course.title) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(course.second, color = ImiBlue, fontWeight = FontWeight.SemiBold)
-                    Text(course.third, color = ImiMuted, lineHeight = 21.sp)
-                    if (isDone) Text("تم إكمال هذا الدرس", color = ImiGreen, fontSize = 12.sp)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (course.description.isNotBlank()) Text(course.description, color = ImiMuted, fontSize = 12.sp)
+                    when {
+                        lessonsLoading -> CircularProgressIndicator(color = ImiBlue)
+                        lessonsError != null -> Text(lessonsError!!, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                        lessons.isEmpty() -> Text("لا توجد دروس منشورة في هذه الدورة بعد.", color = ImiMuted, fontSize = 12.sp)
+                        else -> LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            items(lessons, key = { it.id }) { lesson ->
+                                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Text(lesson.title, color = ImiText, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                    if (lesson.content.isNotBlank()) Text(lesson.content, color = ImiMuted, fontSize = 11.sp, lineHeight = 18.sp)
+                                    Divider(color = ImiSurface2)
+                                }
+                            }
+                        }
+                    }
                 }
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    completed = if (isDone) completed - index.toString() else completed + index.toString()
-                    val saved = JSONArray()
-                    completed.forEach { saved.put(it) }
-                    progressPrefs.edit().putString("completed", saved.toString()).apply()
-                    selectedCourse = null
-                }) { Text(if (isDone) "إلغاء الإكمال" else "تحديد كمكتمل") }
-            },
-            dismissButton = {
-                TextButton(onClick = { selectedCourse = null }) { Text("إغلاق") }
-            }
+            confirmButton = { TextButton(onClick = { selectedCourse = null }) { Text("إغلاق") } }
         )
     }
 }

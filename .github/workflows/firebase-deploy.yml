@@ -1,6 +1,22 @@
 name: IMI Firebase Rules and Indexes Deployment
 
 on:
+  push:
+    branches: [main, master, 'feature/**']
+    paths:
+      - 'firestore.rules'
+      - 'firestore.indexes.json'
+      - 'storage.rules'
+      - 'firebase.json'
+      - '.github/workflows/firebase-deploy.yml'
+  pull_request:
+    branches: [main, master, 'feature/**']
+    paths:
+      - 'firestore.rules'
+      - 'firestore.indexes.json'
+      - 'storage.rules'
+      - 'firebase.json'
+      - '.github/workflows/firebase-deploy.yml'
   workflow_dispatch:
     inputs:
       project_id:
@@ -15,15 +31,14 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: imi-firebase-rules-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   validate:
     name: Validate workflow and Firebase rules configuration
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.confirm_deploy != 'DEPLOY' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
+    concurrency:
+      group: imi-firebase-rules-validation-${{ github.event.pull_request.head.ref || github.ref_name }}
+      cancel-in-progress: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,12 +54,32 @@ jobs:
       - name: Validate Firestore indexes JSON
         run: node -e "JSON.parse(require('node:fs').readFileSync('firestore.indexes.json', 'utf8')); console.log('firestore.indexes.json: valid JSON')"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Java for Firebase Emulator Suite
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install security test dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run Firestore and Storage rules Emulator tests
+        run: npx --yes firebase-tools@15.37.0 emulators:exec --only firestore,storage --project demo-imi-security "npm run test:rules"
+
   deploy:
     name: Deploy Firestore rules and indexes only
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_deploy == 'DEPLOY' }}
     needs: validate
     runs-on: ubuntu-latest
     environment: firebase-production
+    concurrency:
+      group: imi-firebase-rules-production-deploy
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
@@ -70,20 +105,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-
-      - name: Set up Java for Firebase Emulator Suite
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Install Firebase CLI and security test dependencies
-        run: |
-          npm ci --no-audit --no-fund
-          npx --yes firebase-tools@15.37.0 --version
-
-      - name: Run Firestore and Storage rules Emulator tests
-        run: npx --yes firebase-tools@15.37.0 emulators:exec --only firestore,storage --project demo-imi-security "npm run test:rules"
 
       - name: Authenticate to Google Cloud using GitHub OIDC
         uses: google-github-actions/auth@v2

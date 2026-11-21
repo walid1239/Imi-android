@@ -39,6 +39,12 @@ const coreStore: StorePort = {
   },
   isVerifiedTeacher: async uid => (await getAuth().getUser(uid)).customClaims?.teacherVerified === true,
   directConversationId,
+  getDocument: async path => { const snapshot = await db.doc(path).get(); return { exists: snapshot.exists, data: snapshot.data() ?? {} }; },
+  getActiveCalls: async (callerUid, calleeUid) => {
+    const snapshot = await db.collection("calls").where("callerUid", "==", callerUid)
+      .where("calleeUid", "==", calleeUid).where("status", "in", ["ringing", "accepted"]).get();
+    return snapshot.docs.map(item => ({ id: item.id }));
+  },
 };
 async function runCore<T>(work: () => Promise<T>): Promise<T> {
   try { return await work(); }

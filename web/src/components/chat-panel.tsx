@@ -7,7 +7,6 @@ import {
   setDoc, startAfter, startAt, where, writeBatch, Timestamp
 } from 'firebase/firestore';
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
-import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db, storage } from '@/lib/firebase/client';
 import { postAuthenticated } from '@/lib/api';
 import CallControls from '@/components/call-controls';
@@ -419,9 +418,8 @@ export default function ChatPanel({ user }: { user: User }) {
     if (groupName.trim().length < 2 || groupMembers.length < 2 || busy) return;
     setBusy(true); setError('');
     try {
-      const action = httpsCallable<{ name: string; participantUids: string[] }, { conversationId: string }>(getFunctions(), 'createGroupConversation');
-      const response = await action({ name: groupName.trim(), participantUids: groupMembers });
-      setSelectedId(response.data.conversationId);
+      const response = await postAuthenticated<{ conversationId: string }>(user, '/api/v1/conversations/groups', { name: groupName.trim(), participantUids: groupMembers });
+      setSelectedId(response.conversationId);
       setGroupMembers([]); setGroupName(''); setSearchResults([]);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'تعذر إنشاء المجموعة. تأكد من أن الأعضاء أصدقاؤك.');
@@ -436,7 +434,7 @@ export default function ChatPanel({ user }: { user: User }) {
     if (!selectedId || selected?.type !== 'group' || groupMembers.length === 0 || busy) return;
     setBusy(true); setError('');
     try {
-      await httpsCallable(getFunctions(), 'addGroupParticipants')({ conversationId: selectedId, participantUids: groupMembers });
+      await postAuthenticated(user, '/api/v1/conversations/groups/members', { conversationId: selectedId, participantUids: groupMembers });
       setGroupMembers([]);
       setNotice('تمت إضافة الأعضاء إلى المجموعة.');
     } catch (reason) {
@@ -446,7 +444,7 @@ export default function ChatPanel({ user }: { user: User }) {
 
   async function unblock(uid: string) {
     try {
-      await httpsCallable(getFunctions(), 'unblockUser')({ targetUid: uid });
+      await postAuthenticated(user, '/api/v1/users/unblock', { targetUid: uid });
       setError('');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'تعذر إلغاء الحظر.');
@@ -458,7 +456,7 @@ export default function ChatPanel({ user }: { user: User }) {
     if (!window.confirm('هل تريد حظر هذا المستخدم؟ سيُوقف التواصل المباشر وتُحذف الصداقة المتبادلة.')) return;
     setBlockBusy(true); setError('');
     try {
-      await httpsCallable(getFunctions(), 'blockUser')({ targetUid: otherUid });
+      await postAuthenticated(user, '/api/v1/users/block', { targetUid: otherUid });
       setSelectedId('');
       setMessages([]);
       setNotice('تم حظر المستخدم وإيقاف المحادثة المباشرة.');

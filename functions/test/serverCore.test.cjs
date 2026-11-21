@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
   CoreError, createStatus, sendFriendRequest, createOrGetDirectConversation,
   acceptFriendRequest, rejectFriendRequest, removeFriend,
+  blockUser, unblockUser, createGroupConversation, addGroupParticipants,
 } = require("../lib/shared/serverCore.js");
 const { directConversationId } = require("../lib/conversationLogic.js");
 
@@ -32,6 +33,8 @@ function makeStore(seed = {}, teachers = {}) {
     timestampToMillis: value => value && typeof value.toMillis === "function" ? value.toMillis() : undefined,
     isVerifiedTeacher: async uid => teachers[uid] === true,
     directConversationId,
+    getDocument: async path => ({ exists: docs.has(path), data: docs.get(path) ?? {} }),
+    getActiveCalls: async () => [],
   };
 }
 
@@ -112,4 +115,48 @@ test("removeFriend deletes reciprocal edges and marks accepted requests removed"
   assert.equal(store.docs.has("users/a/friends/b"), false);
   assert.equal(store.docs.has("users/b/friends/a"), false);
   assert.equal(store.docs.get("friendRequests/a__b").status, "removed");
+});
+
+test("blockUser removes friendship, closes direct chat and active calls", async () => {
+  const store = makeStore({
+    "publicProfiles/b": {},
+    "users/a/friends/b": { status: "accepted" }, "users/b/friends/a": { status: "accepted" },
+    "conversations/a__b": { participants: ["a", "b"], status: "active" },
+    "friendRequests/a__b": { status: "pending" },
+  });
+  assert.equal((await blockUser(store, "a", { targetUid: "b" })).status, "blocked");
+  assert.equal(store.docs.has("users/a/blockedUsers/b"), true);
+  assert.equal(store.docs.has("users/a/friends/b"), false);
+  assert.equal(store.docs.get("conversations/a__b").status, "blocked");
+});
+test("unblockUser only restores direct chat when reverse block is absent", async () => {
+  const store = makeStore({
+    "users/a/blockedUsers/b": {}, "users/b/blockedUsers/a": {},
+    "conversations/a__b": { status: "blocked" },
+  });
+  await unblockUser(store, "a", { targetUid: "b" });
+  assert.equal(store.docs.has("users/a/blockedUsers/b"), false);
+  assert.equal(store.docs.get("conversations/a__b").status, "blocked");
+});
+test("createGroupConversation requires mutual friendship and creates admin membership", async () => {
+  const store = makeStore({
+    "publicProfiles/a": {}, "publicProfiles/b": {}, "publicProfiles/c": {},
+    "users/a/friends/b": { status: "accepted" }, "users/b/friends/a": { status: "accepted" },
+    "users/a/friends/c": { status: "accepted" }, "users/c/friends/a": { status: "accepted" },
+  });
+  const result = await createGroupConversation(store, "a", { name: "الفريق", participantUids: ["b", "c"] });
+  const group = store.docs.get("conversations/" + result.conversationId);
+  assert.deepEqual(group.participants, ["a", "b", "c"]);
+  assert.deepEqual(group.admins, ["a"]);
+});
+test("addGroupParticipants is admin-only and revalidates mutual friendship", async () => {
+  const store = makeStore({
+    "conversations/g": { type: "group", admins: ["a"], participants: ["a", "b"] },
+    "publicProfiles/c": {},
+    "users/a/friends/c": { status: "accepted" }, "users/c/friends/a": { status: "accepted" },
+  });
+  await assert.rejects(addGroupParticipants(store, "x", { conversationId: "g", participantUids: ["c"] }),
+    error => error instanceof CoreError && error.code === "permission-denied");
+  const result = await addGroupParticipants(store, "a", { conversationId: "g", participantUids: ["c"] });
+  assert.equal(result.participantCount, 3);
 });

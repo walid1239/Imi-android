@@ -26,6 +26,8 @@ export interface StorePort {
   timestampToMillis(value: unknown): number | undefined;
   isVerifiedTeacher(uid: string): Promise<boolean>;
   directConversationId(firstUid: string, secondUid: string): string;
+  getDocument(path: string): Promise<Snapshot>;
+  getActiveCalls(callerUid: string, calleeUid: string): Promise<Array<{ id: string }>>;
 }
 
 function requireUid(value: unknown, message: string, maxLength = 128): string {
@@ -251,4 +253,159 @@ export async function createOrGetDirectConversation(
     });
   });
   return { conversationId };
+}
+
+
+export async function blockUser(store: StorePort, uidValue: unknown, input: { targetUid?: unknown }) {
+  const uid = requireUid(uidValue, "معرّف المستخدم غير صالح.");
+  const targetUid = requireUid(input.targetUid, "معرّف المستخدم المستهدف غير صالح.");
+  if (uid === targetUid) throw new CoreError("invalid-argument", "لا يمكنك حظر حسابك.");
+  const [profile, outgoingCalls, incomingCalls] = await Promise.all([
+    store.getDocument(`publicProfiles/${targetUid}`),
+    store.getActiveCalls(uid, targetUid),
+    store.getActiveCalls(targetUid, uid),
+  ]);
+  if (!profile.exists) throw new CoreError("not-found", "الحساب غير موجود.");
+  const callPaths = [...new Set([...outgoingCalls, ...incomingCalls].map(call => `calls/${call.id}`))];
+  const directPath = `conversations/${store.directConversationId(uid, targetUid)}`;
+  const forward = `friendRequests/${friendRequestId(uid, targetUid)}`;
+  const reverse = `friendRequests/${friendRequestId(targetUid, uid)}`;
+  await store.runTransaction(async tx => {
+    const paths = [
+      `users/${uid}/blockedUsers/${targetUid}`, `users/${uid}/friends/${targetUid}`,
+      `users/${targetUid}/friends/${uid}`, forward, reverse, directPath, ...callPaths,
+    ];
+    const snapshots = await Promise.all(paths.map(path => tx.get(path)));
+    const byPath = new Map(paths.map((path, index) => [path, snapshots[index]]));
+    tx.set(paths[0], { uid: targetUid, blockedAt: store.serverTimestamp() });
+    tx.delete(paths[1]); tx.delete(paths[2]); tx.delete(forward); tx.delete(reverse);
+    const direct = byPath.get(directPath)!;
+    if (direct.exists) tx.update(directPath, { status: "blocked", lastMessage: "", updatedAt: store.serverTimestamp() });
+    for (const path of callPaths) {
+      if (byPath.get(path)?.exists) tx.update(path, {
+        status: "ended", endedBy: uid, endReason: "blocked",
+        endedAt: store.serverTimestamp(), updatedAt: store.serverTimestamp(),
+      });
+    }
+  });
+  return { status: "blocked" as const };
+}
+
+export async function unblockUser(store: StorePort, uidValue: unknown, input: { targetUid?: unknown }) {
+  const uid = requireUid(uidValue, "معرّف المستخدم غير صالح.");
+  const targetUid = requireUid(input.targetUid, "معرّف المستخدم المستهدف غير صالح.");
+  if (uid === targetUid) throw new CoreError("invalid-argument", "معرّف الحساب غير صالح.");
+  await store.runTransaction(async tx => {
+    const ownPath = `users/${uid}/blockedUsers/${targetUid}`;
+    const reversePath = `users/${targetUid}/blockedUsers/${uid}`;
+    const directPath = `conversations/${store.directConversationId(uid, targetUid)}`;
+    const [own, reverse, direct] = await Promise.all([tx.get(ownPath), tx.get(reversePath), tx.get(directPath)]);
+    if (own.exists) tx.delete(ownPath);
+    if (!reverse.exists && direct.exists && direct.data.status === "blocked") {
+      tx.update(directPath, { status: "active", updatedAt: store.serverTimestamp() });
+    }
+  });
+  return { status: "unblocked" as const };
+}
+
+export async function createGroupConversation(
+  store: StorePort, uidValue: unknown, input: { name?: unknown; participantUids?: unknown },
+) {
+  const uid = requireUid(uidValue, "معرّف المستخدم غير صالح.");
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  if (name.length < 2 || name.length > 80) throw new CoreError("invalid-argument", "اسم المجموعة يجب أن يكون بين حرفين و80 حرفاً.");
+  if (!Array.isArray(input.participantUids) || input.participantUids.length < 2 || input.participantUids.length > 49) {
+    throw new CoreError("invalid-argument", "اختر من عضوين إلى 49 عضواً بالإضافة إليك.");
+  }
+  const participants = [...new Set([uid, ...input.participantUids.map(value => requireUid(value, "معرّف عضو المجموعة غير صالح."))])].sort();
+  if (participants.length < 3 || participants.length > 50) throw new CoreError("invalid-argument", "المجموعة تتطلب ثلاثة أعضاء على الأقل.");
+  const roles = await Promise.all(participants.map(id => store.isVerifiedTeacher(id)));
+  if (roles.some(role => role !== roles[0])) throw new CoreError("permission-denied", "لا يمكن إنشاء مجموعة خاصة تضم أساتذة وتلاميذ معاً.");
+  const conversationId = store.newId();
+  await store.runTransaction(async tx => {
+    const paths = participants.flatMap(id => [
+      `publicProfiles/${id}`,
+      ...(id === uid ? [] : [
+        `users/${uid}/friends/${id}`, `users/${id}/friends/${uid}`,
+        `users/${uid}/blockedUsers/${id}`, `users/${id}/blockedUsers/${uid}`,
+      ]),
+    ]);
+    const snapshots = await Promise.all(paths.map(path => tx.get(path)));
+    const byPath = new Map(paths.map((path, index) => [path, snapshots[index]]));
+    for (const id of participants) {
+      if (!byPath.get(`publicProfiles/${id}`)?.exists) throw new CoreError("not-found", "تعذر العثور على ملف أحد أعضاء المجموعة.");
+      if (id !== uid) {
+        const a = byPath.get(`users/${uid}/friends/${id}`), b = byPath.get(`users/${id}/friends/${uid}`);
+        if (!a?.exists || !b?.exists || a.data.status !== "accepted" || b.data.status !== "accepted") {
+          throw new CoreError("failed-precondition", "يجب أن تكون صديقاً مؤكداً لكل عضو في المجموعة.");
+        }
+        if (byPath.get(`users/${uid}/blockedUsers/${id}`)?.exists || byPath.get(`users/${id}/blockedUsers/${uid}`)?.exists) {
+          throw new CoreError("permission-denied", "لا يمكن إضافة عضو بسبب إعدادات الحظر.");
+        }
+      }
+    }
+    const now = store.serverTimestamp();
+    tx.create(`conversations/${conversationId}`, {
+      type: "group", name, ownerUid: uid, admins: [uid], participants,
+      createdBy: uid, createdAt: now, updatedAt: now, lastMessage: "", lastMessageAt: now,
+    });
+  });
+  return { conversationId, participantCount: participants.length };
+}
+
+export async function addGroupParticipants(
+  store: StorePort, uidValue: unknown,
+  input: { conversationId?: unknown; participantUids?: unknown },
+) {
+  const uid = requireUid(uidValue, "معرّف المستخدم غير صالح.");
+  const conversationId = requireUid(input.conversationId, "معرّف المجموعة غير صالح.");
+  if (!Array.isArray(input.participantUids) || input.participantUids.length < 1 || input.participantUids.length > 20) {
+    throw new CoreError("invalid-argument", "عدد الأعضاء غير صالح.");
+  }
+  const additions = [...new Set(input.participantUids.map(value => requireUid(value, "معرّف عضو المجموعة غير صالح.")))];
+  const conversationPath = `conversations/${conversationId}`;
+  const current = await store.getDocument(conversationPath);
+  if (!current.exists || current.data.type !== "group") throw new CoreError("not-found", "المجموعة غير موجودة.");
+  const members = current.data.participants;
+  const admins = current.data.admins;
+  if (!Array.isArray(members) || !members.every(value => typeof value === "string") ||
+    new Set(members).size !== members.length || !Array.isArray(admins) || !admins.includes(uid)) {
+    throw new CoreError("permission-denied", "مشرفو المجموعة فقط يمكنهم إضافة أعضاء.");
+  }
+  const fresh = additions.filter(id => !members.includes(id));
+  if (!fresh.length) return { participantCount: members.length };
+  if (members.length + fresh.length > 50) throw new CoreError("resource-exhausted", "الحد الأقصى للمجموعة 50 عضواً.");
+  const roles = await Promise.all([...members, ...fresh].map(id => store.isVerifiedTeacher(id)));
+  if (roles.some(role => role !== roles[0])) throw new CoreError("permission-denied", "لا يمكن جمع أساتذة وتلاميذ في مجموعة خاصة.");
+  await store.runTransaction(async tx => {
+    const paths = [
+      conversationPath,
+      ...fresh.flatMap(id => [
+        `publicProfiles/${id}`, `users/${uid}/friends/${id}`, `users/${id}/friends/${uid}`,
+        `users/${uid}/blockedUsers/${id}`, `users/${id}/blockedUsers/${uid}`,
+      ]),
+    ];
+    const snapshots = await Promise.all(paths.map(path => tx.get(path)));
+    const byPath = new Map(paths.map((path, index) => [path, snapshots[index]]));
+    const latest = byPath.get(conversationPath)!;
+    if (!latest.exists || latest.data.type !== "group") throw new CoreError("not-found", "المجموعة غير موجودة.");
+    const latestMembers = latest.data.participants, latestAdmins = latest.data.admins;
+    if (!Array.isArray(latestAdmins) || !latestAdmins.includes(uid)) throw new CoreError("permission-denied", "مشرفو المجموعة فقط يمكنهم إضافة أعضاء.");
+    if (!Array.isArray(latestMembers) || latestMembers.length !== members.length ||
+      [...latestMembers].sort().some((id, index) => id !== [...members].sort()[index])) {
+      throw new CoreError("failed-precondition", "تغيرت عضوية المجموعة أثناء العملية؛ أعد المحاولة.");
+    }
+    for (const id of fresh) {
+      if (!byPath.get(`publicProfiles/${id}`)?.exists) throw new CoreError("not-found", "تعذر العثور على ملف أحد الأعضاء.");
+      const a = byPath.get(`users/${uid}/friends/${id}`), b = byPath.get(`users/${id}/friends/${uid}`);
+      if (!a?.exists || !b?.exists || a.data.status !== "accepted" || b.data.status !== "accepted") {
+        throw new CoreError("failed-precondition", "يجب أن تكون صديقاً مؤكداً لكل عضو جديد.");
+      }
+      if (byPath.get(`users/${uid}/blockedUsers/${id}`)?.exists || byPath.get(`users/${id}/blockedUsers/${uid}`)?.exists) {
+        throw new CoreError("permission-denied", "لا يمكن إضافة عضو بسبب إعدادات الحظر.");
+      }
+    }
+    tx.update(conversationPath, { participants: [...members, ...fresh].sort(), updatedAt: store.serverTimestamp() });
+  });
+  return { participantCount: members.length + fresh.length };
 }

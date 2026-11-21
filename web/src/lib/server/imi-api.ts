@@ -7,11 +7,12 @@ import { NextResponse } from "next/server";
 import {
   createStatus, sendFriendRequest, createOrGetDirectConversation,
   acceptFriendRequest, rejectFriendRequest, removeFriend,
+  blockUser, unblockUser, createGroupConversation, addGroupParticipants,
   type StorePort, type TransactionPort,
 } from "../../../../functions/src/shared/serverCore";
 import { authenticateBearer, publicErrorMessage } from "../../../../functions/src/shared/serverAuth";
 
-type Operation = "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend";
+type Operation = "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend" | "blockUser" | "unblockUser" | "createGroupConversation" | "addGroupParticipants";
 const limits: Record<Operation, { count: number; windowMs: number }> = {
   createStatus: { count: 2, windowMs: 60_000 },
   sendFriendRequest: { count: 10, windowMs: 60 * 60_000 },
@@ -19,6 +20,10 @@ const limits: Record<Operation, { count: number; windowMs: number }> = {
   acceptFriendRequest: { count: 30, windowMs: 60_000 },
   rejectFriendRequest: { count: 30, windowMs: 60_000 },
   removeFriend: { count: 10, windowMs: 60_000 },
+  blockUser: { count: 10, windowMs: 60_000 },
+  unblockUser: { count: 20, windowMs: 60_000 },
+  createGroupConversation: { count: 5, windowMs: 60_000 },
+  addGroupParticipants: { count: 10, windowMs: 60_000 },
 };
 
 function adminApp(): App {
@@ -70,6 +75,12 @@ function makeStore(app: App): StorePort {
       update: (path, data) => transaction.update(db.doc(path), data),
       delete: path => transaction.delete(db.doc(path)),
     })),
+    getDocument: async path => { const snapshot = await db.doc(path).get(); return { exists: snapshot.exists, data: snapshot.data() ?? {} }; },
+    getActiveCalls: async (callerUid, calleeUid) => {
+      const snapshot = await db.collection("calls").where("callerUid", "==", callerUid)
+        .where("calleeUid", "==", calleeUid).where("status", "in", ["ringing", "accepted"]).get();
+      return snapshot.docs.map(item => ({ id: item.id }));
+    },
     newId: () => db.collection("_imi_ids").doc().id,
     nowMillis: () => Date.now(),
     serverTimestamp: () => FieldValue.serverTimestamp(),
@@ -143,6 +154,10 @@ export async function handleImiPost(request: Request, operation: Operation): Pro
       acceptFriendRequest: () => acceptFriendRequest(store, uid, body),
       rejectFriendRequest: () => rejectFriendRequest(store, uid, body),
       removeFriend: () => removeFriend(store, uid, body),
+      blockUser: () => blockUser(store, uid, body),
+      unblockUser: () => unblockUser(store, uid, body),
+      createGroupConversation: () => createGroupConversation(store, uid, body),
+      addGroupParticipants: () => addGroupParticipants(store, uid, body),
     };
     const result = await handlers[operation]();
     return NextResponse.json({ ok: true, data: result }, { status: 200 });

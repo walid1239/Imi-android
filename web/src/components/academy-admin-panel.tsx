@@ -165,7 +165,7 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
       </article>)}
     </section>
 
-    <CurriculumAdminPanel />
+    <CurriculumAdminPanel user={user} />
 
     <section className="space-y-3 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
       <div className="flex items-center justify-between"><h3 className="font-bold">طلبات توثيق الأساتذة ({teacherApplications.filter(item => item.status === 'pending').length})</h3><span className="text-xs text-slate-500">أحدث 100 طلب</span></div>

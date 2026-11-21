@@ -94,3 +94,21 @@ Branch-only proof of concept validated on 2026-11-21 at code commit `e838ae3e4c6
 - `POST /api/v1/conversations/groups` and `/api/v1/conversations/groups/members` use shared transactional logic. Group creation and membership additions verify profiles, mutual accepted friendship, bilateral block state, teacher/student role separation, admin rights, and the 50-member ceiling.
 - Legacy callable functions remain present during the migration. The UI now calls the trusted Next.js routes; no Firebase production rules or project settings were changed.
 - E2E request fixtures are seeded through the Firebase Admin SDK only against the disposable `demo-imi-playwright` emulator. Client REST writes remain prohibited by Firestore rules.
+
+
+## Spark phase-1 UI lockdown — 2026-11-21
+
+The current work branch now disables Firebase Storage-dependent user-facing features instead of leaving upload controls that would fail on Spark:
+
+- Web chat composer is text-only; attachment picker, voice recording, Storage upload/download code paths were removed from the component. Existing historical media messages are shown as unavailable in the free phase.
+- Web status screen is text-only; it no longer downloads or deletes Storage media. Text status creation still uses the existing authenticated `POST /api/v1/status` route and server-calculated 28-hour expiry.
+- Web Reels is replaced by a clear deferred-feature notice; no Storage feed or upload request is made.
+- Web profile editing saves text fields only; avatar upload/download is deferred.
+- Teacher application submission is paused because proof documents require file storage. No incomplete application is submitted.
+- Teacher content authoring is limited to text lessons and externally hosted embeds; video/image/PDF upload options are removed.
+- Android chat attachment picker and Storage-backed message upload implementation are disabled; historical media attachments are not downloaded.
+- Android Reels and profile avatar upload/download are removed from the active UI. Android status composer is temporarily paused while the text-only status flow is migrated to the trusted Next.js route.
+
+This is a source change on `feature/free-server-core-poc`; it is not yet a verified build or deployed preview. The Android chat data model still retains legacy media fields for backwards compatibility, but the client UI no longer exposes new media uploads. Do not claim Android text statuses are available until the route integration is completed and tested.
+
+No Firebase project settings, Storage/Firestore rules, Cloud Functions, service-account secrets, Vercel production variables, production deployments, or PR merge were changed.

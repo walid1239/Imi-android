@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { User, getIdTokenResult } from 'firebase/auth';
 import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '@/lib/firebase/client';
 import CurriculumAdminPanel from '@/components/curriculum-admin-panel';
 
@@ -112,7 +111,14 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
   async function call<T extends Record<string, unknown>>(name: string, payload: T, success: string) {
     setBusy(true); setError(''); setNotice('');
     try {
-      await httpsCallable(getFunctions(), name)(payload);
+      const token = await user.getIdToken();
+      const response = await fetch('/api/v1/academy/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: name, ...payload }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || 'تعذر تنفيذ العملية.');
       setNotice(success);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'تعذر تنفيذ العملية.');

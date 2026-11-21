@@ -20,7 +20,7 @@ async function login(page: Page, address: string) {
 test('public academy shows the empty curriculum hierarchy without fake lessons', async ({ page }) => {
   const response = await page.goto('/academy');
   await expect(response).not.toBeNull();
-  await expect(response).toHaveStatus(200);
+  expect(response?.status()).toBe(200);
   await expect(page.getByRole('heading', { name: 'ابدأ من مستواك، وتقدّم خطوة بخطوة' })).toBeVisible();
   await expect(page.locator('main')).toHaveAttribute('dir', 'rtl');
   await expect(page.getByLabel('المستوى')).toBeVisible();

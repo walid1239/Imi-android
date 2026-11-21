@@ -1,5 +1,5 @@
 name: IMI Web CI
-# Manual dispatch is available for operator-requested validation of the selected branch.
+# Feature branches are validated by pull_request; push runs are reserved for main/master to avoid duplicate CI on PR commits.
 
 on:
   workflow_dispatch:
@@ -23,7 +23,7 @@ on:
       - 'docs/turn-windows.md'
       - 'docs/call-test-plan.md'
   push:
-    branches: [main, 'feature/**']
+    branches: [main, master]
     paths:
       - 'web/**'
       - 'functions/**'

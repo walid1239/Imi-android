@@ -2,7 +2,7 @@ name: IMI Firebase Rules and Indexes Deployment
 
 on:
   push:
-    branches: [main, master, 'feature/**']
+    branches: [main, master]
     paths:
       - 'firestore.rules'
       - 'firestore.indexes.json'

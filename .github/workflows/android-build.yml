@@ -1,11 +1,11 @@
 name: IMI Android CI
 # Root, Functions, and Web lockfiles are committed; CI uses npm ci for reproducible installs.
 # Firebase Emulator commands use the exact firebase-tools@15.37.0 pin and Node.js 22.
-# Keep manual dispatch and PR/push validation available on the feature branch; emulator checks run in Web CI.
+# Feature branches are validated by pull_request; push runs are reserved for main/master to avoid duplicate CI on PR commits.
 
 on:
   push:
-    branches: [ main, master, 'feature/**' ]
+    branches: [ main, master ]
     paths:
       - 'app/**'
       - 'gradle/**'

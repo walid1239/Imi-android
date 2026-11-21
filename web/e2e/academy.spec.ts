@@ -10,7 +10,7 @@ async function login(page: Page, address: string) {
   await page.getByLabel('كلمة المرور').fill(password);
   await page.getByRole('button', { name: 'تسجيل الدخول' }).click();
   try {
-    await expect(page).toHaveURL(/\\/app$/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/app$/, { timeout: 15000 });
   } catch {
     const messages = await page.locator('[role="status"], [role="alert"]').allTextContents();
     throw new Error(`Login did not reach /app. Visible Firebase/auth messages: ${messages.join(' | ') || 'none'}`);

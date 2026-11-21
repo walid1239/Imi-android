@@ -12,7 +12,7 @@ import {
 } from "../../../../functions/src/shared/serverCore";
 import { authenticateBearer, publicErrorMessage } from "../../../../functions/src/shared/serverAuth";
 
-type Operation = "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend" | "blockUser" | "unblockUser" | "createGroupConversation" | "addGroupParticipants";
+type Operation = "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend" | "blockUser" | "unblockUser" | "createGroupConversation" | "addGroupParticipants" | "enrollInCourse" | "completeCourseLesson" | "reportAcademyLesson";
 const limits: Record<Operation, { count: number; windowMs: number }> = {
   createStatus: { count: 2, windowMs: 60_000 },
   sendFriendRequest: { count: 10, windowMs: 60 * 60_000 },
@@ -24,6 +24,9 @@ const limits: Record<Operation, { count: number; windowMs: number }> = {
   unblockUser: { count: 20, windowMs: 60_000 },
   createGroupConversation: { count: 5, windowMs: 60_000 },
   addGroupParticipants: { count: 10, windowMs: 60_000 },
+  enrollInCourse: { count: 10, windowMs: 60_000 },
+  completeCourseLesson: { count: 30, windowMs: 60_000 },
+  reportAcademyLesson: { count: 2, windowMs: 60_000 },
 };
 
 function adminApp(): App {
@@ -121,6 +124,102 @@ async function applyRateLimit(app: App, uid: string, operation: Operation): Prom
   });
 }
 
+function requiredId(value: unknown, label: string): string {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(value.trim())) {
+    throw Object.assign(new Error(`معرّف ${label} غير صالح.`), { code: "invalid-argument" });
+  }
+  return value.trim();
+}
+
+function academyText(value: unknown, label: string, max: number, optional = false): string {
+  if (optional && (value === undefined || value === null || value === "")) return "";
+  if (typeof value !== "string") throw Object.assign(new Error(`حقل ${label} يجب أن يكون نصاً.`), { code: "invalid-argument" });
+  const normalized = value.trim();
+  if ((!optional && !normalized) || normalized.length > max) {
+    throw Object.assign(new Error(`حقل ${label} فارغ أو يتجاوز الحد المسموح.`), { code: "invalid-argument" });
+  }
+  return normalized;
+}
+
+async function enrollInCourse(app: App, uid: string, body: Record<string, unknown>) {
+  const firestore = getFirestore(app);
+  const courseId = requiredId(body.courseId, "الدورة");
+  const courseRef = firestore.collection("courses").doc(courseId);
+  const enrollmentRef = firestore.collection("users").doc(uid).collection("enrollments").doc(courseId);
+  return firestore.runTransaction(async tx => {
+    const [course, enrollment] = await Promise.all([tx.get(courseRef), tx.get(enrollmentRef)]);
+    if (!course.exists || course.get("published") !== true) {
+      throw Object.assign(new Error("هذه الدورة غير متاحة حالياً."), { code: "not-found" });
+    }
+    if (!enrollment.exists) {
+      tx.create(enrollmentRef, {
+        courseId, completedLessonIds: [],
+        createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+    return { status: "enrolled" as const };
+  });
+}
+
+async function completeCourseLesson(app: App, uid: string, body: Record<string, unknown>) {
+  const firestore = getFirestore(app);
+  const courseId = requiredId(body.courseId, "الدورة");
+  const lessonId = requiredId(body.lessonId, "الدرس");
+  const courseRef = firestore.collection("courses").doc(courseId);
+  const lessonRef = courseRef.collection("lessons").doc(lessonId);
+  const enrollmentRef = firestore.collection("users").doc(uid).collection("enrollments").doc(courseId);
+  await firestore.runTransaction(async tx => {
+    const [course, lesson, enrollment] = await Promise.all([
+      tx.get(courseRef), tx.get(lessonRef), tx.get(enrollmentRef),
+    ]);
+    if (!course.exists || course.get("published") !== true || !lesson.exists || lesson.get("published") !== true) {
+      throw Object.assign(new Error("الدورة أو الدرس غير متاح."), { code: "not-found" });
+    }
+    if (!enrollment.exists) {
+      throw Object.assign(new Error("سجّل في الدورة قبل إكمال الدروس."), { code: "failed-precondition" });
+    }
+    const completed = enrollment.get("completedLessonIds");
+    if (Array.isArray(completed) && completed.includes(lessonId)) return;
+    tx.update(enrollmentRef, {
+      completedLessonIds: FieldValue.arrayUnion(lessonId),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return { status: "completed", courseId, lessonId };
+}
+
+async function reportAcademyLesson(app: App, uid: string, body: Record<string, unknown>) {
+  const firestore = getFirestore(app);
+  const courseId = requiredId(body.courseId, "الدورة");
+  const lessonId = requiredId(body.lessonId, "الدرس");
+  const reason = academyText(body.reason, "سبب البلاغ", 32);
+  if (!["incorrect", "inappropriate", "copyright", "other"].includes(reason)) {
+    throw Object.assign(new Error("سبب البلاغ غير مدعوم."), { code: "invalid-argument" });
+  }
+  const details = academyText(body.details, "تفاصيل البلاغ", 500, true);
+  const courseRef = firestore.collection("courses").doc(courseId);
+  const lessonRef = courseRef.collection("lessons").doc(lessonId);
+  const rateRef = firestore.collection("reportRateLimits").doc(uid);
+  const reportRef = firestore.collection("contentReports").doc();
+  await firestore.runTransaction(async tx => {
+    const [course, lesson, rate] = await Promise.all([tx.get(courseRef), tx.get(lessonRef), tx.get(rateRef)]);
+    if (!course.exists || course.get("published") !== true || !lesson.exists || lesson.get("published") !== true) {
+      throw Object.assign(new Error("المحتوى غير متاح للإبلاغ."), { code: "not-found" });
+    }
+    const now = Timestamp.now();
+    const lastReportAt = rate.get("lastReportAt") as Timestamp | undefined;
+    if (lastReportAt && now.toMillis() - lastReportAt.toMillis() < 30_000) {
+      throw Object.assign(new Error("انتظر 30 ثانية قبل إرسال بلاغ آخر."), { code: "resource-exhausted" });
+    }
+    tx.create(reportRef, {
+      reporterUid: uid, targetType: "academyLesson", courseId, lessonId, reason, details,
+      status: "open", createdAt: now, updatedAt: now,
+    });
+    tx.set(rateRef, { uid, lastReportAt: now, updatedAt: now }, { merge: true });
+  });
+  return { status: "submitted", reportId: reportRef.id };
+}
+
 export async function handleImiPost(request: Request, operation: Operation): Promise<Response> {
   try {
     assertOrigin(request);
@@ -158,6 +257,9 @@ export async function handleImiPost(request: Request, operation: Operation): Pro
       unblockUser: () => unblockUser(store, uid, body),
       createGroupConversation: () => createGroupConversation(store, uid, body),
       addGroupParticipants: () => addGroupParticipants(store, uid, body),
+      enrollInCourse: () => enrollInCourse(app, uid, body),
+      completeCourseLesson: () => completeCourseLesson(app, uid, body),
+      reportAcademyLesson: () => reportAcademyLesson(app, uid, body),
     };
     const result = await handlers[operation]();
     return NextResponse.json({ ok: true, data: result }, { status: 200 });

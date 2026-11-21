@@ -93,21 +93,6 @@ test('friend request accept, reject and remove routes enforce ownership and reci
   const rejectSenderUid = `imi-e2e-d-${suffix}`;
   const requestId = `${senderUid}__${recipientUid}`;
   const rejectRequestId = `${rejectSenderUid}__${recipientUid}`;
-  const base = 'http://127.0.0.1:8080/v1/projects/demo-imi-playwright/databases/(default)/documents/friendRequests/';
-  const seed = (id: string, fromUid: string) => fetch(base + id, {
-    method: 'PATCH',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fields: {
-      fromUid: { stringValue: fromUid },
-      toUid: { stringValue: recipientUid },
-      status: { stringValue: 'pending' },
-    }}),
-  });
-  const [seededAccept, seededReject] = await Promise.all([
-    seed(requestId, senderUid), seed(rejectRequestId, rejectSenderUid),
-  ]);
-  expect([200, 201]).toContain(seededAccept.status);
-  expect([200, 201]).toContain(seededReject.status);
 
   const accepted = await post('/api/v1/friends/requests/accept', { requestId }, recipientToken);
   expect(accepted.status).toBe(200);

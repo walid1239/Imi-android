@@ -261,6 +261,25 @@ test('enrollment and lesson progress are private and server-write-only', async (
   }));
 });
 
+test('public profile photoPath is restricted to the owner avatar namespace', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  await assertSucceeds(setDoc(doc(aliceDb, 'publicProfiles/alice'), {
+    uid: 'alice', displayName: 'Alice Updated',
+    photoPath: 'users/alice/avatars/profile.webp',
+    updatedAt: serverTimestamp()
+  }));
+  await assertFails(setDoc(doc(aliceDb, 'publicProfiles/alice'), {
+    uid: 'alice', displayName: 'Alice Updated',
+    photoPath: 'https://attacker.invalid/avatar.png',
+    updatedAt: serverTimestamp()
+  }));
+  await assertFails(setDoc(doc(aliceDb, 'publicProfiles/bob'), {
+    uid: 'bob', displayName: 'Forged Bob',
+    photoPath: 'users/bob/avatars/profile.webp',
+    updatedAt: serverTimestamp()
+  }));
+});
+
 test('unauthenticated clients cannot read private user documents', async () => {
   const db = env.unauthenticatedContext().firestore();
   await assertFails(getDoc(doc(db, 'users/alice')));

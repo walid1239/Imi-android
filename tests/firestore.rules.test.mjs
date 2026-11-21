@@ -200,7 +200,7 @@ test('only reviewed published curriculum is public; hidden and unreviewed nodes 
   await assertSucceeds(getDoc(doc(guestDb, 'curriculumNodes/primary')));
   await assertFails(getDoc(doc(guestDb, 'curriculumNodes/hidden-unit')));
   await assertFails(getDoc(doc(guestDb, 'curriculumNodes/unreviewed-published')));
-  const publicNodes = await getDocs(query(collection(guestDb, 'curriculumNodes'), where('status', '==', 'published'), where('needsReview', '==', false)));
+  const publicNodes = await getDocs(query(collection(guestDb, 'curriculumNodes'), where('status', '==', 'published'), where('needsReview', '==', false), where('type', 'in', ['level', 'track', 'subject', 'unit'])));
   assert.deepEqual(publicNodes.docs.map(item => item.id), ['primary']);
   await assertSucceeds(getDoc(doc(adminDb, 'curriculumNodes/unreviewed-published')));
   await assertSucceeds(getDoc(doc(adminDb, 'curriculumNodes/hidden-unit')));

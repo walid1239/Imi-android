@@ -425,7 +425,7 @@ private fun StoriesSection() {
             confirmButton = {
                 TextButton(enabled = !loading && draft.isNotBlank(), onClick = {
                     val uid = auth?.currentUser?.uid
-                    if (uid == null || db == null || storage == null) {
+                    if (uid == null || db == null) {
                         message = "Firebase غير مهيأ؛ لم تُنشر الحالة. لن نحفظها كحالة محلية."
                         showComposer = false
                     } else {

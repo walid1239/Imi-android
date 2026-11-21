@@ -121,7 +121,7 @@ jobs:
 
       - name: Run unit tests and assemble debug APK
         id: android_build
-        run: gradle --no-daemon testDebugUnitTest assembleDebug assembleDebugAndroidTest
+        run: gradle --no-daemon testDebugUnitTest assembleDebug assembleDebugAndroidTest assembleRelease
 
       - name: Upload debug APK for device verification
         if: always() && steps.android_build.outcome == 'success'

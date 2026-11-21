@@ -1,6 +1,41 @@
 import { createHash } from "node:crypto";
-import { FieldValue, type DocumentReference, type Firestore } from "firebase-admin/firestore";
-import type { Bucket, File } from "@google-cloud/storage";
+
+interface DocumentReferenceLike {
+  path: string;
+  delete(): Promise<unknown>;
+}
+interface DocumentSnapshotLike {
+  id: string;
+  exists: boolean;
+  ref: DocumentReferenceLike;
+  get(field: string): unknown;
+}
+interface QuerySnapshotLike { docs: DocumentSnapshotLike[]; }
+interface QueryLike {
+  where(field: string, operator: string, value: unknown): QueryLike;
+  get(): Promise<QuerySnapshotLike>;
+}
+interface CollectionLike extends QueryLike { doc(id: string): DocumentReferenceLike; }
+interface BatchLike {
+  delete(ref: DocumentReferenceLike): void;
+  update(ref: DocumentReferenceLike, data: Record<string, unknown>): void;
+  commit(): Promise<unknown>;
+}
+export interface AccountDeletionFirestore {
+  collection(name: string): CollectionLike;
+  collectionGroup(name: string): QueryLike;
+  doc(path: string): DocumentReferenceLike & { get(): Promise<DocumentSnapshotLike> };
+  batch(): BatchLike;
+  recursiveDelete(ref: DocumentReferenceLike): Promise<unknown>;
+}
+interface StorageFileLike {
+  name: string;
+  delete(options?: { ignoreNotFound?: boolean }): Promise<unknown>;
+}
+export interface AccountDeletionBucket {
+  getFiles(options: { prefix: string }): Promise<[StorageFileLike[]]>;
+  file(path: string): StorageFileLike;
+}
 
 const RATE_LIMIT_OPERATIONS = [
   "createStatus", "sendFriendRequest", "createOrGetDirectConversation",
@@ -18,7 +53,7 @@ function addStoragePath(paths: Set<string>, value: unknown, uid: string): void {
   if (allowed.some(prefix => value.startsWith(prefix))) paths.add(value);
 }
 
-async function deleteRefs(db: Firestore, refs: DocumentReference[]): Promise<void> {
+async function deleteRefs(db: AccountDeletionFirestore, refs: DocumentReferenceLike[]): Promise<void> {
   for (let offset = 0; offset < refs.length; offset += 400) {
     const batch = db.batch();
     for (const ref of refs.slice(offset, offset + 400)) batch.delete(ref);
@@ -26,8 +61,8 @@ async function deleteRefs(db: Firestore, refs: DocumentReference[]): Promise<voi
   }
 }
 
-async function collectFiles(bucket: Bucket, prefixes: Set<string>, exactPaths: Set<string>): Promise<File[]> {
-  const files = new Map<string, File>();
+async function collectFiles(bucket: AccountDeletionBucket, prefixes: Set<string>, exactPaths: Set<string>): Promise<StorageFileLike[]> {
+  const files = new Map<string, StorageFileLike>();
   for (const prefix of prefixes) {
     const [found] = await bucket.getFiles({ prefix });
     for (const file of found) files.set(file.name, file);
@@ -36,7 +71,11 @@ async function collectFiles(bucket: Bucket, prefixes: Set<string>, exactPaths: S
   return [...files.values()];
 }
 
-export async function cleanupAccountData(db: Firestore, bucket: Bucket, uid: string): Promise<void> {
+export async function cleanupAccountData(
+  db: AccountDeletionFirestore,
+  bucket: AccountDeletionBucket,
+  uid: string
+): Promise<void> {
   if (!/^[A-Za-z0-9_-]{2,128}$/.test(uid)) throw new Error("Invalid account UID.");
 
   const [conversations, callerCalls, calleeCalls, teacherContent, outgoingRequests,
@@ -65,9 +104,9 @@ export async function cleanupAccountData(db: Firestore, bucket: Bucket, uid: str
     `teacher-content/${uid}/`, `reels/${uid}/`, `statuses/${uid}/`,
   ]);
   const exactStoragePaths = new Set<string>();
-  const directConversations: DocumentReference[] = [];
-  const emptyGroups: DocumentReference[] = [];
-  const groupUpdates: Array<{ ref: DocumentReference; participants: string[]; admins: string[]; ownerUid: string | null }> = [];
+  const directConversations: DocumentReferenceLike[] = [];
+  const emptyGroups: DocumentReferenceLike[] = [];
+  const groupUpdates: Array<{ ref: DocumentReferenceLike; participants: string[]; admins: string[]; ownerUid: string | null }> = [];
 
   for (const conversation of conversations.docs) {
     const participants = conversation.get("participants");
@@ -75,8 +114,9 @@ export async function cleanupAccountData(db: Firestore, bucket: Bucket, uid: str
     const id = conversation.id;
     if (conversation.get("type") === "group") {
       const remaining = participants.filter((member: unknown): member is string => typeof member === "string" && member !== uid);
-      const admins = Array.isArray(conversation.get("admins"))
-        ? conversation.get("admins").filter((member: unknown): member is string => typeof member === "string" && member !== uid)
+      const rawAdmins = conversation.get("admins");
+      const admins = Array.isArray(rawAdmins)
+        ? rawAdmins.filter((member: unknown): member is string => typeof member === "string" && member !== uid)
         : [];
       const ownerUid = conversation.get("ownerUid") === uid ? remaining[0] ?? null : String(conversation.get("ownerUid") ?? "") || null;
       if (remaining.length === 0) {
@@ -117,7 +157,7 @@ export async function cleanupAccountData(db: Firestore, bucket: Bucket, uid: str
         participants: item.participants,
         admins: item.admins,
         ownerUid: item.ownerUid,
-        updatedAt: FieldValue.serverTimestamp(),
+        updatedAt: new Date(),
       });
     }
     await batch.commit();
@@ -126,7 +166,7 @@ export async function cleanupAccountData(db: Firestore, bucket: Bucket, uid: str
   await Promise.all([...directConversations, ...emptyGroups, ...callRefs].map(ref => db.recursiveDelete(ref)));
 
   const requests = [...outgoingRequests.docs, ...incomingRequests.docs];
-  const uniqueRefs = (items: Array<{ ref: DocumentReference }>) =>
+  const uniqueRefs = (items: Array<{ ref: DocumentReferenceLike }>) =>
     [...new Map(items.map(item => [item.ref.path, item.ref])).values()];
   await Promise.all([
     deleteRefs(db, uniqueRefs([...requests, ...reports.docs, ...teacherContent.docs, ...reels.docs,

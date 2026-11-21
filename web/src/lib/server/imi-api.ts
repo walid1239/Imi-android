@@ -173,7 +173,11 @@ export async function handleDeleteAccount(request: Request): Promise<Response> {
     }
 
     await applyRateLimit(app, decoded.uid, "deleteMyAccount");
-    await cleanupAccountData(getFirestore(app), getStorage(app).bucket(), decoded.uid);
+    await cleanupAccountData(
+      getFirestore(app) as unknown as Parameters<typeof cleanupAccountData>[0],
+      getStorage(app).bucket() as unknown as Parameters<typeof cleanupAccountData>[1],
+      decoded.uid
+    );
     await getAuth(app).deleteUser(decoded.uid);
     return NextResponse.json({ ok: true, data: { deleted: true } });
   } catch (error) {

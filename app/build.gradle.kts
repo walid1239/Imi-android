@@ -15,7 +15,13 @@ android {
     namespace = "com.walid.chat"
     compileSdk = 35
 
+    val imiApiBaseUrl = providers.gradleProperty("IMI_API_BASE_URL")
+        .orElse(providers.environmentVariable("IMI_API_BASE_URL"))
+        .orElse("")
+        .get()
+
     defaultConfig {
+        buildConfigField("String", "IMI_API_BASE_URL", "\"${imiApiBaseUrl}\"")
         applicationId = "com.walid.chat"
         minSdk = 26
         targetSdk = 35
@@ -33,7 +39,10 @@ android {
         jvmTarget = "17"
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 }
 
 dependencies {
@@ -50,7 +59,6 @@ dependencies {
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-storage")
-    implementation("com.google.firebase:firebase-functions")
     // Force the maintained OkHttp 4.x line over Firebase Functions' obsolete 3.x transitive request.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")

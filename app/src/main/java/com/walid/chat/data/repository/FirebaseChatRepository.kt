@@ -9,7 +9,6 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
-import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageMetadata
 import com.walid.chat.data.model.Chat
@@ -260,15 +259,16 @@ class FirebaseChatRepository(
         val uid = requireUid()
         require(otherUid.isNotBlank() && otherUid != uid) { "المستخدم الآخر غير صالح" }
 
-        // Conversation creation is server-authoritative. The callable enforces
-        // teacher/student restrictions, block checks, and profile requirements.
-        val response = FirebaseFunctions.getInstance()
-            .getHttpsCallable("createOrGetDirectConversation")
-            .call(mapOf("otherUid" to otherUid))
-            .await()
-        val data = response.getData() as? Map<*, *>
-            ?: error("استجابة إنشاء المحادثة غير صالحة")
-        val conversationId = data["conversationId"] as? String
+        // Server-authoritative: role restrictions, block checks and profile requirements.
+        val idToken = auth.currentUser?.getIdToken(false)?.await()?.token
+            ?: error("جلسة Firebase غير صالحة؛ أعد تسجيل الدخول.")
+        val data = ImiApiClient().post(
+            "/api/v1/conversations/direct",
+            idToken,
+            org.json.JSONObject().put("otherUid", otherUid)
+        )
+        val conversationId = data.optString("conversationId")
+            .takeIf { it.isNotBlank() }
             ?: error("لم يُرجع الخادم معرّف المحادثة")
         require(conversationId.isNotBlank()) { "معرّف المحادثة فارغ" }
         conversationId

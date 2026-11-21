@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import org.json.JSONArray
+import org.json.JSONObject
 import com.walid.chat.ui.theme.IMITheme
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -433,17 +434,15 @@ private fun StoriesSection() {
                         scope.launch {
                             runCatching {
                                 val value = draft.trim().take(700)
-                                val requestData = mapOf("text" to value)
-                                val callable = com.google.firebase.functions.FirebaseFunctions.getInstance()
-                                    .getHttpsCallable("createStatus")
-                                val response = callable.call(requestData).await()
-                                val result = response.getData() as? Map<*, *>
-                                    ?: error("استجابة خادم الحالات غير صالحة")
-                                val id = result["statusId"] as? String
+                                val idToken = auth?.currentUser?.getIdToken(false)?.await()?.token
+                                    ?: error("جلسة Firebase غير صالحة؛ أعد تسجيل الدخول.")
+                                val result = com.walid.chat.data.repository.ImiApiClient()
+                                    .post("/api/v1/status", idToken, JSONObject().put("text", value))
+                                val id = result.optString("statusId").takeIf { it.isNotBlank() }
                                     ?: error("لم يُرجع الخادم معرّف الحالة")
-                                val expiryMillis = (result["expiresAtMillis"] as? Number)?.toLong()
+                                val expiryMillis = result.optLong("expiresAtMillis").takeIf { it > 0 }
                                     ?: error("لم يُرجع الخادم وقت انتهاء الحالة")
-                                val path = result["mediaPath"] as? String
+                                val path = if (result.isNull("mediaPath")) null else result.optString("mediaPath")
                                 mapOf(
                                     "__statusId" to id,
                                     "text" to value,
@@ -577,16 +576,17 @@ private fun ReelsScreen() {
                         val ref = storage.reference.child(path)
                         val metadata = StorageMetadata.Builder().setContentType(mime).build()
                         ref.putFile(uri, metadata).await()
-                        com.google.firebase.functions.FirebaseFunctions.getInstance()
-                            .getHttpsCallable("submitReel")
-                            .call(
-                                mapOf(
-                                    "reelId" to id,
-                                    "caption" to caption.trim().take(300),
-                                    "storagePath" to path,
-                                    "contentType" to mime
-                                )
-                            ).await()
+                        val idToken = auth?.currentUser?.getIdToken(false)?.await()?.token
+                            ?: error("جلسة Firebase غير صالحة؛ أعد تسجيل الدخول.")
+                        com.walid.chat.data.repository.ImiApiClient().post(
+                            "/api/v1/reels/submit",
+                            idToken,
+                            JSONObject()
+                                .put("reelId", id)
+                                .put("caption", caption.trim().take(300))
+                                .put("storagePath", path)
+                                .put("contentType", mime)
+                        )
                         caption = ""
                         Toast.makeText(context, "تم رفع المقطع وإرساله للمراجعة؛ سيظهر بعد موافقة المشرف.", Toast.LENGTH_LONG).show()
                     }.onFailure {

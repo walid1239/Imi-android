@@ -108,6 +108,16 @@ test('authenticated Next.js routes create a status, friend request and direct co
   expect(conversation.status).toBe(200);
   const conversationPayload = await conversation.json() as { ok: boolean; data: { conversationId: string } };
   expect(conversationPayload.data.conversationId).toMatch(/^direct_[a-f0-9]{64}$/);
+
+  // Native Android requests intentionally omit Origin; bearer authentication remains mandatory.
+  const nativeConversation = await fetch(`${apiBase}/api/v1/conversations/direct`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify({ otherUid: targetUid }),
+  });
+  expect(nativeConversation.status).toBe(200);
+  const nativePayload = await nativeConversation.json() as { ok: boolean; data: { conversationId: string } };
+  expect(nativePayload.data.conversationId).toBe(conversationPayload.data.conversationId);
 });
 
 test('friend request accept, reject and remove routes enforce ownership and reciprocal state', async () => {

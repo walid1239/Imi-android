@@ -3,9 +3,9 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { User } from 'firebase/auth';
 import { collection, deleteDoc, doc, getDoc, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getDownloadURL, ref } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase/client';
+import { postAuthenticated } from '@/lib/api';
 
 type Status = {
   id: string;
@@ -19,7 +19,6 @@ type FriendStatus = { id: string; ownerUid: string; displayName: string; text: s
 type CreateStatusResult = {
   statusId: string;
   expiresAtMillis: number;
-  mediaPath: string | null;
 };
 
 export default function StatusPanel({ user }: { user: User }) {
@@ -27,7 +26,6 @@ export default function StatusPanel({ user }: { user: User }) {
   const [friendStatuses, setFriendStatuses] = useState<FriendStatus[]>([]);
   const [mediaUrl, setMediaUrl] = useState('');
   const [text, setText] = useState('');
-  const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -114,39 +112,15 @@ export default function StatusPanel({ user }: { user: User }) {
   async function publish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = text.trim();
-    if (!value && !file) { setError('أضف نصاً أو صورة قبل النشر.'); return; }
+    if (!value) { setError('اكتب نص الحالة قبل النشر.'); return; }
     if (value.length > 700) { setError('نص الحالة يتجاوز 700 حرف.'); return; }
-    if (file && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      setError('الصور المدعومة JPEG وPNG وWebP فقط.'); return;
-    }
-    if (file && file.size > 20 * 1024 * 1024) {
-      setError('حجم الصورة يتجاوز الحد الأقصى 20 ميغابايت.'); return;
-    }
     setBusy(true); setError(''); setNotice('');
-    let created: CreateStatusResult | null = null;
     try {
-      const callable = httpsCallable<{ text?: string; mediaType?: string }, CreateStatusResult>(
-        getFunctions(), 'createStatus'
-      );
-      const payload: { text?: string; mediaType?: string } = {};
-      if (value) payload.text = value;
-      if (file) payload.mediaType = file.type;
-      const response = await callable(payload);
-      created = response.data;
+      const created = await postAuthenticated<CreateStatusResult>(user, '/api/v1/status', { text: value });
       if (!created.statusId || !created.expiresAtMillis) throw new Error('استجابة خادم الحالات غير مكتملة.');
-      if (file) {
-        if (!created.mediaPath) throw new Error('لم يرجع الخادم مسار صورة الحالة.');
-        await uploadBytes(ref(storage, created.mediaPath), file, { contentType: file.type });
-      }
-      setText(''); setFile(null);
-      const input = document.getElementById('imi-status-file') as HTMLInputElement | null;
-      if (input) input.value = '';
+      setText('');
       setNotice('نُشرت حالتك. ستنتهي بعد 28 ساعة محسوبة من وقت الخادم.');
     } catch (reason) {
-      if (created?.statusId) {
-        await deleteDoc(doc(db, 'users', user.uid, 'statuses', created.statusId)).catch(() => undefined);
-        if (created.mediaPath) await import('firebase/storage').then(({ deleteObject }) => deleteObject(ref(storage, created!.mediaPath!))).catch(() => undefined);
-      }
       setError(reason instanceof Error ? reason.message : 'تعذر نشر الحالة.');
     } finally {
       setBusy(false);
@@ -173,10 +147,9 @@ export default function StatusPanel({ user }: { user: User }) {
   return <section dir="rtl" className="space-y-5">
     <form onSubmit={publish} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
       <h3 className="font-bold">أضف حالة جديدة</h3>
-      <p className="mt-1 text-xs leading-6 text-slate-400">إنشاء الحالة يتم عبر createStatus على الخادم، ومدة الصلاحية 28 ساعة من توقيت الخادم.</p>
+      <p className="mt-1 text-xs leading-6 text-slate-400">تُنشر الحالات النصية عبر خادم IMI وتبقى 28 ساعة. رفع الصور غير متاح في مرحلة Firebase Spark المجانية.</p>
       <textarea value={text} onChange={event => setText(event.target.value)} maxLength={700} rows={3} placeholder="ماذا تريد أن تشارك؟" disabled={busy} className="mt-4 w-full resize-y rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-sm outline-none focus:border-blue-500" />
-      <input id="imi-status-file" type="file" accept="image/jpeg,image/png,image/webp" onChange={event => setFile(event.target.files?.[0] ?? null)} disabled={busy} className="mt-3 block w-full text-sm text-slate-300 file:ml-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-slate-100" />
-      <button disabled={busy || (!text.trim() && !file)} className="mt-3 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold disabled:opacity-40">{busy ? 'جارٍ النشر…' : 'نشر الحالة'}</button>
+      <button disabled={busy || !text.trim()} className="mt-3 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold disabled:opacity-40">{busy ? 'جارٍ النشر…' : 'نشر الحالة'}</button>
     </form>
     {error && <p role="alert" className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-6 text-amber-200">{error}</p>}
     {notice && <p role="status" className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs leading-6 text-emerald-200">{notice}</p>}
@@ -196,6 +169,6 @@ export default function StatusPanel({ user }: { user: User }) {
           {item.mediaUrl && <img src={item.mediaUrl} alt="حالة صديق" className="mt-3 max-h-[520px] w-full rounded-xl object-contain" />}
         </article>)}
     </section>
-    <p className="text-xs leading-6 text-slate-500">تُعرض حالات الأصدقاء فقط عندما تكون علاقة الصداقة مؤكدة من الطرفين، وتظل صلاحية الحالة محسوبة من توقيت الخادم.</p>
+    <p className="text-xs leading-6 text-slate-500">تُعرض حالات الأصدقاء فقط عندما تكون علاقة الصداقة مؤكدة من الطرفين، وتظل صلاحية الحالة محسوبة من توقيت الخادم. الوسائط مؤجلة إلى مرحلة تتوفر فيها خدمة تخزين مجانية مناسبة.</p>
   </section>;
 }

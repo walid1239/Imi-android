@@ -9,6 +9,7 @@ import {
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db, storage } from '@/lib/firebase/client';
+import { postAuthenticated } from '@/lib/api';
 import CallControls from '@/components/call-controls';
 
 type Conversation = {
@@ -399,12 +400,11 @@ export default function ChatPanel({ user }: { user: User }) {
     setBusy(true);
     setError('');
     try {
-      const action = httpsCallable<{ otherUid: string }, { conversationId: string }>(
-        getFunctions(), 'createOrGetDirectConversation'
+      const response = await postAuthenticated<{ conversationId: string }>(
+        user, '/api/v1/conversations/direct', { otherUid }
       );
-      const response = await action({ otherUid });
-      if (!response.data.conversationId) throw new Error('لم يرجع الخادم معرّف المحادثة.');
-      setSelectedId(response.data.conversationId);
+      if (!response.conversationId) throw new Error('لم يرجع الخادم معرّف المحادثة.');
+      setSelectedId(response.conversationId);
       setSearchResults([]);
       setSearchTerm('');
     } catch (reason) {

@@ -5,6 +5,7 @@ import { User } from 'firebase/auth';
 import { collection, doc, endAt, getDoc, onSnapshot, orderBy, query, startAt, where } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '@/lib/firebase/client';
+import { postAuthenticated } from '@/lib/api';
 
 type PublicProfile = { uid: string; displayName: string; city?: string; photoPath?: string };
 type FriendRequest = { id: string; fromUid: string; toUid: string };
@@ -73,8 +74,12 @@ export default function FriendsPanel({ user }: { user: User }) {
   async function call(name: string, payload: Record<string, string>, key: string, success: string) {
     setBusy(key); setError(''); setNotice('');
     try {
-      const action = httpsCallable<Record<string, string>, { status?: string; requestId?: string }>(getFunctions(), name);
-      await action(payload);
+      if (name === 'sendFriendRequest') {
+        await postAuthenticated<{ status: string; requestId: string }>(user, '/api/v1/friends/requests', payload);
+      } else {
+        const action = httpsCallable<Record<string, string>, { status?: string; requestId?: string }>(getFunctions(), name);
+        await action(payload);
+      }
       setNotice(success);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'تعذر تنفيذ العملية.');
@@ -123,6 +128,6 @@ export default function FriendsPanel({ user }: { user: User }) {
     </div>
     {error && <p role="alert" className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-6 text-amber-200">{error}</p>}
     {notice && <p role="status" className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs leading-6 text-emerald-200">{notice}</p>}
-    <p className="text-xs leading-6 text-slate-500">طلبات الصداقة وقبولها وإزالتها تُنفّذ عبر Cloud Functions موثوقة؛ لا يستطيع العميل إنشاء علاقة صداقة مباشرة في Firestore.</p>
+    <p className="text-xs leading-6 text-slate-500">إرسال طلب الصداقة وإنشاء المحادثة المباشرة يمران عبر مسارات الخادم الموثوقة. قبول الطلب ورفضه وإزالة الصديق ما زالت على Cloud Functions إلى حين نقلها واختبارها.</p>
   </section>;
 }

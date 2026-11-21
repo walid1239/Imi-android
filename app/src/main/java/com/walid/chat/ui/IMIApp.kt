@@ -11,10 +11,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.common.MediaItem
-import androidx.media3.ui.PlayerView
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -325,15 +321,6 @@ private fun FeatureTile(title: String, subtitle: String, icon: androidx.compose.
         }
     }
 }
-
-private data class CloudReel(
-    val id: String,
-    val ownerUid: String,
-    val caption: String,
-    val videoUrl: String,
-    val storagePath: String,
-    val createdAtLabel: String
-)
 
 @Composable
 private fun ReelsScreen() {

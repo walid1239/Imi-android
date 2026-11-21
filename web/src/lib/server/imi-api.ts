@@ -308,6 +308,54 @@ async function academyAdminAction(app: App, uid: string, body: Record<string, un
     return { nodeId, status: "hidden", needsReview: true };
   }
 
+  if (action === "importCurriculumNodes") {
+    if (!Array.isArray(body.nodes) || body.nodes.length < 1 || body.nodes.length > 5) {
+      throw new CoreError("invalid-argument", "استيراد المنهاج يقبل من 1 إلى 5 عناصر في الدفعة الواحدة.");
+    }
+    const normalized = body.nodes.map((value, index) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) throw new CoreError("invalid-argument", `بيانات العنصر رقم ${index + 1} غير صالحة.`);
+      const item = value as Record<string, unknown>;
+      const nodeId = requiredId(item.id, "معرّف عنصر المنهاج");
+      if (!/^[a-z0-9][a-z0-9_-]{1,100}$/.test(nodeId)) throw new CoreError("invalid-argument", "معرّف عنصر المنهاج غير صالح.");
+      if (!["level", "track", "subject", "unit"].includes(String(item.type))) throw new CoreError("invalid-argument", "نوع عنصر المنهاج غير صالح.");
+      const nameAr = title(item.nameAr, "الاسم العربي", 160);
+      const nameFr = title(item.nameFr, "الاسم الفرنسي", 160, true);
+      const parentId = item.parentId === null || item.parentId === "" ? null : requiredId(item.parentId, "العنصر الأب");
+      const order = item.order;
+      if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 1 || order > 100000) throw new CoreError("invalid-argument", "ترتيب عنصر المنهاج غير صالح.");
+      return { nodeId, parentId, type: item.type, nameAr, nameFr, language: item.language === "fr" ? "fr" : "ar", order };
+    });
+    const ids = new Set(normalized.map(item => item.nodeId));
+    if (ids.size !== normalized.length) throw new CoreError("invalid-argument", "ملف الاستيراد يحتوي على معرّفات مكررة.");
+    const parentById = new Map(normalized.map(item => [item.nodeId, item.parentId]));
+    for (const item of normalized) {
+      let parent = item.parentId;
+      const visited = new Set<string>([item.nodeId]);
+      while (parent && parentById.has(parent)) {
+        if (visited.has(parent)) throw new CoreError("invalid-argument", "ملف الاستيراد يحتوي على حلقة في شجرة المنهاج.");
+        visited.add(parent);
+        parent = parentById.get(parent) ?? null;
+      }
+    }
+    const nodes = firestore.collection("curriculumNodes");
+    await firestore.runTransaction(async tx => {
+      const snapshots = await Promise.all(normalized.map(item => tx.get(nodes.doc(item.nodeId))));
+      if (snapshots.some(snapshot => snapshot.exists)) throw new CoreError("already-exists", "يوجد معرّف عنصر مستخدم مسبقاً.");
+      const externalParents = [...new Set(normalized.map(item => item.parentId).filter((id): id is string => Boolean(id) && !ids.has(id!)))];
+      const parentSnapshots = await Promise.all(externalParents.map(id => tx.get(nodes.doc(id))));
+      if (parentSnapshots.some(snapshot => !snapshot.exists)) throw new CoreError("not-found", "يوجد عنصر أب غير موجود في قاعدة البيانات.");
+      for (const item of normalized) {
+        tx.create(nodes.doc(item.nodeId), {
+          id: item.nodeId, parentId: item.parentId, type: item.type, nameAr: item.nameAr, nameFr: item.nameFr,
+          language: item.language, order: item.order, semester: null, officialSource: null,
+          needsReview: true, status: "hidden", createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(), createdBy: uid,
+        });
+      }
+    });
+    return { imported: normalized.length, status: "hidden", needsReview: true };
+  }
+
   if (action === "reorderCurriculumNode") {
     const nodeId = requiredId(body.nodeId, "عنصر المنهاج");
     if (body.delta !== -1 && body.delta !== 1) throw new CoreError("invalid-argument", "قيمة تغيير الترتيب غير صالحة.");

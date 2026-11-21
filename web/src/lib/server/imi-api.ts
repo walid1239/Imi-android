@@ -3,6 +3,7 @@ import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
+import { reserveRateLimitWindows } from "./rate-limit-core.mjs";
 import { directConversationId } from "../../../../functions/src/conversationLogic";
 import { NextResponse } from "next/server";
 import {
@@ -105,24 +106,29 @@ async function applyRateLimit(app: App, uid: string, operation: Operation): Prom
     ? [{ label: "hour", count: 10, windowMs: 60 * 60_000 }, { label: "day", count: 30, windowMs: 24 * 60 * 60_000 }]
     : [{ label: "window", ...limits[operation] }];
   const now = Date.now();
-  const refs = policies.map(policy => {
-    const key = createHash("sha256").update(`${operation}:${uid}:${policy.label}`).digest("hex");
-    return { ...policy, key, ref: db.doc(`apiRateLimits/${key}`) };
-  });
-  await db.runTransaction(async tx => {
-    const snapshots = await Promise.all(refs.map(item => tx.get(item.ref)));
-    for (let index = 0; index < refs.length; index += 1) {
-      const policy = refs[index];
-      const snapshot = snapshots[index];
-      const start = snapshot.exists ? (snapshot.get("windowStartedAt") as Timestamp).toMillis() : now;
-      const current = snapshot.exists && now - start < policy.windowMs ? Number(snapshot.get("count") ?? 0) : 0;
-      if (current >= policy.count) throw Object.assign(new Error("RATE_LIMIT"), { code: "resource-exhausted" });
-      tx.set(policy.ref, {
-        operation, uidHash: policy.key, windowStartedAt: Timestamp.fromMillis(current ? start : now),
-        count: current + 1,
-      });
-    }
-  });
+  const key = createHash("sha256").update(`${operation}:${uid}`).digest("hex");
+  const ref = db.doc(`apiRateLimits/${key}`);
+  await reserveRateLimitWindows({
+    runTransaction: work => db.runTransaction(async transaction => work({
+      get: async () => {
+        const snapshot = await transaction.get(ref);
+        if (!snapshot.exists) return null;
+        const stored = (snapshot.get("windows") ?? {}) as Record<string, { windowStartedAt: Timestamp; count: number }>;
+        return {
+          windows: Object.fromEntries(Object.entries(stored).map(([label, value]) => [
+            label, { windowStartedAt: value.windowStartedAt.toMillis(), count: Number(value.count) }
+          ]))
+        };
+      },
+      set: (_key, value) => transaction.set(ref, {
+        operation,
+        uidHash: key,
+        windows: Object.fromEntries(Object.entries(value.windows).map(([label, window]) => [
+          label, { windowStartedAt: Timestamp.fromMillis(window.windowStartedAt), count: window.count }
+        ]))
+      })
+    }))
+  }, key, policies, now);
 }
 
 export async function handleImiPost(request: Request, operation: Operation): Promise<Response> {

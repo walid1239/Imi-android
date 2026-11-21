@@ -520,6 +520,11 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Server-only counters; clients cannot read, forge, reset or delete rate limits.
+    match /apiRateLimits/{rateLimitId} {
+      allow read, write: if false;
+    }
+
     // Anything not explicitly modelled above is private by default.
     match /{document=**} {
       allow read, write: if false;

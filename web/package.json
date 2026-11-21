@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:health": "node scripts/health-smoke.mjs",
+    "test:rate-limit": "node --test scripts/rate-limit.test.mjs",
     "e2e": "playwright test"
   },
   "dependencies": {

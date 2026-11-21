@@ -66,6 +66,7 @@ jobs:
       - name: Audit web dependencies (high and critical block CI)
         run: npm audit --audit-level=high
       - run: npm run typecheck
+      - run: npm run test:rate-limit
       - run: npm run build
       - run: npm run test:health
 

@@ -887,6 +887,16 @@ test('Reels storage keeps uploads private until server approval', async () => {
   await assertFails(getBytes(ref(env.unauthenticatedContext().storage(), 'reels/alice/approved2/video.mp4')));
 });
 
+test('API rate-limit counters are inaccessible to clients', async () => {
+  const alice = env.authenticatedContext('alice').firestore();
+  await assertFails(getDoc(doc(alice, 'apiRateLimits/private-counter')));
+  await assertFails(setDoc(doc(alice, 'apiRateLimits/private-counter'), {
+    operation: 'createStatus',
+    count: 999,
+    windowStartedAt: serverTimestamp()
+  }));
+});
+
 test('clients cannot create statuses because trusted server time is required', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   await assertFails(setDoc(doc(aliceDb, 'users/alice/statuses/status-1'), {

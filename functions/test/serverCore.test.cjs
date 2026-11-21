@@ -49,7 +49,8 @@ test("blockUser commits the block before querying calls created during the reque
   store.getActiveCalls = async (callerUid, calleeUid) => {
     // Simulate a call becoming visible only after the block transaction commits.
     if (!store.docs.has("users/actor/blockedUsers/target")) return [];
-    return originalGetActiveCalls(callerUid, calleeUid).concat(
+    const existing = await originalGetActiveCalls(callerUid, calleeUid);
+    return existing.concat(
       callerUid === "actor" && calleeUid === "target"
         ? [{ id: "call-created-during-block", callerUid, calleeUid }]
         : [],

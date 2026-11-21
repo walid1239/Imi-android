@@ -20,7 +20,10 @@ function adminApp(): App {
   const existing = getApps().find(app => app.name === "imi-server-api");
   if (existing) return existing;
   const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-  if (projectId !== "imi-indroid") throw new Error("Firebase project configuration is unavailable.");
+  const usingEmulators = Boolean(process.env.FIREBASE_AUTH_EMULATOR_HOST && process.env.FIRESTORE_EMULATOR_HOST);
+  if (!projectId || (!usingEmulators && projectId !== "imi-indroid")) {
+    throw new Error("Firebase project configuration is unavailable.");
+  }
   if (process.env.FIREBASE_AUTH_EMULATOR_HOST && process.env.FIRESTORE_EMULATOR_HOST) {
     return initializeApp({ projectId }, "imi-server-api");
   }
@@ -70,16 +73,27 @@ function makeStore(app: App): StorePort {
 
 async function applyRateLimit(app: App, uid: string, operation: Operation): Promise<void> {
   const db = getFirestore(app);
-  const { count, windowMs } = limits[operation];
-  const key = createHash("sha256").update(`${operation}:${uid}`).digest("hex");
-  const ref = db.doc(`apiRateLimits/${key}`);
+  const policies = operation === "sendFriendRequest"
+    ? [{ label: "hour", count: 10, windowMs: 60 * 60_000 }, { label: "day", count: 30, windowMs: 24 * 60 * 60_000 }]
+    : [{ label: "window", ...limits[operation] }];
   const now = Date.now();
+  const refs = policies.map(policy => {
+    const key = createHash("sha256").update(`${operation}:${uid}:${policy.label}`).digest("hex");
+    return { ...policy, key, ref: db.doc(`apiRateLimits/${key}`) };
+  });
   await db.runTransaction(async tx => {
-    const snapshot = await tx.get(ref);
-    const start = snapshot.exists ? (snapshot.get("windowStartedAt") as Timestamp).toMillis() : now;
-    const current = snapshot.exists && now - start < windowMs ? Number(snapshot.get("count") ?? 0) : 0;
-    if (current >= count) throw Object.assign(new Error("RATE_LIMIT"), { code: "resource-exhausted" });
-    tx.set(ref, { operation, uidHash: key, windowStartedAt: Timestamp.fromMillis(current ? start : now), count: current + 1 });
+    const snapshots = await Promise.all(refs.map(item => tx.get(item.ref)));
+    for (let index = 0; index < refs.length; index += 1) {
+      const policy = refs[index];
+      const snapshot = snapshots[index];
+      const start = snapshot.exists ? (snapshot.get("windowStartedAt") as Timestamp).toMillis() : now;
+      const current = snapshot.exists && now - start < policy.windowMs ? Number(snapshot.get("count") ?? 0) : 0;
+      if (current >= policy.count) throw Object.assign(new Error("RATE_LIMIT"), { code: "resource-exhausted" });
+      tx.set(policy.ref, {
+        operation, uidHash: policy.key, windowStartedAt: Timestamp.fromMillis(current ? start : now),
+        count: current + 1,
+      });
+    }
   });
 }
 

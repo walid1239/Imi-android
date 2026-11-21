@@ -38,7 +38,18 @@ async function post(path: string, body: Record<string, unknown>, token?: string)
 }
 
 test('Next.js server routes reject missing and forged tokens without echoing credentials', async () => {
-  const missing = await post('/api/v1/status', { text: 'should not be written' });
+  const crossOrigin = await fetch(`${apiBase}/api/v1/status`, {
+    method: 'POST',
+    headers: { origin: 'https://attacker.example', 'content-type': 'application/json' },
+    body: JSON.stringify({ text: 'should not be written' }),
+  });
+  expect(crossOrigin.status).toBe(403);
+
+  const missing = await fetch(`${apiBase}/api/v1/status`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text: 'should not be written' }),
+  });
   expect(missing.status).toBe(401);
 
   const forgedToken = 'eyJhbGciOiJub25lIn0.eyJ1aWQiOiJhdHRhY2tlciJ9.forged-secret-fragment';

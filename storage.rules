@@ -5,24 +5,48 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return signedIn() && request.auth.token.get('admin', false) == true;
+    }
+
+    function isVerifiedTeacher() {
+      return signedIn() && request.auth.token.get('teacherVerified', false) == true;
+    }
+
+    function isBlockedBetween(uidA, uidB) {
+      return firestore.exists(/databases/(default)/documents/users/$(uidA)/blockedUsers/$(uidB))
+        || firestore.exists(/databases/(default)/documents/users/$(uidB)/blockedUsers/$(uidA));
+    }
+
     function isConversationMember(conversationId) {
       return signedIn()
         && firestore.exists(/databases/(default)/documents/conversations/$(conversationId))
-        && request.auth.uid in firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.participants;
+        && request.auth.uid in firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.participants
+        && (
+          firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.get('type', '') == 'group'
+          || firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.participants.size() != 2
+          || !isBlockedBetween(
+            firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.participants[0],
+            firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.participants[1]
+          )
+        );
     }
 
     function acceptedFriend(ownerUid) {
       return signedIn()
         && firestore.exists(/databases/(default)/documents/users/$(ownerUid)/friends/$(request.auth.uid))
-        && firestore.get(/databases/(default)/documents/users/$(ownerUid)/friends/$(request.auth.uid)).data.status == 'accepted';
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)/friends/$(ownerUid))
+        && firestore.get(/databases/(default)/documents/users/$(ownerUid)/friends/$(request.auth.uid)).data.status == 'accepted'
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)/friends/$(ownerUid)).data.status == 'accepted';
     }
 
     match /users/{uid}/avatars/{fileName} {
       allow read: if signedIn();
-      allow write: if signedIn()
+      allow create, update: if signedIn()
         && request.auth.uid == uid
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
 
     // The status document ID is part of the object path so expiry can be checked.
@@ -37,7 +61,8 @@ service firebase.storage {
         && (request.auth.uid == uid || acceptedFriend(uid));
       // Require an active status document created by the trusted callable before accepting media.
       // The client uploads only after the callable returns the server-created status ID.
-      allow create, update: if signedIn()
+      allow create: if signedIn()
+        && resource == null
         && request.auth.uid == uid
         && statusIsActive()
         && firestore.get(/databases/(default)/documents/users/$(uid)/statuses/$(statusId)).data.ownerUid == uid
@@ -47,21 +72,103 @@ service firebase.storage {
       allow delete: if signedIn() && request.auth.uid == uid;
     }
 
-    // Public-to-authenticated-user Reels; only the owner can upload/delete.
-    match /reels/{uid}/{fileName} {
-      allow read: if signedIn();
-      allow create, update: if signedIn()
+    // Reels stay private to their owner until the server approves metadata.
+    // The document ID is part of the path so Storage can verify moderation state.
+    match /reels/{uid}/{reelId}/{fileName} {
+      function reelApproved() {
+        return firestore.exists(/databases/(default)/documents/reels/$(reelId))
+          && firestore.get(/databases/(default)/documents/reels/$(reelId)).data.status == 'approved'
+          && firestore.get(/databases/(default)/documents/reels/$(reelId)).data.ownerUid == uid
+          && firestore.get(/databases/(default)/documents/reels/$(reelId)).data.storagePath == 'reels/' + uid + '/' + reelId + '/' + fileName;
+      }
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin() || reelApproved());
+      allow create: if signedIn()
+        && resource == null
         && request.auth.uid == uid
-        && request.resource.size < 100 * 1024 * 1024
+        && request.resource.size > 0
+        && request.resource.size <= 100 * 1024 * 1024
         && request.resource.contentType.matches('video/(mp4|webm)');
+      allow update: if false;
       allow delete: if signedIn() && request.auth.uid == uid;
     }
 
-    match /conversations/{conversationId}/{fileName=**} {
+    // Conversation media is stored under the sender UID and immutable message ID.
+    // Participants can read it; only the sender can create it. Clients cannot overwrite
+    // or delete another participant's media through this path.
+    match /conversations/{conversationId}/{uid}/{messageId}/{fileName} {
       allow read: if isConversationMember(conversationId);
-      allow write: if isConversationMember(conversationId)
-        && request.resource.size < 50 * 1024 * 1024
-        && request.resource.contentType.matches('(image/(jpeg|png|webp)|audio/(mpeg|mp4|aac|ogg|wav|webm)|video/(mp4|webm))');
+      allow create: if isConversationMember(conversationId)
+        && request.auth.uid == uid
+        && request.resource != null
+        && request.resource.size > 0
+        && (
+          (request.resource.contentType.matches('image/(jpeg|png|webp)')
+            && request.resource.size <= 10 * 1024 * 1024)
+          || (request.resource.contentType.matches('audio/(mpeg|mp4|aac|ogg|wav|webm)')
+            && request.resource.size <= 20 * 1024 * 1024)
+          || (request.resource.contentType.matches('video/(mp4|webm)')
+            && request.resource.size <= 50 * 1024 * 1024)
+        );
+      allow update: if false;
+      // Permit cleanup of an orphaned upload only while no message references it.
+      allow delete: if isConversationMember(conversationId)
+        && request.auth.uid == uid
+        && !firestore.exists(/databases/(default)/documents/conversations/$(conversationId)/messages/$(messageId));
+    }
+
+    // Teacher content uploads are private drafts until the server publishes their metadata.
+    match /teacher-content/{uid}/{contentId}/{fileName} {
+      function contentIsPublished() {
+        return firestore.exists(/databases/(default)/documents/teacherContent/$(contentId))
+          && firestore.get(/databases/(default)/documents/teacherContent/$(contentId)).data.ownerUid == uid
+          && firestore.get(/databases/(default)/documents/teacherContent/$(contentId)).data.get('published', false) == true;
+      }
+      function teacherProfileIsComplete() {
+        return firestore.exists(/databases/(default)/documents/teacherProfiles/$(uid))
+          && firestore.get(/databases/(default)/documents/teacherProfiles/$(uid)).data.profileComplete == true
+          && firestore.get(/databases/(default)/documents/teacherProfiles/$(uid)).data.published == true;
+      }
+      allow read: if (signedIn() && request.auth.uid == uid)
+        || isAdmin()
+        || contentIsPublished();
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && isVerifiedTeacher()
+        && teacherProfileIsComplete()
+        && request.resource != null
+        && (
+          (request.resource.contentType.matches('video/(mp4|webm)') && request.resource.size > 0 && request.resource.size <= 100 * 1024 * 1024)
+          || (request.resource.contentType.matches('image/(jpeg|png|webp)') && request.resource.size > 0 && request.resource.size <= 10 * 1024 * 1024)
+          || (request.resource.contentType == 'application/pdf' && request.resource.size > 0 && request.resource.size <= 20 * 1024 * 1024)
+        );
+      allow update, delete: if false;
+    }
+
+    // Identity documents are write-only for the applicant and readable only by admins.
+    match /teacher-verification/{uid}/{fileName} {
+      allow read: if isAdmin();
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('(application/pdf|image/jpeg|image/png)');
+      allow update, delete: if false;
+    }
+
+    // Verified teachers may upload a small profile image; published profile images are public.
+    match /teachers/{uid}/avatar/{fileName} {
+      allow read: if signedIn() && request.auth.uid == uid
+        || (firestore.exists(/databases/(default)/documents/teacherProfiles/$(uid))
+          && firestore.get(/databases/(default)/documents/teacherProfiles/$(uid)).data.published == true);
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && isVerifiedTeacher()
+        && request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow update, delete: if false;
     }
 
     match /{allPaths=**} {

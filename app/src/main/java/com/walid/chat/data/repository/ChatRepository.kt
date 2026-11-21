@@ -1,5 +1,6 @@
 package com.walid.chat.data.repository
 
+import android.net.Uri
 import com.walid.chat.data.model.Chat
 import com.walid.chat.data.model.ChatMessage
 import kotlinx.coroutines.flow.Flow
@@ -11,5 +12,14 @@ import kotlinx.coroutines.flow.Flow
 interface ChatRepository {
     suspend fun getChats(): Result<List<Chat>>
     fun observeMessages(chatId: String): Flow<Result<List<ChatMessage>>>
+    suspend fun loadOlderMessages(chatId: String, before: ChatMessage): Result<List<ChatMessage>>
     suspend fun sendMessage(chatId: String, text: String): Result<Unit>
+    suspend fun sendMediaMessage(
+        chatId: String,
+        uri: Uri,
+        contentType: String,
+        fileName: String,
+        sizeBytes: Long,
+        caption: String = ""
+    ): Result<Unit>
 }

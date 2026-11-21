@@ -1,6 +1,6 @@
 # إعداد Firebase لتطبيق IMI
 
-هذه الوثيقة تشرح ربط مشروع Firebase حقيقي. **لا يوجد حاليًا مشروع Firebase مؤكد الملكية ومربوط بالتطبيق، ولم تُنشر Functions أو Firestore أو Storage.** لا تستخدم معرّف مشروع قديمًا لمجرد أنه موجود في ملفات سابقة.
+هذه الوثيقة تشرح ربط مشروع Firebase حقيقي. يحتوي `.firebaserc` على `imi-indroid` كمعرّف افتراضي، وتذكر إعدادات البناء رقم المشروع `135769436246` والحزمة `com.walid.chat`. وجود هذه القيم أو نجاح فحص ملف الإعداد في CI لا يثبت وحده ملكية المشروع أو تفعيل مزودي الدخول أو نشر أي خدمة. لا توجد في هذا المستودع أدلة على نشر Functions أو Firestore Rules أو Storage Rules إلى Firebase الإنتاجي.
 
 ## 1. إنشاء المشروع وربط تطبيق Android
 
@@ -10,8 +10,8 @@
 2. سجّل معرّف المشروع الحقيقي من Project settings. لا تفترض أن `cosmic-altar-m6shk` هو المشروع الصحيح؛ يجب أن تؤكد ذلك من حسابك.
 3. أضف تطبيق Android بمعرّف الحزمة الدقيق `com.walid.chat`.
 4. نزّل `google-services.json` الخاص بهذا التطبيق.
-5. فعّل Firebase Authentication > Anonymous مؤقتًا للاختبار فقط.
-6. أنشئ Firestore Database وStorage في المنطقة التي تختارها. راجع قواعد الأمان قبل أي بيانات إنتاجية.
+5. هيّئ Firebase Authentication وفعّل فقط طرق الدخول التي ستُختبر فعليًا: Anonymous مؤقتًا، وEmail/Password وGoogle عند الحاجة. وجود `google-services.json` في بناء CI لا يثبت أن أي مزوّد دخول مفعّل في Firebase Console.
+6. أنشئ Firestore Database في المنطقة التي تختارها، وراجع قواعد الأمان قبل أي بيانات إنتاجية. لا تُنشئ ولا تستخدم Firebase Storage ضمن شرط Spark المجاني؛ وصول Storage إلى الـbucket يتطلب Blaze منذ 3 فبراير 2026. لذلك رفع الصور والفيديو والملفات عبر Firebase Storage غير متاح على Spark. لا تفعّل Blaze أو تربط وسيلة دفع. يلزم اعتماد مزوّد تخزين بديل مجاني/مناسب أو موافقة مستقلة على الفوترة قبل تفعيل الوسائط.
 7. لا تضع مفاتيح Admin أو Meta في التطبيق أو المستودع.
 
 ## 2. إعداد بناء Android في GitHub
@@ -22,7 +22,7 @@
 
 أُضيف workflow يدوي في `.github/workflows/firebase-deploy.yml`. لا ينشر تلقائيًا. يحتاج إعداد Workload Identity Federation في Google Cloud، وحساب خدمة مخصص للنشر، وصلاحيات Firebase/Google Cloud اللازمة. لا تستخدم مفتاح JSON دائمًا.
 
-في GitHub أنشئ Environment باسم `firebase-production`، وأضف Environment secrets التالية:
+في GitHub أنشئ Environment باسم `firebase-production`، وأضف Environment secrets التالية. **الـworkflow الحالي ينشر Cloud Functions فقط** بعد تشغيل يدوي صريح ومرور بوابة البيئة؛ لا ينشر Firestore Rules أو Storage Rules، ولا يحدث أي نشر تلقائي على push أو pull request:
 
 - `FIREBASE_PROJECT_ID`: معرّف المشروع الوحيد المسموح بالنشر إليه؛ يجب أن يطابق المشروع الذي تملكه وتتحقق منه.
 - `GCP_WORKLOAD_IDENTITY_PROVIDER`: المورد الكامل لمزوّد Workload Identity Provider.
@@ -32,7 +32,7 @@
 
 في Google Cloud، أنشئ Workload Identity Pool/Provider مع GitHub OIDC، واجعل شرط السماح مقيدًا بالمستودع `walid1239/Imi-android` وبالفرع `feature/server-authoritative-status` (أو الفرع الإنتاجي الذي تقرره لاحقًا). اربط الهوية بحساب خدمة محدود الصلاحيات، ولا تمنح صلاحيات Owner أو Editor العامة. يجب تفعيل واجهات Google Cloud المطلوبة وإعداد فوترة مناسبة لخدمات Cloud Functions إن طلبتها Google.
 
-بعد إعداد الهوية والمشروع، شغّل GitHub Actions > IMI Firebase Cloud Deployment يدويًا، واختر فرع التغيير، وأدخل معرّف مشروعك المؤكد، واكتب `DEPLOY` للتأكيد. سيبني workflow Functions ثم ينشر Functions وFirestore rules وStorage rules إلى المشروع المحدد. نجاح workflow وحده لا يغني عن اختبار التطبيق من جهاز فعلي.
+بعد إعداد الهوية والمشروع، لا تشغّل هذا الـworkflow إلا بعد موافقة صريحة على نشر Functions إلى المشروع المحدد، ومراجعة الفوترة المطلوبة. اختر GitHub Actions > IMI Firebase Cloud Deployment يدويًا، وحدد الفرع، وأدخل معرّف المشروع المؤكد، واكتب `DEPLOY` للتأكيد، ثم أكمل موافقة Environment المحمية إن كانت مفعّلة. سيبني workflow Functions ويختبر قواعد Firestore وStorage على Emulator فقط، ثم ينشر Cloud Functions فقط. لا ينشر أي قواعد إنتاجية. نشر القواعد يحتاج خطوة منفصلة وموافقة مستقلة بعد مراجعتها. نجاح workflow وحده لا يغني عن اختبار التطبيق من جهاز فعلي.
 
 **تنبيه:** لا تشغّل workflow قبل مراجعة المشروع المستهدف والقواعد وصلاحيات حساب الخدمة. هذا الإعداد ليس دليلًا على أن أي خدمة نُشرت بالفعل.
 

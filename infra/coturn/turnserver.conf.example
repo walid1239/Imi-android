@@ -1,0 +1,4 @@
+# Compatibility note: the maintained template is turnserver.conf.
+# Build infra/coturn/Dockerfile; entrypoint.sh renders environment variables
+# from infra/coturn/.env. Never place a real shared secret in this file.
+# See docs/turn-windows.md for Windows Docker Desktop setup.

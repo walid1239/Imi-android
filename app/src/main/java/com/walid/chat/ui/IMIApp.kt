@@ -182,7 +182,7 @@ private fun HomeScreen(onChats: () -> Unit, onReels: () -> Unit, onAcademy: () -
                 }
             }
         }
-        item { Text("المحادثات والملفات العامة تعتمد على إعداد Firebase؛ ميزات الوسائط والمكالمات والتحقق عبر WhatsApp لم تُفعّل بعد.", color = ImiMuted, fontSize = 11.sp) }
+        item { Text("المحادثات والملفات العامة تعتمد على إعداد Firebase؛ مكالمات أندرويد غير جاهزة حالياً، وميزات الوسائط والتحقق عبر WhatsApp غير مفعّلة.", color = ImiMuted, fontSize = 11.sp) }
     }
     if (showNotifications) {
         AlertDialog(
@@ -284,7 +284,6 @@ private fun StoriesSection() {
     var expiresAt by remember { mutableStateOf<Long?>(null) }
     var showComposer by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
-    var draftImageUri by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var configured by remember { mutableStateOf(false) }
@@ -310,20 +309,6 @@ private fun StoriesSection() {
     val storage = remember(configured) {
         if (configured) com.google.firebase.storage.FirebaseStorage.getInstance() else null
     }
-    val statusImagePicker = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) {
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            }
-            draftImageUri = uri.toString()
-        }
-    }
-
     LaunchedEffect(configured, auth?.currentUser?.uid) {
         val uid = auth?.currentUser?.uid ?: return@LaunchedEffect
         runCatching {
@@ -434,22 +419,13 @@ private fun StoriesSection() {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = draft, onValueChange = { draft = it }, label = { Text("ماذا تريد أن تشارك؟") }, maxLines = 4)
-                    OutlinedButton(onClick = { statusImagePicker.launch(arrayOf("image/*")) }) {
-                        Icon(Icons.Filled.Image, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (draftImageUri == null) "إرفاق صورة" else "تغيير الصورة")
-                    }
-                    if (draftImageUri != null) {
-                        Text("تم اختيار صورة للنشر السحابي.", color = ImiMuted, fontSize = 11.sp)
-                        TextButton(onClick = { draftImageUri = null }) { Text("إزالة الصورة") }
-                    }
-                    Text("تُحفظ الحالة في السحابة وتُحذف صلاحية عرضها بعد 28 ساعة.", color = ImiMuted, fontSize = 10.sp)
+                    Text("في المرحلة المجانية، تُنشر الحالات النصية فقط وتُحذف صلاحيتها بعد 28 ساعة.", color = ImiMuted, fontSize = 10.sp)
                 }
             },
             confirmButton = {
-                TextButton(enabled = !loading && (draft.isNotBlank() || draftImageUri != null), onClick = {
+                TextButton(enabled = !loading && draft.isNotBlank(), onClick = {
                     val uid = auth?.currentUser?.uid
-                    if (uid == null || db == null || storage == null) {
+                    if (uid == null || db == null) {
                         message = "Firebase غير مهيأ؛ لم تُنشر الحالة. لن نحفظها كحالة محلية."
                         showComposer = false
                     } else {
@@ -457,15 +433,7 @@ private fun StoriesSection() {
                         scope.launch {
                             runCatching {
                                 val value = draft.trim().take(700)
-                                val selectedMedia = draftImageUri?.let { selectedUri ->
-                                    val uri = android.net.Uri.parse(selectedUri)
-                                    val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
-                                    require(mime in setOf("image/jpeg", "image/png", "image/webp")) { "صيغة الصورة غير مدعومة." }
-                                    uri to mime
-                                }
-                                val requestData = mutableMapOf<String, Any>()
-                                if (value.isNotEmpty()) requestData["text"] = value
-                                selectedMedia?.let { requestData["mediaType"] = it.second }
+                                val requestData = mapOf("text" to value)
                                 val callable = com.google.firebase.functions.FirebaseFunctions.getInstance()
                                     .getHttpsCallable("createStatus")
                                 val response = callable.call(requestData).await()
@@ -476,23 +444,6 @@ private fun StoriesSection() {
                                 val expiryMillis = (result["expiresAtMillis"] as? Number)?.toLong()
                                     ?: error("لم يُرجع الخادم وقت انتهاء الحالة")
                                 val path = result["mediaPath"] as? String
-                                val statusRef = db.collection("users").document(uid)
-                                    .collection("statuses").document(id)
-                                try {
-                                    selectedMedia?.let { (uri, mime) ->
-                                        require(!path.isNullOrBlank()) { "لم يُرجع الخادم مسار الصورة" }
-                                        storage.reference.child(path).putFile(
-                                            uri,
-                                            com.google.firebase.storage.StorageMetadata.Builder().setContentType(mime).build()
-                                        ).await()
-                                    }
-                                } catch (uploadError: Exception) {
-                                    if (!path.isNullOrBlank()) {
-                                        runCatching { storage.reference.child(path).delete().await() }
-                                    }
-                                    runCatching { statusRef.delete().await() }
-                                    throw uploadError
-                                }
                                 mapOf(
                                     "__statusId" to id,
                                     "text" to value,
@@ -505,7 +456,6 @@ private fun StoriesSection() {
                                 statusMediaPath = data["mediaPath"] as? String
                                 expiresAt = (data["expiresAtMillis"] as? Number)?.toLong()
                                 draft = ""
-                                draftImageUri = null
                                 showComposer = false
                                 message = "نُشرت حالتك في سحابة IMI."
                             }.onFailure {
@@ -570,7 +520,7 @@ private fun ReelsScreen() {
     val storage = remember(configured) { if (configured) FirebaseStorage.getInstance() else null }
 
     fun loadReels() {
-        if (db == null || auth?.currentUser == null) {
+        if (db == null || storage == null || auth?.currentUser == null) {
             error = "خدمة Firebase غير مهيأة؛ لن نعرض مقاطع تجريبية."
             reels = emptyList()
             return
@@ -579,12 +529,13 @@ private fun ReelsScreen() {
             busy = true
             runCatching {
                 db.collection("reels")
+                    .whereEqualTo("status", "approved")
                     .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
                     .limit(50)
                     .get().await().documents.mapNotNull { doc ->
-                        val url = doc.getString("videoUrl") ?: return@mapNotNull null
                         val owner = doc.getString("ownerUid") ?: return@mapNotNull null
                         val path = doc.getString("storagePath") ?: return@mapNotNull null
+                        val url = storage.reference.child(path).downloadUrl.await().toString()
                         CloudReel(
                             id = doc.id,
                             ownerUid = owner,
@@ -597,9 +548,9 @@ private fun ReelsScreen() {
             }.onSuccess {
                 reels = it
                 if (selected?.id !in it.map { reel -> reel.id }) selected = it.firstOrNull()
-                error = if (it.isEmpty()) "لا توجد مقاطع منشورة بعد. أضف أول مقطع حقيقي إلى موجز IMI." else null
+                error = if (it.isEmpty()) "لا توجد مقاطع وافق عليها المشرف بعد." else null
             }.onFailure {
-                error = "تعذر تحميل موجز Reels من السحابة: ${it.localizedMessage ?: "خطأ غير معروف"}"
+                error = "تعذر تحميل موجز Reels المعتمدة من السحابة: ${it.localizedMessage ?: "خطأ غير معروف"}"
             }
             busy = false
         }
@@ -622,22 +573,22 @@ private fun ReelsScreen() {
                         require(mime in listOf("video/mp4", "video/webm")) { "الصيغة المدعومة حالياً MP4 أو WebM فقط." }
                         val id = db.collection("reels").document().id
                         val extension = if (mime == "video/webm") "webm" else "mp4"
-                        val path = "reels/$uid/$id.$extension"
+                        val path = "reels/$uid/$id/video.$extension"
                         val ref = storage.reference.child(path)
                         val metadata = StorageMetadata.Builder().setContentType(mime).build()
                         ref.putFile(uri, metadata).await()
-                        val url = ref.downloadUrl.await().toString()
-                        db.collection("reels").document(id).set(
-                            mapOf(
-                                "ownerUid" to uid,
-                                "caption" to caption.trim().take(300),
-                                "videoUrl" to url,
-                                "storagePath" to path,
-                                "contentType" to mime,
-                                "createdAt" to FieldValue.serverTimestamp()
-                            )
-                        ).await()
+                        com.google.firebase.functions.FirebaseFunctions.getInstance()
+                            .getHttpsCallable("submitReel")
+                            .call(
+                                mapOf(
+                                    "reelId" to id,
+                                    "caption" to caption.trim().take(300),
+                                    "storagePath" to path,
+                                    "contentType" to mime
+                                )
+                            ).await()
                         caption = ""
+                        Toast.makeText(context, "تم رفع المقطع وإرساله للمراجعة؛ سيظهر بعد موافقة المشرف.", Toast.LENGTH_LONG).show()
                     }.onFailure {
                         error = "فشل رفع المقطع أو نشره: ${it.localizedMessage ?: "خطأ غير معروف"}"
                     }
@@ -1064,7 +1015,12 @@ private fun ProfileScreen() {
                                 photoPath?.let { path ->
                                     com.google.firebase.firestore.FirebaseFirestore.getInstance()
                                         .collection("users").document(uid)
-                                        .set(mapOf("photoPath" to path), com.google.firebase.firestore.SetOptions.merge())
+                                        .set(mapOf(
+                                            "displayName" to displayName.trim().take(60),
+                                            "city" to city.trim().take(80),
+                                            "photoPath" to path,
+                                            "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                                        ), com.google.firebase.firestore.SetOptions.merge())
                                         .await()
                                 }
                                 uid

@@ -121,4 +121,4 @@ jobs:
         if: success()
         env:
           PROJECT_ID: ${{ inputs.project_id }}
-        run: echo "Firestore rules and indexes deployed for explicitly approved project: $PROJECT_ID"
+        run: |\n          echo "Firestore rules and indexes deployed for explicitly approved project: $PROJECT_ID"

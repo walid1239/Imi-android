@@ -286,7 +286,7 @@ async function academyAdminAction(app: App, uid: string, body: Record<string, un
     if (!["level", "track", "subject", "unit"].includes(String(type))) throw new CoreError("invalid-argument", "نوع عنصر المنهاج غير صالح.");
     const nameAr = title(body.nameAr, "الاسم العربي", 160);
     const nameFr = title(body.nameFr, "الاسم الفرنسي", 160, true);
-    const language = body.language === "fr" ? "fr" : "ar";
+    const language = ["ar", "fr", "mixed", "unknown"].includes(String(body.language)) ? String(body.language) : "ar";
     const order = body.order;
     if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 1 || order > 100000) throw new CoreError("invalid-argument", "ترتيب عنصر المنهاج غير صالح.");
     const parentId = body.parentId === null || body.parentId === "" ? null : requiredId(body.parentId, "العنصر الأب");
@@ -323,7 +323,7 @@ async function academyAdminAction(app: App, uid: string, body: Record<string, un
       const parentId = item.parentId === null || item.parentId === "" ? null : requiredId(item.parentId, "العنصر الأب");
       const order = item.order;
       if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 1 || order > 100000) throw new CoreError("invalid-argument", "ترتيب عنصر المنهاج غير صالح.");
-      return { nodeId, parentId, type: item.type, nameAr, nameFr, language: item.language === "fr" ? "fr" : "ar", order };
+      return { nodeId, parentId, type: item.type, nameAr, nameFr, language: ["ar", "fr", "mixed", "unknown"].includes(String(item.language)) ? String(item.language) : "ar", order };
     });
     const ids = new Set(normalized.map(item => item.nodeId));
     if (ids.size !== normalized.length) throw new CoreError("invalid-argument", "ملف الاستيراد يحتوي على معرّفات مكررة.");
@@ -341,7 +341,7 @@ async function academyAdminAction(app: App, uid: string, body: Record<string, un
     await firestore.runTransaction(async tx => {
       const snapshots = await Promise.all(normalized.map(item => tx.get(nodes.doc(item.nodeId))));
       if (snapshots.some(snapshot => snapshot.exists)) throw new CoreError("already-exists", "يوجد معرّف عنصر مستخدم مسبقاً.");
-      const externalParents = [...new Set(normalized.map(item => item.parentId).filter((id): id is string => Boolean(id) && !ids.has(id!)))];
+      const externalParents = [...new Set(normalized.map(item => item.parentId).filter((id): id is string => id !== null && !ids.has(id)))];
       const parentSnapshots = await Promise.all(externalParents.map(id => tx.get(nodes.doc(id))));
       if (parentSnapshots.some(snapshot => !snapshot.exists)) throw new CoreError("not-found", "يوجد عنصر أب غير موجود في قاعدة البيانات.");
       for (const item of normalized) {

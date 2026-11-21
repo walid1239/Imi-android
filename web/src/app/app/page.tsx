@@ -4,7 +4,8 @@ import { getIdTokenResult, onAuthStateChanged, signOut, User } from 'firebase/au
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { auth } from '@/lib/firebase/client';
+import { auth, firebaseConfigured } from '@/lib/firebase/client';
+import FirebaseConfigRequired from '@/components/firebase-config-required';
 import ChatPanel from '@/components/chat-panel';
 import ReelsPanel from '@/components/reels-panel';
 import StatusPanel from '@/components/status-panel';
@@ -30,14 +31,17 @@ export default function AppHomePage() {
   const [active, setActive] = useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  useEffect(() => onAuthStateChanged(auth, current => {
-    setUser(current);
-    setReady(true);
-    if (!current) router.replace('/login');
-  }), [router]);
+  useEffect(() => {
+    if (!firebaseConfigured) { setReady(true); return; }
+    return onAuthStateChanged(auth, current => {
+      setUser(current);
+      setReady(true);
+      if (!current) router.replace('/login');
+    });
+  }, [router]);
 
   useEffect(() => {
-    if (!user) { setIsAdmin(false); return; }
+    if (!firebaseConfigured || !user) { setIsAdmin(false); return; }
     let current = true;
     getIdTokenResult(user, true).then(token => { if (current) setIsAdmin(token.claims.admin === true); })
       .catch(() => { if (current) setIsAdmin(false); });
@@ -51,6 +55,7 @@ export default function AppHomePage() {
     router.replace('/login');
   }
 
+  if (!firebaseConfigured) return <FirebaseConfigRequired />;
   if (!ready || !user) return <main className="grid min-h-screen place-items-center text-slate-400">جارٍ التحقق من الجلسة…</main>;
 
   return <main dir="rtl" className="mx-auto min-h-screen max-w-6xl px-4 pb-24 pt-6 sm:px-8">

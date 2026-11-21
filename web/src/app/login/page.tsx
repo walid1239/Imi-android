@@ -6,6 +6,7 @@ import { FirebaseError } from 'firebase/app';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { auth, firebaseConfigured } from '@/lib/firebase/client';
+import FirebaseConfigRequired from '@/components/firebase-config-required';
 
 
 function getArabicAuthError(error: unknown, action: 'email' | 'google' | 'guest' | 'reset'): string {
@@ -42,6 +43,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+
+  if (!firebaseConfigured) return <FirebaseConfigRequired />;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

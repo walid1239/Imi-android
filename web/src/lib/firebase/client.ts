@@ -22,7 +22,7 @@ export const firebaseConfigured = Object.values(requiredEnv).every(Boolean);
 // real Firebase environment variables are supplied.
 const buildFallback = {
   apiKey: 'build-only-not-a-real-firebase-api-key',
-  authDomain: 'localhost',
+  authDomain: 'demo-imi-build.firebaseapp.com',
   projectId: 'demo-imi-build',
   storageBucket: 'demo-imi-build.firebasestorage.app',
   messagingSenderId: '000000000000',

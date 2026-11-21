@@ -49,7 +49,7 @@ android {
         "imiApiBaseUrl must be an HTTPS origin without a path."
     }
     defaultConfig {
-        buildConfigField("String", "IMI_API_BASE_URL", "\\"$imiApiBaseUrl\\"")
+        buildConfigField("String", "IMI_API_BASE_URL", "\"$imiApiBaseUrl\"")
     }
 }
 

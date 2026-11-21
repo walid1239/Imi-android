@@ -25,7 +25,6 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
   const [category, setCategory] = useState('');
   const [lessonTitle, setLessonTitle] = useState('');
   const [content, setContent] = useState('');
-  const [videoUrl, setVideoUrl] = useState('');
   const [order, setOrder] = useState('0');
   const [sourceType, setSourceType] = useState('original');
   const [sourceName, setSourceName] = useState('محتوى أصلي من IMI');
@@ -135,10 +134,10 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
     event.preventDefault();
     if (!selectedId) return;
     await call('createCourseLesson', {
-      courseId: selectedId, title: lessonTitle, content, videoUrl,
+      courseId: selectedId, title: lessonTitle, content,
       order: Number(order), sourceType, sourceName, sourceUrl, license, permissionNote,
     }, 'تمت إضافة الدرس كمسودة. لا يمكن نشره قبل استكمال بيانات المصدر ومراجعته.');
-    setLessonTitle(''); setContent(''); setVideoUrl(''); setOrder(String(lessons.length + 1));
+    setLessonTitle(''); setContent(''); setOrder(String(lessons.length + 1));
   }
 
   if (authorized === null) return <section dir="rtl" className="rounded-2xl border border-white/10 p-6 text-sm text-slate-400">جارٍ التحقق من صلاحية المشرف من رمز Firebase…</section>;
@@ -227,10 +226,10 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
         </div>)}
 
         {!selected.published && <form onSubmit={createLesson} className="space-y-3 rounded-xl border border-dashed border-white/15 p-3">
-          <h4 className="text-sm font-bold">إضافة درس</h4>
+          <h4 className="text-sm font-bold">إضافة درس نصي</h4>
+          <p className="text-xs text-amber-200">رفع الفيديو والصور والملفات غير متاح في المرحلة المجانية الأولى.</p>
           <input required maxLength={120} value={lessonTitle} onChange={e => setLessonTitle(e.target.value)} placeholder="عنوان الدرس" className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" />
           <textarea maxLength={20000} rows={4} value={content} onChange={e => setContent(e.target.value)} placeholder="المحتوى النصي (اختياري)" className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" />
-          <input type="url" value={videoUrl} onChange={e => setVideoUrl(e.target.value)} placeholder="رابط فيديو HTTPS (اختياري)" className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" />
           <input type="number" min={0} max={100000} step={1} value={order} onChange={e => setOrder(e.target.value)} aria-label="ترتيب الدرس" className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" />
           <label className="block text-xs text-slate-400">نوع المصدر
             <select value={sourceType} onChange={e => setSourceType(e.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-slate-100">

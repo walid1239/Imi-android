@@ -7,7 +7,7 @@ const {
 } = require("../lib/shared/serverCore.js");
 const { directConversationId } = require("../lib/conversationLogic.js");
 
-function makeStore(seed = {}, teachers = {}) {
+function makeStore(seed = {}, teachers = {}, activeCalls = []) {
   const docs = new Map(Object.entries(seed));
   let nextId = 0;
   const now = 1_800_000_000_000;
@@ -34,7 +34,7 @@ function makeStore(seed = {}, teachers = {}) {
     isVerifiedTeacher: async uid => teachers[uid] === true,
     directConversationId,
     getDocument: async path => ({ exists: docs.has(path), data: docs.get(path) ?? {} }),
-    getActiveCalls: async () => [],
+    getActiveCalls: async (callerUid, calleeUid) => activeCalls.filter(call => call.callerUid === callerUid && call.calleeUid === calleeUid),
   };
 }
 
@@ -123,11 +123,14 @@ test("blockUser removes friendship, closes direct chat and active calls", async 
     "users/a/friends/b": { status: "accepted" }, "users/b/friends/a": { status: "accepted" },
     [`conversations/${directConversationId("a", "b")}`]: { participants: ["a", "b"], status: "active" },
     "friendRequests/a__b": { status: "pending" },
-  });
+    "calls/call-1": { callerUid: "a", calleeUid: "b", status: "ringing" },
+  }, {}, [{ id: "call-1", callerUid: "a", calleeUid: "b" }]);
   assert.equal((await blockUser(store, "a", { targetUid: "b" })).status, "blocked");
   assert.equal(store.docs.has("users/a/blockedUsers/b"), true);
   assert.equal(store.docs.has("users/a/friends/b"), false);
-  assert.equal(store.docs.get("conversations/a__b").status, "blocked");
+  assert.equal(store.docs.get("conversations/" + directConversationId("a", "b")).status, "blocked");
+  assert.equal(store.docs.get("calls/call-1").status, "ended");
+  assert.equal(store.docs.get("calls/call-1").endReason, "blocked");
 });
 test("unblockUser only restores direct chat when reverse block is absent", async () => {
   const store = makeStore({

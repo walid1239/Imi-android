@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
   CoreError, createStatus, sendFriendRequest, createOrGetDirectConversation,
 } = require("../lib/shared/serverCore.js");
+const { directConversationId } = require("../lib/conversationLogic.js");
 
 function makeStore(seed = {}, teachers = {}) {
   const docs = new Map(Object.entries(seed));
@@ -24,6 +25,7 @@ function makeStore(seed = {}, teachers = {}) {
     timestampFromMillis: value => ({ millis: value, toMillis() { return value; } }),
     timestampToMillis: value => value && typeof value.toMillis === "function" ? value.toMillis() : undefined,
     isVerifiedTeacher: async uid => teachers[uid] === true,
+    directConversationId,
   };
 }
 

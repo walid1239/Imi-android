@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   CoreError, createStatus, sendFriendRequest, createOrGetDirectConversation,
+  acceptFriendRequest, rejectFriendRequest, removeFriend,
 } = require("../lib/shared/serverCore.js");
 const { directConversationId } = require("../lib/conversationLogic.js");
 
@@ -18,6 +19,11 @@ function makeStore(seed = {}, teachers = {}) {
         docs.set(path, data);
       },
       set: (path, data) => docs.set(path, data),
+      update: (path, data) => {
+        if (!docs.has(path)) throw new Error("missing document");
+        docs.set(path, { ...docs.get(path), ...data });
+      },
+      delete: path => docs.delete(path),
     }),
     newId: () => `status-${++nextId}`,
     nowMillis: () => now,
@@ -72,4 +78,38 @@ test("direct conversation ID is symmetric and conversation creation checks both 
   assert.equal(result.conversationId, reverse.conversationId);
   const conversation = store.docs.get(`conversations/${result.conversationId}`);
   assert.deepEqual(conversation.participants, ["user_A", "user_B"]);
+});
+
+test("acceptFriendRequest verifies recipient, blocks and creates reciprocal friendship", async () => {
+  const store = makeStore({
+    "friendRequests/sender__recipient": { fromUid: "sender", toUid: "recipient", status: "pending" },
+  });
+  await assert.rejects(acceptFriendRequest(store, "intruder", { requestId: "sender__recipient" }),
+    error => error instanceof CoreError && error.code === "permission-denied");
+  const result = await acceptFriendRequest(store, "recipient", { requestId: "sender__recipient" });
+  assert.equal(result.status, "accepted");
+  assert.equal(store.docs.get("users/recipient/friends/sender").status, "accepted");
+  assert.equal(store.docs.get("users/sender/friends/recipient").status, "accepted");
+});
+
+test("rejectFriendRequest is recipient-only and idempotent after rejection", async () => {
+  const store = makeStore({
+    "friendRequests/sender__recipient": { fromUid: "sender", toUid: "recipient", status: "pending" },
+  });
+  await assert.rejects(rejectFriendRequest(store, "intruder", { requestId: "sender__recipient" }),
+    error => error instanceof CoreError && error.code === "permission-denied");
+  assert.equal((await rejectFriendRequest(store, "recipient", { requestId: "sender__recipient" })).status, "rejected");
+  assert.equal((await rejectFriendRequest(store, "recipient", { requestId: "sender__recipient" })).status, "rejected");
+});
+
+test("removeFriend deletes reciprocal edges and marks accepted requests removed", async () => {
+  const store = makeStore({
+    "users/a/friends/b": { status: "accepted" },
+    "users/b/friends/a": { status: "accepted" },
+    "friendRequests/a__b": { fromUid: "a", toUid: "b", status: "accepted" },
+  });
+  assert.equal((await removeFriend(store, "a", { friendUid: "b" })).status, "removed");
+  assert.equal(store.docs.has("users/a/friends/b"), false);
+  assert.equal(store.docs.has("users/b/friends/a"), false);
+  assert.equal(store.docs.get("friendRequests/a__b").status, "removed");
 });

@@ -6,15 +6,19 @@ import { directConversationId } from "../../../../functions/src/conversationLogi
 import { NextResponse } from "next/server";
 import {
   createStatus, sendFriendRequest, createOrGetDirectConversation,
+  acceptFriendRequest, rejectFriendRequest, removeFriend,
   type StorePort, type TransactionPort,
 } from "../../../../functions/src/shared/serverCore";
 import { authenticateBearer, publicErrorMessage } from "../../../../functions/src/shared/serverAuth";
 
-type Operation = "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation";
+type Operation = "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend";
 const limits: Record<Operation, { count: number; windowMs: number }> = {
   createStatus: { count: 2, windowMs: 60_000 },
   sendFriendRequest: { count: 10, windowMs: 60 * 60_000 },
   createOrGetDirectConversation: { count: 20, windowMs: 60_000 },
+  acceptFriendRequest: { count: 30, windowMs: 60_000 },
+  rejectFriendRequest: { count: 30, windowMs: 60_000 },
+  removeFriend: { count: 10, windowMs: 60_000 },
 };
 
 function adminApp(): App {
@@ -63,6 +67,8 @@ function makeStore(app: App): StorePort {
       },
       create: (path, data) => transaction.create(db.doc(path), data),
       set: (path, data) => transaction.set(db.doc(path), data),
+      update: (path, data) => transaction.update(db.doc(path), data),
+      delete: path => transaction.delete(db.doc(path)),
     })),
     newId: () => db.collection("_imi_ids").doc().id,
     nowMillis: () => Date.now(),
@@ -130,11 +136,15 @@ export async function handleImiPost(request: Request, operation: Operation): Pro
     });
     await applyRateLimit(app, uid, operation);
     const store = makeStore(app);
-    const result = operation === "createStatus"
-      ? await createStatus(store, uid, body)
-      : operation === "sendFriendRequest"
-        ? await sendFriendRequest(store, uid, body)
-        : await createOrGetDirectConversation(store, uid, body);
+    const handlers = {
+      createStatus: () => createStatus(store, uid, body),
+      sendFriendRequest: () => sendFriendRequest(store, uid, body),
+      createOrGetDirectConversation: () => createOrGetDirectConversation(store, uid, body),
+      acceptFriendRequest: () => acceptFriendRequest(store, uid, body),
+      rejectFriendRequest: () => rejectFriendRequest(store, uid, body),
+      removeFriend: () => removeFriend(store, uid, body),
+    };
+    const result = await handlers[operation]();
     return NextResponse.json({ ok: true, data: result }, { status: 200 });
   } catch (error) {
     if (error instanceof Error && error.message === "ORIGIN_REJECTED") {

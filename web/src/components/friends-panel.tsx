@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { User } from 'firebase/auth';
 import { collection, doc, endAt, getDoc, onSnapshot, orderBy, query, startAt, where } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '@/lib/firebase/client';
 import { postAuthenticated } from '@/lib/api';
 
@@ -74,12 +73,15 @@ export default function FriendsPanel({ user }: { user: User }) {
   async function call(name: string, payload: Record<string, string>, key: string, success: string) {
     setBusy(key); setError(''); setNotice('');
     try {
-      if (name === 'sendFriendRequest') {
-        await postAuthenticated<{ status: string; requestId: string }>(user, '/api/v1/friends/requests', payload);
-      } else {
-        const action = httpsCallable<Record<string, string>, { status?: string; requestId?: string }>(getFunctions(), name);
-        await action(payload);
-      }
+      const routes: Record<string, string> = {
+        sendFriendRequest: '/api/v1/friends/requests',
+        acceptFriendRequest: '/api/v1/friends/requests/accept',
+        rejectFriendRequest: '/api/v1/friends/requests/reject',
+        removeFriend: '/api/v1/friends/remove',
+      };
+      const path = routes[name];
+      if (!path) throw new Error('هذه العملية غير متاحة.');
+      await postAuthenticated<{ status?: string; requestId?: string }>(user, path, payload);
       setNotice(success);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'تعذر تنفيذ العملية.');
@@ -128,6 +130,6 @@ export default function FriendsPanel({ user }: { user: User }) {
     </div>
     {error && <p role="alert" className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-6 text-amber-200">{error}</p>}
     {notice && <p role="status" className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs leading-6 text-emerald-200">{notice}</p>}
-    <p className="text-xs leading-6 text-slate-500">إرسال طلب الصداقة وإنشاء المحادثة المباشرة يمران عبر مسارات الخادم الموثوقة. قبول الطلب ورفضه وإزالة الصديق ما زالت على Cloud Functions إلى حين نقلها واختبارها.</p>
+    <p className="text-xs leading-6 text-slate-500">إرسال الطلب وقبوله ورفضه وإزالة الصديق تتم عبر مسارات الخادم الموثوقة مع التحقق من هوية المستخدم وصلاحياته.</p>
   </section>;
 }

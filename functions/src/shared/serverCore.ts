@@ -14,6 +14,8 @@ export interface TransactionPort {
   get(path: string): Promise<Snapshot>;
   create(path: string, data: Record<string, unknown>): void;
   set(path: string, data: Record<string, unknown>): void;
+  update(path: string, data: Record<string, unknown>): void;
+  delete(path: string): void;
 }
 export interface StorePort {
   runTransaction<T>(work: (tx: TransactionPort) => Promise<T>): Promise<T>;
@@ -123,6 +125,90 @@ export async function sendFriendRequest(store: StorePort, uidValue: unknown, inp
     });
   });
   return { requestId: friendRequestId(uid, toUid), status: "pending" as const };
+}
+
+
+export async function acceptFriendRequest(
+  store: StorePort, uidValue: unknown, input: { requestId?: unknown },
+) {
+  const uid = requireUid(uidValue, "معرّف المستخدم غير صالح.");
+  const requestId = requireUid(input.requestId, "معرّف طلب الصداقة غير صالح.", 300);
+  return store.runTransaction(async tx => {
+    const requestPath = `friendRequests/${requestId}`;
+    const request = await tx.get(requestPath);
+    if (!request.exists) throw new CoreError("not-found", "طلب الصداقة غير موجود.");
+    const fromUid = request.data.fromUid;
+    if (request.data.toUid !== uid) throw new CoreError("permission-denied", "لا يمكنك قبول طلب موجّه إلى مستخدم آخر.");
+    if (request.data.status === "accepted") return { status: "accepted" as const };
+    if (request.data.status !== "pending" || typeof fromUid !== "string" || fromUid === uid) {
+      throw new CoreError("failed-precondition", "هذا الطلب لم يعد صالحاً للقبول.");
+    }
+    const ownPath = `users/${uid}/friends/${fromUid}`;
+    const senderPath = `users/${fromUid}/friends/${uid}`;
+    const [ownFriend, senderFriend, ownBlock, senderBlock] = await Promise.all([
+      tx.get(ownPath), tx.get(senderPath),
+      tx.get(`users/${uid}/blockedUsers/${fromUid}`),
+      tx.get(`users/${fromUid}/blockedUsers/${uid}`),
+    ]);
+    if (ownBlock.exists || senderBlock.exists) throw new CoreError("permission-denied", "لا يمكن قبول طلب الصداقة بسبب إعدادات الحظر.");
+    if ((ownFriend.exists && ownFriend.data.status !== "accepted")
+      || (senderFriend.exists && senderFriend.data.status !== "accepted")) {
+      throw new CoreError("failed-precondition", "توجد علاقة صداقة غير متسقة؛ لم يتم تغييرها.");
+    }
+    const now = store.serverTimestamp();
+    tx.update(requestPath, { status: "accepted", respondedAt: now, updatedAt: now });
+    tx.set(ownPath, { uid: fromUid, status: "accepted", createdAt: now, updatedAt: now });
+    tx.set(senderPath, { uid, status: "accepted", createdAt: now, updatedAt: now });
+    return { status: "accepted" as const };
+  });
+}
+
+export async function rejectFriendRequest(
+  store: StorePort, uidValue: unknown, input: { requestId?: unknown },
+) {
+  const uid = requireUid(uidValue, "معرّف المستخدم غير صالح.");
+  const requestId = requireUid(input.requestId, "معرّف طلب الصداقة غير صالح.", 300);
+  return store.runTransaction(async tx => {
+    const path = `friendRequests/${requestId}`;
+    const request = await tx.get(path);
+    if (!request.exists) throw new CoreError("not-found", "طلب الصداقة غير موجود.");
+    if (request.data.toUid !== uid) throw new CoreError("permission-denied", "لا يمكنك رفض طلب موجّه إلى مستخدم آخر.");
+    if (request.data.status === "rejected") return { status: "rejected" as const };
+    if (request.data.status !== "pending") throw new CoreError("failed-precondition", "هذا الطلب لم يعد قيد الانتظار.");
+    const now = store.serverTimestamp();
+    tx.update(path, { status: "rejected", respondedAt: now, updatedAt: now });
+    return { status: "rejected" as const };
+  });
+}
+
+export async function removeFriend(
+  store: StorePort, uidValue: unknown, input: { friendUid?: unknown },
+) {
+  const uid = requireUid(uidValue, "معرّف المستخدم غير صالح.");
+  const friendUid = requireUid(input.friendUid, "معرّف الصديق غير صالح.");
+  if (friendUid === uid) throw new CoreError("invalid-argument", "لا يمكن حذف نفسك من قائمة الأصدقاء.");
+  const forward = `friendRequests/${friendRequestId(uid, friendUid)}`;
+  const reverse = `friendRequests/${friendRequestId(friendUid, uid)}`;
+  return store.runTransaction(async tx => {
+    const ownPath = `users/${uid}/friends/${friendUid}`;
+    const otherPath = `users/${friendUid}/friends/${uid}`;
+    const [ownFriend, otherFriend, forwardRequest, reverseRequest] = await Promise.all([
+      tx.get(ownPath), tx.get(otherPath), tx.get(forward), tx.get(reverse),
+    ]);
+    if (!ownFriend.exists || !otherFriend.exists
+      || ownFriend.data.status !== "accepted" || otherFriend.data.status !== "accepted") {
+      throw new CoreError("not-found", "هذه العلاقة ليست صداقة مؤكدة بين الحسابين.");
+    }
+    tx.delete(ownPath);
+    tx.delete(otherPath);
+    if (forwardRequest.exists && forwardRequest.data.status === "accepted") {
+      tx.update(forward, { status: "removed", updatedAt: store.serverTimestamp() });
+    }
+    if (reverseRequest.exists && reverseRequest.data.status === "accepted") {
+      tx.update(reverse, { status: "removed", updatedAt: store.serverTimestamp() });
+    }
+    return { status: "removed" as const };
+  });
 }
 
 export async function createOrGetDirectConversation(

@@ -84,3 +84,23 @@ test('authenticated Next.js routes create a status, friend request and direct co
   const conversationPayload = await conversation.json() as { ok: boolean; data: { conversationId: string } };
   expect(conversationPayload.data.conversationId).toMatch(/^direct_[a-f0-9]{64}$/);
 });
+
+test('friend request actions enforce ownership and update both sides through server routes', async () => {
+  const suffix = fixtureSuffix(test.info().project.name, test.info().retry);
+  const recipientToken = await idToken(`e2e-recipient-${suffix}@imi.test`);
+  const senderUid = `imi-e2e-sender-${suffix}`;
+  const requestId = `${senderUid}__imi-e2e-recipient-${suffix}`;
+  const seeded = await fetch(`http://127.0.0.1:8080/emulator/v1/projects/demo-imi/databases/(default)/documents/friendRequests/${requestId}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields: {
+      fromUid: { stringValue: senderUid },
+      toUid: { stringValue: `imi-e2e-recipient-${suffix}` },
+      status: { stringValue: 'pending' },
+    }}),
+  });
+  expect([200, 201]).toContain(seeded.status);
+  const accepted = await post('/api/v1/friends/requests/accept', { requestId }, recipientToken);
+  expect(accepted.status).toBe(200);
+  expect((await accepted.json()).data.status).toBe('accepted');
+});

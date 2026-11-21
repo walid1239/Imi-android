@@ -3,18 +3,12 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { User } from 'firebase/auth';
 import { collection, deleteDoc, doc, getDoc, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore';
-import { getDownloadURL, ref } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase/client';
+import { db } from '@/lib/firebase/client';
 import { postAuthenticated } from '@/lib/api';
 
-type Status = {
-  id: string;
-  text: string;
-  mediaPath?: string;
-  expiresAt: Timestamp;
-};
+type Status = { id: string; text: string; expiresAt: Timestamp };
 
-type FriendStatus = { id: string; ownerUid: string; displayName: string; text: string; expiresAt: Timestamp; mediaUrl?: string };
+type FriendStatus = { id: string; ownerUid: string; displayName: string; text: string; expiresAt: Timestamp };
 
 type CreateStatusResult = {
   statusId: string;
@@ -24,7 +18,6 @@ type CreateStatusResult = {
 export default function StatusPanel({ user }: { user: User }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [friendStatuses, setFriendStatuses] = useState<FriendStatus[]>([]);
-  const [mediaUrl, setMediaUrl] = useState('');
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -39,21 +32,9 @@ export default function StatusPanel({ user }: { user: User }) {
     );
     return onSnapshot(activeStatuses, snapshot => {
       const item = snapshot.docs[0];
-      if (!item) { setStatus(null); setMediaUrl(''); return; }
+      if (!item) { setStatus(null); return; }
       const expiresAt = item.get('expiresAt');
-      const mediaPath = item.get('mediaPath');
-      setStatus({
-        id: item.id,
-        text: item.get('text') || '',
-        mediaPath: typeof mediaPath === 'string' ? mediaPath : undefined,
-        expiresAt
-      });
-      setMediaUrl('');
-      if (typeof mediaPath === 'string') {
-        getDownloadURL(ref(storage, mediaPath))
-          .then(setMediaUrl)
-          .catch(reason => setError(reason instanceof Error ? reason.message : 'تعذر تحميل صورة الحالة.'));
-      }
+      setStatus({ id: item.id, text: item.get('text') || '', expiresAt });
       setError('');
     }, reason => setError(reason.message));
   }, [user.uid]);
@@ -80,20 +61,12 @@ export default function StatusPanel({ user }: { user: User }) {
           const displayName = profileSnapshot.exists()
             ? profileSnapshot.get('displayName') || 'صديق'
             : 'صديق';
-          const items = await Promise.all(statusesSnapshot.docs.map(async item => {
-            const mediaPath = item.get('mediaPath');
-            let mediaUrl = '';
-            if (typeof mediaPath === 'string') {
-              try { mediaUrl = await getDownloadURL(ref(storage, mediaPath)); } catch { mediaUrl = ''; }
-            }
-            return {
-              id: item.id,
-              ownerUid: friendUid,
-              displayName,
-              text: item.get('text') || '',
-              expiresAt: item.get('expiresAt') as Timestamp,
-              ...(mediaUrl ? { mediaUrl } : {}),
-            };
+          const items = statusesSnapshot.docs.map(item => ({
+            id: item.id,
+            ownerUid: friendUid,
+            displayName,
+            text: item.get('text') || '',
+            expiresAt: item.get('expiresAt') as Timestamp,
           }));
           setFriendStatuses(current => [
             ...current.filter(item => item.ownerUid !== friendUid),
@@ -132,10 +105,6 @@ export default function StatusPanel({ user }: { user: User }) {
     setBusy(true); setError(''); setNotice('');
     try {
       await deleteDoc(doc(db, 'users', user.uid, 'statuses', status.id));
-      if (status.mediaPath) {
-        const { deleteObject } = await import('firebase/storage');
-        await deleteObject(ref(storage, status.mediaPath)).catch(() => undefined);
-      }
       setNotice('حُذفت حالتك.');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'تعذر حذف الحالة.');
@@ -156,7 +125,6 @@ export default function StatusPanel({ user }: { user: User }) {
     {status ? <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
       <div className="flex items-center justify-between gap-3"><h3 className="font-bold">حالتي الحالية</h3><span className="text-xs text-slate-400">تنتهي: {new Intl.DateTimeFormat('ar', { dateStyle: 'short', timeStyle: 'short' }).format(status.expiresAt.toDate())}</span></div>
       {status.text && <p className="mt-4 whitespace-pre-wrap text-sm leading-7">{status.text}</p>}
-      {status.mediaPath && (mediaUrl ? <img src={mediaUrl} alt="صورة الحالة" className="mt-4 max-h-[520px] w-full rounded-xl object-contain" /> : <p className="mt-3 text-xs text-slate-400">جارٍ تحميل صورة الحالة…</p>)}
       <button onClick={removeStatus} disabled={busy} className="mt-4 rounded-lg border border-rose-500/30 px-4 py-2 text-xs font-semibold text-rose-300 disabled:opacity-40">حذف حالتي</button>
     </article> : <p className="rounded-2xl border border-dashed border-white/15 p-8 text-center text-sm text-slate-400">لا توجد حالة نشطة لك حالياً.</p>}
     <section className="space-y-3">
@@ -166,7 +134,6 @@ export default function StatusPanel({ user }: { user: User }) {
         : friendStatuses.map(item => <article key={item.ownerUid + item.id} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
           <div className="flex items-center justify-between gap-3"><h4 className="font-semibold">{item.displayName}</h4><span className="text-xs text-slate-500">تنتهي {new Intl.DateTimeFormat('ar', { dateStyle: 'short', timeStyle: 'short' }).format(item.expiresAt.toDate())}</span></div>
           {item.text && <p className="mt-3 whitespace-pre-wrap text-sm leading-7">{item.text}</p>}
-          {item.mediaUrl && <img src={item.mediaUrl} alt="حالة صديق" className="mt-3 max-h-[520px] w-full rounded-xl object-contain" />}
         </article>)}
     </section>
     <p className="text-xs leading-6 text-slate-500">تُعرض حالات الأصدقاء فقط عندما تكون علاقة الصداقة مؤكدة من الطرفين، وتظل صلاحية الحالة محسوبة من توقيت الخادم. الوسائط مؤجلة إلى مرحلة تتوفر فيها خدمة تخزين مجانية مناسبة.</p>

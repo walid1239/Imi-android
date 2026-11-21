@@ -1,5 +1,6 @@
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { getStorage } from "firebase-admin/storage";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import { directConversationId } from "../../../../functions/src/conversationLogic";
@@ -8,11 +9,11 @@ import {
   createStatus, sendFriendRequest, createOrGetDirectConversation,
   acceptFriendRequest, rejectFriendRequest, removeFriend,
   blockUser, unblockUser, createGroupConversation, addGroupParticipants,
-  type StorePort, type TransactionPort,
+  type StorePort, type TransactionPort, CoreError,
 } from "../../../../functions/src/shared/serverCore";
 import { authenticateBearer, publicErrorMessage } from "../../../../functions/src/shared/serverAuth";
 
-type Operation = "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend" | "blockUser" | "unblockUser" | "createGroupConversation" | "addGroupParticipants";
+type Operation = "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend" | "blockUser" | "unblockUser" | "createGroupConversation" | "addGroupParticipants" | "submitReel" | "reviewReel";
 const limits: Record<Operation, { count: number; windowMs: number }> = {
   createStatus: { count: 2, windowMs: 60_000 },
   sendFriendRequest: { count: 10, windowMs: 60 * 60_000 },
@@ -24,6 +25,8 @@ const limits: Record<Operation, { count: number; windowMs: number }> = {
   unblockUser: { count: 20, windowMs: 60_000 },
   createGroupConversation: { count: 5, windowMs: 60_000 },
   addGroupParticipants: { count: 10, windowMs: 60_000 },
+  submitReel: { count: 3, windowMs: 60 * 60_000 },
+  reviewReel: { count: 60, windowMs: 60_000 },
 };
 
 function adminApp(): App {
@@ -158,6 +161,61 @@ export async function handleImiPost(request: Request, operation: Operation): Pro
       unblockUser: () => unblockUser(store, uid, body),
       createGroupConversation: () => createGroupConversation(store, uid, body),
       addGroupParticipants: () => addGroupParticipants(store, uid, body),
+      submitReel: async () => {
+        const reelId = typeof body.reelId === "string" ? body.reelId.trim() : "";
+        const caption = typeof body.caption === "string" ? body.caption.trim() : "";
+        const contentType = body.contentType;
+        if (!/^[A-Za-z0-9_-]{8,128}$/.test(reelId)) throw new CoreError("invalid-argument", "معرّف المقطع غير صالح.");
+        if (caption.length > 300) throw new CoreError("invalid-argument", "الوصف يتجاوز 300 حرف.");
+        if (contentType !== "video/mp4" && contentType !== "video/webm") throw new CoreError("invalid-argument", "صيغة الفيديو غير مدعومة.");
+        const extension = contentType === "video/webm" ? "webm" : "mp4";
+        const expectedPath = `reels/${uid}/${reelId}/video.${extension}`;
+        if (body.storagePath !== expectedPath) throw new CoreError("invalid-argument", "مسار الفيديو لا يطابق حسابك أو معرّف المقطع.");
+        let metadata: Record<string, unknown>;
+        try {
+          const [actual] = await getStorage(app).bucket().file(expectedPath).getMetadata();
+          metadata = actual as Record<string, unknown>;
+        } catch {
+          throw new CoreError("not-found", "لم يتم العثور على الفيديو المرفوع.");
+        }
+        const size = Number(metadata.size ?? 0);
+        if (metadata.contentType !== contentType || !Number.isFinite(size) || size <= 0 || size > 100 * 1024 * 1024) {
+          throw new CoreError("failed-precondition", "بيانات الفيديو أو حجمه لا تطابق الشروط.");
+        }
+        const reelRef = getFirestore(app).collection("reels").doc(reelId);
+        await getFirestore(app).runTransaction(async transaction => {
+          const existing = await transaction.get(reelRef);
+          if (existing.exists) throw new CoreError("already-exists", "هذا المقطع مسجل مسبقاً.");
+          transaction.create(reelRef, {
+            ownerUid: uid, caption, storagePath: expectedPath, contentType,
+            status: "pending", createdAt: FieldValue.serverTimestamp(), reviewedAt: null, reviewedBy: null,
+          });
+        });
+        return { reelId, status: "pending" };
+      },
+      reviewReel: async () => {
+        const admin = await getAuth(app).getUser(uid);
+        if (admin.customClaims?.admin !== true) throw new CoreError("permission-denied", "هذه العملية للمشرفين فقط.");
+        const reelId = typeof body.reelId === "string" ? body.reelId.trim() : "";
+        const decision = body.decision;
+        const note = typeof body.note === "string" ? body.note.trim().slice(0, 500) : "";
+        if (!/^[A-Za-z0-9_-]{8,128}$/.test(reelId) || !["approved", "rejected"].includes(String(decision))) {
+          throw new CoreError("invalid-argument", "طلب المراجعة غير صالح.");
+        }
+        const db = getFirestore(app);
+        const reelRef = db.collection("reels").doc(reelId);
+        await db.runTransaction(async transaction => {
+          const reel = await transaction.get(reelRef);
+          if (!reel.exists) throw new CoreError("not-found", "المقطع غير موجود.");
+          if (reel.get("status") !== "pending") throw new CoreError("failed-precondition", "تمت مراجعة هذا المقطع مسبقاً.");
+          transaction.update(reelRef, { status: decision, reviewedBy: uid, reviewedAt: FieldValue.serverTimestamp(), reviewNote: note });
+          transaction.create(db.collection("moderationLogs").doc(), {
+            actorUid: uid, action: decision === "approved" ? "reel_approved" : "reel_rejected",
+            targetId: reelId, createdAt: FieldValue.serverTimestamp(),
+          });
+        });
+        return { reelId, status: decision };
+      },
     };
     const result = await handlers[operation]();
     return NextResponse.json({ ok: true, data: result }, { status: 200 });

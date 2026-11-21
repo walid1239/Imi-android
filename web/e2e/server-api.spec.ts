@@ -106,3 +106,43 @@ test('friend request accept, reject and remove routes enforce ownership and reci
   expect(rejected.status).toBe(200);
   expect((await rejected.json()).data.status).toBe('rejected');
 });
+
+
+test('group and block lifecycle routes enforce friendship, admin and bilateral safety rules', async () => {
+  const suffix = fixtureSuffix(test.info().project.name, test.info().retry);
+  const actorUid = `imi-e2e-a-${suffix}`;
+  const actorToken = await idToken(`e2e-a-${suffix}@imi.test`);
+  const dUid = `imi-e2e-d-${suffix}`;
+  const eUid = `imi-e2e-e-${suffix}`;
+  const fUid = `imi-e2e-f-${suffix}`;
+
+  const created = await post('/api/v1/conversations/groups', {
+    name: 'مجموعة اختبار E2E',
+    participantUids: [dUid, eUid],
+  }, actorToken);
+  expect(created.status).toBe(200);
+  const createdPayload = await created.json() as { data: { conversationId: string; participantCount: number } };
+  expect(createdPayload.data.participantCount).toBe(3);
+
+  const added = await post('/api/v1/conversations/groups/members', {
+    conversationId: createdPayload.data.conversationId,
+    participantUids: [fUid],
+  }, actorToken);
+  expect(added.status).toBe(200);
+  expect((await added.json()).data.participantCount).toBe(4);
+
+  const blocked = await post('/api/v1/users/block', { targetUid: dUid }, actorToken);
+  expect(blocked.status).toBe(200);
+  expect((await blocked.json()).data.status).toBe('blocked');
+
+  const unblocked = await post('/api/v1/users/unblock', { targetUid: dUid }, actorToken);
+  expect(unblocked.status).toBe(200);
+  expect((await unblocked.json()).data.status).toBe('unblocked');
+
+  // Blocking is not an implicit friend request: the reciprocal friendship remains removed.
+  const cannotCreateDirect = await post('/api/v1/conversations/direct', { otherUid: dUid }, actorToken);
+  expect(cannotCreateDirect.status).toBe(200);
+  const newFriend = await post('/api/v1/friends/requests', { toUid: dUid }, actorToken);
+  expect(newFriend.status).toBe(200);
+  expect((await newFriend.json()).data.status).toBe('pending');
+});

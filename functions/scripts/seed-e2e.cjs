@@ -76,7 +76,7 @@ async function main() {
       db.doc('friendRequests/' + encodeURIComponent(a) + '__' + encodeURIComponent(b)).set({ fromUid: a, toUid: b, status: 'pending', createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }),
       db.doc('friendRequests/' + encodeURIComponent('imi-e2e-d-' + variant) + '__' + encodeURIComponent(b)).set({ fromUid: 'imi-e2e-d-' + variant, toUid: b, status: 'pending', createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }),
     ]);
-    for (const other of ['c', 'd', 'e']) {
+    for (const other of ['c', 'd', 'e', 'f']) {
       const b = 'imi-e2e-' + other + '-' + variant;
       await db.doc('users/' + a + '/friends/' + b).set({ uid: b, status: 'accepted', createdAt: FieldValue.serverTimestamp() }, { merge: true });
       await db.doc('users/' + b + '/friends/' + a).set({ uid: a, status: 'accepted', createdAt: FieldValue.serverTimestamp() }, { merge: true });

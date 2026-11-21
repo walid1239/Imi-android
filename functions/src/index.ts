@@ -25,6 +25,8 @@ const coreStore: StorePort = {
     },
     create: (path, data) => transaction.create(db.doc(path), data),
     set: (path, data) => transaction.set(db.doc(path), data),
+    update: (path, data) => transaction.update(db.doc(path), data),
+    delete: path => transaction.delete(db.doc(path)),
   })),
   newId: () => db.collection("_ids").doc().id,
   nowMillis: () => Date.now(),

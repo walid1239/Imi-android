@@ -85,22 +85,39 @@ test('authenticated Next.js routes create a status, friend request and direct co
   expect(conversationPayload.data.conversationId).toMatch(/^direct_[a-f0-9]{64}$/);
 });
 
-test('friend request actions enforce ownership and update both sides through server routes', async () => {
+test('friend request accept, reject and remove routes enforce ownership and reciprocal state', async () => {
   const suffix = fixtureSuffix(test.info().project.name, test.info().retry);
-  const recipientToken = await idToken(`e2e-recipient-${suffix}@imi.test`);
-  const senderUid = `imi-e2e-sender-${suffix}`;
-  const requestId = `${senderUid}__imi-e2e-recipient-${suffix}`;
-  const seeded = await fetch(`http://127.0.0.1:8080/emulator/v1/projects/demo-imi/databases/(default)/documents/friendRequests/${requestId}`, {
+  const recipientToken = await idToken(`e2e-b-${suffix}@imi.test`);
+  const recipientUid = `imi-e2e-b-${suffix}`;
+  const senderUid = `imi-e2e-a-${suffix}`;
+  const rejectSenderUid = `imi-e2e-d-${suffix}`;
+  const requestId = `${senderUid}__${recipientUid}`;
+  const rejectRequestId = `${rejectSenderUid}__${recipientUid}`;
+  const base = 'http://127.0.0.1:8080/emulator/v1/projects/demo-imi-playwright/databases/(default)/documents/friendRequests/';
+  const seed = (id: string, fromUid: string) => fetch(base + id, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fields: {
-      fromUid: { stringValue: senderUid },
-      toUid: { stringValue: `imi-e2e-recipient-${suffix}` },
+      fromUid: { stringValue: fromUid },
+      toUid: { stringValue: recipientUid },
       status: { stringValue: 'pending' },
     }}),
   });
-  expect([200, 201]).toContain(seeded.status);
+  const [seededAccept, seededReject] = await Promise.all([
+    seed(requestId, senderUid), seed(rejectRequestId, rejectSenderUid),
+  ]);
+  expect([200, 201]).toContain(seededAccept.status);
+  expect([200, 201]).toContain(seededReject.status);
+
   const accepted = await post('/api/v1/friends/requests/accept', { requestId }, recipientToken);
   expect(accepted.status).toBe(200);
   expect((await accepted.json()).data.status).toBe('accepted');
+
+  const removed = await post('/api/v1/friends/remove', { friendUid: senderUid }, recipientToken);
+  expect(removed.status).toBe(200);
+  expect((await removed.json()).data.status).toBe('removed');
+
+  const rejected = await post('/api/v1/friends/requests/reject', { requestId: rejectRequestId }, recipientToken);
+  expect(rejected.status).toBe(200);
+  expect((await rejected.json()).data.status).toBe('rejected');
 });

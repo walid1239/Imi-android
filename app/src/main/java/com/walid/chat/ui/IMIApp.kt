@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import org.json.JSONArray
-import org.json.JSONObject
 import com.walid.chat.ui.theme.IMITheme
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -437,12 +436,12 @@ private fun StoriesSection() {
                                 val idToken = auth?.currentUser?.getIdToken(false)?.await()?.token
                                     ?: error("جلسة Firebase غير صالحة؛ أعد تسجيل الدخول.")
                                 val result = com.walid.chat.data.repository.ImiApiClient()
-                                    .post("/api/v1/status", idToken, JSONObject().put("text", value))
-                                val id = result.optString("statusId").takeIf { it.isNotBlank() }
+                                    .post("/api/v1/status", idToken, com.google.gson.Gson().toJson(mapOf("text" to value)))
+                                val id = result.get("statusId")?.takeIf { !it.isJsonNull }?.asString?.takeIf { it.isNotBlank() }
                                     ?: error("لم يُرجع الخادم معرّف الحالة")
-                                val expiryMillis = result.optLong("expiresAtMillis").takeIf { it > 0 }
+                                val expiryMillis = result.get("expiresAtMillis")?.takeIf { !it.isJsonNull }?.asLong?.takeIf { it > 0 }
                                     ?: error("لم يُرجع الخادم وقت انتهاء الحالة")
-                                val path = if (result.isNull("mediaPath")) null else result.optString("mediaPath")
+                                val path = result.get("mediaPath")?.takeIf { !it.isJsonNull }?.asString
                                 mapOf(
                                     "__statusId" to id,
                                     "text" to value,

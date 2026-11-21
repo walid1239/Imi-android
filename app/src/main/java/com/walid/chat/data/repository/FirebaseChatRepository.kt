@@ -265,9 +265,9 @@ class FirebaseChatRepository(
         val data = ImiApiClient().post(
             "/api/v1/conversations/direct",
             idToken,
-            org.json.JSONObject().put("otherUid", otherUid)
+            com.google.gson.Gson().toJson(mapOf("otherUid" to otherUid))
         )
-        val conversationId = data.optString("conversationId")
+        val conversationId = data.get("conversationId")?.asString.orEmpty()
             .takeIf { it.isNotBlank() }
             ?: error("لم يُرجع الخادم معرّف المحادثة")
         require(conversationId.isNotBlank()) { "معرّف المحادثة فارغ" }

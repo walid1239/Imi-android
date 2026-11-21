@@ -8,7 +8,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import java.io.IOException
 
 /** Bearer-authenticated client for the IMI server API. */
@@ -18,9 +19,9 @@ class ImiApiClient(
 ) {
     private val baseUrl = baseUrl.trim().trimEnd('/')
 
-    suspend fun post(path: String, idToken: String, payload: JSONObject): JSONObject =
+    suspend fun post(path: String, idToken: String, payloadJson: String): JsonObject =
         withContext(Dispatchers.IO) {
-            val request = ImiApiHttp.buildRequest(baseUrl, path, idToken, payload)
+            val request = ImiApiHttp.buildRequest(baseUrl, path, idToken, payloadJson)
             httpClient.newCall(request).execute().use { response ->
                 ImiApiHttp.parseResponse(response.code, response.body?.string().orEmpty())
             }
@@ -30,7 +31,7 @@ class ImiApiClient(
 internal object ImiApiHttp {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
-    fun buildRequest(baseUrl: String, path: String, idToken: String, payload: JSONObject): Request {
+    fun buildRequest(baseUrl: String, path: String, idToken: String, payloadJson: String): Request {
         require(idToken.isNotBlank()) { "جلسة Firebase غير صالحة؛ أعد تسجيل الدخول." }
         require(path.startsWith("/api/v1/")) { "مسار API غير صالح." }
         val root = baseUrl.toHttpUrlOrNull()
@@ -41,18 +42,18 @@ internal object ImiApiHttp {
             .url(url)
             .header("Authorization", "Bearer $idToken")
             .header("Accept", "application/json")
-            .post(payload.toString().toRequestBody(jsonMediaType))
+            .post(payloadJson.toRequestBody(jsonMediaType))
             .build()
     }
 
-    fun parseResponse(statusCode: Int, responseBody: String): JSONObject {
+    fun parseResponse(statusCode: Int, responseBody: String): JsonObject {
         val json = try {
-            JSONObject(responseBody)
+            JsonParser.parseString(responseBody).asJsonObject
         } catch (_: Exception) {
             throw IOException("تعذر فهم استجابة خادم IMI (HTTP $statusCode).")
         }
-        if (statusCode !in 200..299 || !json.optBoolean("ok", false)) {
-            val serverMessage = json.optString("error").trim()
+        if (statusCode !in 200..299 || !(json.get("ok")?.asBoolean == true)) {
+            val serverMessage = json.get("error")?.takeIf { !it.isJsonNull }?.asString?.trim().orEmpty()
             val message = when {
                 Regex("[\\u0600-\\u06FF]").containsMatchIn(serverMessage) -> serverMessage
                 statusCode == 401 -> "انتهت جلسة الدخول؛ أعد تسجيل الدخول ثم حاول مجدداً."
@@ -66,7 +67,7 @@ internal object ImiApiHttp {
             }
             throw IOException(message)
         }
-        return json.optJSONObject("data")
+        return json.getAsJsonObject("data")
             ?: throw IOException("استجابة خادم IMI لا تحتوي على بيانات صالحة.")
     }
 }

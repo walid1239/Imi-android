@@ -70,6 +70,13 @@ async function main() {
   await auth.createUser({ uid: adminUid, email: adminUid + '@example.invalid' });
   await auth.setCustomUserClaims(adminUid, { admin: true });
   const applicantToken = await tokenFor(applicantUid);
+  const unverifiedUid = 'teacher-unverified-001';
+  await auth.createUser({ uid: unverifiedUid, email: unverifiedUid + '@example.invalid' });
+  const unverifiedToken = await tokenFor(unverifiedUid);
+  await assert.rejects(
+    call('createTeacherContent', {}, unverifiedToken),
+    error => error.code === 'PERMISSION_DENIED',
+  );
   const iceConfig = await call('getIceServers', {}, applicantToken);
   assert.equal(iceConfig.turnAvailable, false);
   assert.equal(iceConfig.expiresAt, null);

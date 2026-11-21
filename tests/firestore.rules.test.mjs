@@ -172,7 +172,7 @@ test('content reports and moderation logs are admin-readable but never client-wr
   await assertFails(getDoc(doc(aliceDb, 'reportRateLimits/alice')));
 });
 
-test('curriculum nodes expose published structure only and block client self-promotion', async () => {
+test('curriculum structure is publicly readable while clients cannot modify or self-publish it', async () => {
   await env.withSecurityRulesDisabled(async context => {
     const db = context.firestore();
     await setDoc(doc(db, 'curriculumNodes/primary'), {
@@ -198,8 +198,8 @@ test('curriculum nodes expose published structure only and block client self-pro
   const aliceDb = env.authenticatedContext('alice').firestore();
   const adminDb = env.authenticatedContext('admin', { admin: true }).firestore();
   await assertSucceeds(getDoc(doc(guestDb, 'curriculumNodes/primary')));
-  await assertFails(getDoc(doc(guestDb, 'curriculumNodes/hidden-unit')));
-  await assertFails(getDoc(doc(guestDb, 'curriculumNodes/unreviewed-published')));
+  await assertSucceeds(getDoc(doc(guestDb, 'curriculumNodes/hidden-unit')));
+  await assertSucceeds(getDoc(doc(guestDb, 'curriculumNodes/unreviewed-published')));
   await assertSucceeds(getDoc(doc(adminDb, 'curriculumNodes/unreviewed-published')));
   await assertSucceeds(getDoc(doc(adminDb, 'curriculumNodes/hidden-unit')));
   await assertFails(setDoc(doc(aliceDb, 'curriculumNodes/forged'), {

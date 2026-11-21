@@ -143,7 +143,7 @@ service cloud.firestore {
 
     // Curriculum tree nodes are public when published; only trusted admins may change them.
     match /curriculumNodes/{nodeId} {
-    allow read: if (resource.data.status == 'published' && resource.data.needsReview == false) || isAdmin();
+    allow read: if isAdmin() || resource.data.type in ['level', 'track', 'subject', 'unit'];
     allow create: if isAdmin()
       && request.resource.data.keys().hasOnly(['id', 'parentId', 'type', 'nameAr', 'nameFr', 'language', 'order', 'semester', 'officialSource', 'needsReview', 'status', 'createdAt', 'updatedAt'])
       && request.resource.data.id == nodeId

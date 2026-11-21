@@ -284,7 +284,6 @@ private fun StoriesSection() {
     var expiresAt by remember { mutableStateOf<Long?>(null) }
     var showComposer by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
-    var draftImageUri by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var configured by remember { mutableStateOf(false) }
@@ -310,20 +309,6 @@ private fun StoriesSection() {
     val storage = remember(configured) {
         if (configured) com.google.firebase.storage.FirebaseStorage.getInstance() else null
     }
-    val statusImagePicker = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) {
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            }
-            draftImageUri = uri.toString()
-        }
-    }
-
     LaunchedEffect(configured, auth?.currentUser?.uid) {
         val uid = auth?.currentUser?.uid ?: return@LaunchedEffect
         runCatching {
@@ -434,20 +419,11 @@ private fun StoriesSection() {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = draft, onValueChange = { draft = it }, label = { Text("ماذا تريد أن تشارك؟") }, maxLines = 4)
-                    OutlinedButton(onClick = { statusImagePicker.launch(arrayOf("image/*")) }) {
-                        Icon(Icons.Filled.Image, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (draftImageUri == null) "إرفاق صورة" else "تغيير الصورة")
-                    }
-                    if (draftImageUri != null) {
-                        Text("تم اختيار صورة للنشر السحابي.", color = ImiMuted, fontSize = 11.sp)
-                        TextButton(onClick = { draftImageUri = null }) { Text("إزالة الصورة") }
-                    }
-                    Text("تُحفظ الحالة في السحابة وتُحذف صلاحية عرضها بعد 28 ساعة.", color = ImiMuted, fontSize = 10.sp)
+                    Text("في المرحلة المجانية، تُنشر الحالات النصية فقط وتُحذف صلاحيتها بعد 28 ساعة.", color = ImiMuted, fontSize = 10.sp)
                 }
             },
             confirmButton = {
-                TextButton(enabled = !loading && (draft.isNotBlank() || draftImageUri != null), onClick = {
+                TextButton(enabled = !loading && draft.isNotBlank(), onClick = {
                     val uid = auth?.currentUser?.uid
                     if (uid == null || db == null || storage == null) {
                         message = "Firebase غير مهيأ؛ لم تُنشر الحالة. لن نحفظها كحالة محلية."
@@ -457,15 +433,7 @@ private fun StoriesSection() {
                         scope.launch {
                             runCatching {
                                 val value = draft.trim().take(700)
-                                val selectedMedia = draftImageUri?.let { selectedUri ->
-                                    val uri = android.net.Uri.parse(selectedUri)
-                                    val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
-                                    require(mime in setOf("image/jpeg", "image/png", "image/webp")) { "صيغة الصورة غير مدعومة." }
-                                    uri to mime
-                                }
-                                val requestData = mutableMapOf<String, Any>()
-                                if (value.isNotEmpty()) requestData["text"] = value
-                                selectedMedia?.let { requestData["mediaType"] = it.second }
+                                val requestData = mapOf("text" to value)
                                 val callable = com.google.firebase.functions.FirebaseFunctions.getInstance()
                                     .getHttpsCallable("createStatus")
                                 val response = callable.call(requestData).await()
@@ -476,23 +444,6 @@ private fun StoriesSection() {
                                 val expiryMillis = (result["expiresAtMillis"] as? Number)?.toLong()
                                     ?: error("لم يُرجع الخادم وقت انتهاء الحالة")
                                 val path = result["mediaPath"] as? String
-                                val statusRef = db.collection("users").document(uid)
-                                    .collection("statuses").document(id)
-                                try {
-                                    selectedMedia?.let { (uri, mime) ->
-                                        require(!path.isNullOrBlank()) { "لم يُرجع الخادم مسار الصورة" }
-                                        storage.reference.child(path).putFile(
-                                            uri,
-                                            com.google.firebase.storage.StorageMetadata.Builder().setContentType(mime).build()
-                                        ).await()
-                                    }
-                                } catch (uploadError: Exception) {
-                                    if (!path.isNullOrBlank()) {
-                                        runCatching { storage.reference.child(path).delete().await() }
-                                    }
-                                    runCatching { statusRef.delete().await() }
-                                    throw uploadError
-                                }
                                 mapOf(
                                     "__statusId" to id,
                                     "text" to value,
@@ -505,7 +456,6 @@ private fun StoriesSection() {
                                 statusMediaPath = data["mediaPath"] as? String
                                 expiresAt = (data["expiresAtMillis"] as? Number)?.toLong()
                                 draft = ""
-                                draftImageUri = null
                                 showComposer = false
                                 message = "نُشرت حالتك في سحابة IMI."
                             }.onFailure {

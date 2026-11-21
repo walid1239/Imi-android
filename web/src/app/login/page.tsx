@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import { GoogleAuthProvider, createUserWithEmailAndPassword, sendPasswordResetEmail, signInAnonymously, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { EmailAuthProvider, GoogleAuthProvider, createUserWithEmailAndPassword, linkWithCredential, linkWithPopup, sendPasswordResetEmail, signInAnonymously, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { FirebaseError } from 'firebase/app';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -25,7 +25,7 @@ function getArabicAuthError(error: unknown, action: 'email' | 'google' | 'guest'
   if (code === 'auth/network-request-failed') return 'تعذر الاتصال بخدمة Firebase. تحقق من الإنترنت أو إعدادات الشبكة ثم حاول مجدداً.';
   if (code === 'auth/too-many-requests') return 'تم إيقاف المحاولات مؤقتاً لكثرتها. انتظر قليلاً ثم حاول مجدداً.';
   if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') return 'بيانات الدخول غير صحيحة أو لا يوجد حساب بهذه البيانات.';
-  if (code === 'auth/email-already-in-use') return 'هذا البريد مرتبط بحساب موجود. جرّب تسجيل الدخول بدلاً من إنشاء حساب جديد.';
+  if (code === 'auth/email-already-in-use' || code === 'auth/credential-already-in-use' || code === 'auth/account-exists-with-different-credential') return 'بيانات الدخول مرتبطة بحساب موجود. لم نغيّر جلسة الضيف الحالية؛ سجّل الدخول بالحساب الموجود بدلاً من ربطه بهذه الطريقة.';
   if (code === 'auth/weak-password') return 'كلمة المرور ضعيفة. استخدم ستة أحرف على الأقل.';
   if (code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user') return 'لم تكتمل نافذة تسجيل الدخول بواسطة Google. اسمح بالنوافذ المنبثقة ثم حاول مجدداً.';
   if (code === 'auth/admin-restricted-operation') return 'تسجيل الدخول كضيف غير مفعّل في Firebase. فعّل Anonymous من Authentication ← Sign-in method.';
@@ -50,7 +50,11 @@ export default function LoginPage() {
     setBusy(true);
     try {
       if (mode === 'login') await signInWithEmailAndPassword(auth, email.trim(), password);
-      else await createUserWithEmailAndPassword(auth, email.trim(), password);
+      else if (auth.currentUser?.isAnonymous) {
+        await linkWithCredential(auth.currentUser, EmailAuthProvider.credential(email.trim(), password));
+      } else {
+        await createUserWithEmailAndPassword(auth, email.trim(), password);
+      }
       router.replace('/app');
     } catch (error) {
       setMessage(getArabicAuthError(error, 'email'));
@@ -61,7 +65,15 @@ export default function LoginPage() {
     setMessage('');
     if (!firebaseConfigured) { setMessage('إعداد Firebase غير مكتمل.'); return; }
     setBusy(true);
-    try { await signInWithPopup(auth, new GoogleAuthProvider()); router.replace('/app'); }
+    try {
+      const provider = new GoogleAuthProvider();
+      if (auth.currentUser?.isAnonymous) {
+        await linkWithPopup(auth.currentUser, provider);
+      } else {
+        await signInWithPopup(auth, provider);
+      }
+      router.replace('/app');
+    }
     catch (error) { setMessage(getArabicAuthError(error, 'google')); }
     finally { setBusy(false); }
   }

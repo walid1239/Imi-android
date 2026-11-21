@@ -69,7 +69,7 @@
 
 Vercel Hobby is not a general-purpose free commercial hosting commitment. If the project is non-commercial and eligible, a personal prototype may use it within documented limits. Before public launch, confirm current Vercel terms or choose a provider whose free terms explicitly fit the intended use. Cloudflare is not approved until Admin SDK compatibility is proven.
 
-Initial per-UID limits (tunable after load tests): status create 1/30 seconds; friend request 10/hour and 30/day; direct conversation creation 20/minute. Add per-IP ceilings and abuse monitoring. Store counters transactionally in Firestore with TTL-free manual cleanup; avoid billing-dependent TTL. These are proposed safety limits, not Firebase or host quotas.
+Initial per-UID limits (implemented in the Next.js adapter, tunable after load tests): status create 1/30 seconds; friend request 10/hour and 30/day; direct conversation creation 20/minute. Per-IP ceilings and abuse monitoring remain a follow-up because a trustworthy client IP header depends on the selected host; never trust arbitrary X-Forwarded-For values. Store counters transactionally in Firestore with TTL-free manual cleanup; avoid billing-dependent TTL. These are application safety limits, not Firebase or host quotas.
 
 ## Exit / phase-2 indicators
 
@@ -79,4 +79,4 @@ Phase 2: obtain explicit owner approval for a budget and billing account; move t
 
 ## Current status
 
-Architecture decision and source review only. No Firebase Console settings, rules, production data, secrets, deployment, or merge were changed. The three-route proof of concept must be validated by Emulator tests and CI before it can be called complete.
+Branch-only proof of concept validated on 2026-11-21: shared core unit tests, Auth Emulator missing/forged-token tests, Next.js route tests against Auth + Firestore Emulators, Web build/typecheck/health check, Functions build/tests, Firestore Rules Emulator tests, and Playwright browser E2E all passed in GitHub Actions. The emulator project ID is explicitly allowed only when both Auth and Firestore emulator hosts are present; production remains pinned to `imi-indroid`. No Firebase Console settings, real rules, production data, secrets, deployment, or merge were changed. The route tests use only disposable `demo-imi-playwright` emulator data and no service-account key.

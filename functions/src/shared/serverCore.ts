@@ -320,7 +320,7 @@ export async function createGroupConversation(
   const participants = [...new Set([uid, ...input.participantUids.map(value => requireUid(value, "معرّف عضو المجموعة غير صالح."))])].sort();
   if (participants.length < 3 || participants.length > 50) throw new CoreError("invalid-argument", "المجموعة تتطلب ثلاثة أعضاء على الأقل.");
   const roles = await Promise.all(participants.map(id => store.isVerifiedTeacher(id)));
-  if (roles.some(role => role !== roles[0])) throw new CoreError("permission-denied", "لا يمكن إنشاء مجموعة خاصة تضم أساتذة وتلاميذ معاً.");
+  if (roles.some(role => role !== roles[0])) throw new CoreError("permission-denied", "المجموعات الخاصة بين الأساتذة والتلاميذ غير متاحة.");
   const conversationId = store.newId();
   await store.runTransaction(async tx => {
     const paths = participants.flatMap(id => [
@@ -376,7 +376,7 @@ export async function addGroupParticipants(
   if (!fresh.length) return { participantCount: members.length };
   if (members.length + fresh.length > 50) throw new CoreError("resource-exhausted", "الحد الأقصى للمجموعة 50 عضواً.");
   const roles = await Promise.all([...members, ...fresh].map(id => store.isVerifiedTeacher(id)));
-  if (roles.some(role => role !== roles[0])) throw new CoreError("permission-denied", "لا يمكن جمع أساتذة وتلاميذ في مجموعة خاصة.");
+  if (roles.some(role => role !== roles[0])) throw new CoreError("permission-denied", "المجموعات الخاصة بين الأساتذة والتلاميذ غير متاحة.");
   await store.runTransaction(async tx => {
     const paths = [
       conversationPath,

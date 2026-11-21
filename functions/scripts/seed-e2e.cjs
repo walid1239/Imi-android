@@ -53,6 +53,11 @@ async function main() {
     await ensureUser('d', variant, 'تلميذ دال ' + variant);
     await ensureUser('e', variant, 'تلميذ هاء ' + variant);
     await ensureUser('f', variant, 'تلميذ فاء ' + variant);
+    // Dedicated group-route fixtures are isolated from academy tests that may approve teacher claims.
+    await ensureUser('g', variant, 'منشئ مجموعة اختبار ' + variant);
+    await ensureUser('h', variant, 'عضو مجموعة اختبار أول ' + variant);
+    await ensureUser('i', variant, 'عضو مجموعة اختبار ثان ' + variant);
+    await ensureUser('j', variant, 'عضو مجموعة اختبار إضافي ' + variant);
     await ensureUser('admin', variant, 'مشرف اختبار ' + variant, true);
   }
 
@@ -82,6 +87,15 @@ async function main() {
       await db.doc('users/' + b + '/friends/' + a).set({ uid: a, status: 'accepted', createdAt: FieldValue.serverTimestamp() }, { merge: true });
       await db.doc('publicProfiles/' + a).set({ uid: a, displayName: 'تلميذ ألف ' + variant, city: 'الدار البيضاء', updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       await db.doc('publicProfiles/' + b).set({ uid: b, displayName: other === 'c' ? 'أستاذ اختبار موثّق ' + variant : other === 'd' ? 'تلميذ دال ' + variant : 'تلميذ هاء ' + variant, city: 'الدار البيضاء', updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    }
+  }
+
+  for (const variant of ['desktop', 'mobile', 'desktop-retry1', 'mobile-retry1']) {
+    const owner = 'imi-e2e-g-' + variant;
+    for (const member of ['h', 'i', 'j']) {
+      const memberUid = 'imi-e2e-' + member + '-' + variant;
+      await db.doc('users/' + owner + '/friends/' + memberUid).set({ uid: memberUid, status: 'accepted', createdAt: FieldValue.serverTimestamp() }, { merge: true });
+      await db.doc('users/' + memberUid + '/friends/' + owner).set({ uid: owner, status: 'accepted', createdAt: FieldValue.serverTimestamp() }, { merge: true });
     }
   }
 

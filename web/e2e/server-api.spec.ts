@@ -110,11 +110,11 @@ test('friend request accept, reject and remove routes enforce ownership and reci
 
 test('group and block lifecycle routes enforce friendship, admin and bilateral safety rules', async () => {
   const suffix = fixtureSuffix(test.info().project.name, test.info().retry);
-  const actorUid = `imi-e2e-a-${suffix}`;
-  const actorToken = await idToken(`e2e-a-${suffix}@imi.test`);
-  const dUid = `imi-e2e-d-${suffix}`;
-  const eUid = `imi-e2e-e-${suffix}`;
-  const fUid = `imi-e2e-f-${suffix}`;
+  const actorUid = `imi-e2e-g-${suffix}`;
+  const actorToken = await idToken(`e2e-g-${suffix}@imi.test`);
+  const dUid = `imi-e2e-h-${suffix}`;
+  const eUid = `imi-e2e-i-${suffix}`;
+  const fUid = `imi-e2e-j-${suffix}`;
 
   const created = await post('/api/v1/conversations/groups', {
     name: 'مجموعة اختبار E2E',

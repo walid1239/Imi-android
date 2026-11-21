@@ -14,7 +14,7 @@ export default function TeacherStudioPanel(){
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  useEffect(()=>onAuthStateChanged(auth,async u=>{setUser(u);if(!u){setVerified(false);return;}try{const token=await getIdTokenResult(u,true);setVerified(token.claims.teacherVerified===true);}catch{setVerified(false);}}),[]);
  useEffect(()=>{if(!user||!verified||!firebaseConfigured)return;getDoc(doc(db,'teacherProfiles',user.uid)).then(s=>setProfileComplete(s.exists()&&s.get('profileComplete')===true&&s.get('published')===true)).catch(()=>setProfileComplete(false));},[user,verified]);
- useEffect(()=>{if(!firebaseConfigured)return;getDocs(query(collection(db,'curriculumNodes'),where('status','==','published'))).then(s=>{const rows=s.docs.map(d=>({id:d.id,type:d.get('type'),nameAr:String(d.get('nameAr')||'')}));setLevels(rows.filter(x=>x.type==='level'));setSubjects(rows.filter(x=>x.type==='subject'));}).catch(()=>setError('تعذر تحميل فهرس الأكاديمية.'));},[]);
+ useEffect(()=>{if(!firebaseConfigured)return;getDocs(query(collection(db,'curriculumNodes'),where('status','==','published'),where('needsReview','==',false))).then(s=>{const rows=s.docs.map(d=>({id:d.id,type:d.get('type'),nameAr:String(d.get('nameAr')||'')}));setLevels(rows.filter(x=>x.type==='level'));setSubjects(rows.filter(x=>x.type==='subject'));}).catch(()=>setError('تعذر تحميل فهرس الأكاديمية.'));},[]);
  async function saveProfile(e:React.FormEvent){
   e.preventDefault();
   setError('حفظ صفحة الأستاذ متوقف مؤقتاً حتى نقل العملية إلى IMI API؛ لم يتم رفع أي صورة.');

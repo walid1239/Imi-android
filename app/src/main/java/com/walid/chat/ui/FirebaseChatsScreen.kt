@@ -14,7 +14,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Send
@@ -30,7 +29,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.storage.FirebaseStorage
 import com.walid.chat.data.model.Chat
 import com.walid.chat.data.model.ChatMessage
 import com.walid.chat.data.model.PublicProfile

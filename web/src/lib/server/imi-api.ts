@@ -279,6 +279,80 @@ async function academyAdminAction(app: App, uid: string, body: Record<string, un
     return { status: body.status };
   }
 
+  if (action === "createCurriculumNode") {
+    const nodeId = requiredId(body.nodeId, "معرّف عنصر المنهاج");
+    if (!/^[a-z0-9][a-z0-9_-]{1,100}$/.test(nodeId)) throw new CoreError("invalid-argument", "معرّف عنصر المنهاج غير صالح.");
+    const type = body.type;
+    if (!["level", "track", "subject", "unit"].includes(String(type))) throw new CoreError("invalid-argument", "نوع عنصر المنهاج غير صالح.");
+    const nameAr = title(body.nameAr, "الاسم العربي", 160);
+    const nameFr = title(body.nameFr, "الاسم الفرنسي", 160, true);
+    const language = body.language === "fr" ? "fr" : "ar";
+    const order = body.order;
+    if (typeof order !== "number" || !Number.isSafeInteger(order) || order < 1 || order > 100000) throw new CoreError("invalid-argument", "ترتيب عنصر المنهاج غير صالح.");
+    const parentId = body.parentId === null || body.parentId === "" ? null : requiredId(body.parentId, "العنصر الأب");
+    const ref = firestore.collection("curriculumNodes").doc(nodeId);
+    await firestore.runTransaction(async tx => {
+      const existing = await tx.get(ref);
+      if (existing.exists) throw new CoreError("already-exists", "معرّف عنصر المنهاج مستخدم.");
+      if (parentId) {
+        const parent = await tx.get(firestore.collection("curriculumNodes").doc(parentId));
+        if (!parent.exists) throw new CoreError("not-found", "العنصر الأب غير موجود.");
+      }
+      tx.create(ref, {
+        id: nodeId, parentId, type, nameAr, nameFr, language, order,
+        semester: null, officialSource: null, needsReview: true, status: "hidden",
+        createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+        createdBy: uid,
+      });
+    });
+    return { nodeId, status: "hidden", needsReview: true };
+  }
+
+  if (action === "reorderCurriculumNode") {
+    const nodeId = requiredId(body.nodeId, "عنصر المنهاج");
+    if (body.delta !== -1 && body.delta !== 1) throw new CoreError("invalid-argument", "قيمة تغيير الترتيب غير صالحة.");
+    const ref = firestore.collection("curriculumNodes").doc(nodeId);
+    return firestore.runTransaction(async tx => {
+      const node = await tx.get(ref);
+      if (!node.exists) throw new CoreError("not-found", "عنصر المنهاج غير موجود.");
+      const current = node.get("order");
+      const order = Math.max(1, (typeof current === "number" && Number.isSafeInteger(current) ? current : 1) + body.delta);
+      tx.update(ref, { order, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid });
+      return { nodeId, order };
+    });
+  }
+
+  if (action === "mergeCurriculumNode") {
+    const nodeId = requiredId(body.nodeId, "العنصر المراد دمجه");
+    const targetId = requiredId(body.targetId, "العنصر الهدف");
+    if (nodeId === targetId) throw new CoreError("invalid-argument", "لا يمكن دمج العنصر في نفسه.");
+    const nodes = firestore.collection("curriculumNodes");
+    const sourceRef = nodes.doc(nodeId);
+    const targetRef = nodes.doc(targetId);
+    return firestore.runTransaction(async tx => {
+      const [source, target] = await Promise.all([tx.get(sourceRef), tx.get(targetRef)]);
+      if (!source.exists || !target.exists) throw new CoreError("not-found", "العنصر المصدر أو الهدف غير موجود.");
+      if (source.get("type") !== target.get("type")) throw new CoreError("failed-precondition", "يجب أن يكون العنصران من النوع نفسه.");
+      if (target.get("status") !== "published" || target.get("needsReview") === true) {
+        throw new CoreError("failed-precondition", "يجب أن يكون العنصر الهدف منشوراً ومعتمداً.");
+      }
+      let ancestorId = target.get("parentId");
+      const seen = new Set<string>([targetId]);
+      while (typeof ancestorId === "string" && ancestorId) {
+        if (ancestorId === nodeId) throw new CoreError("failed-precondition", "لا يمكن الدمج داخل أحد أحفاد العنصر المصدر.");
+        if (seen.has(ancestorId)) throw new CoreError("failed-precondition", "تحتوي شجرة المنهاج على حلقة غير صالحة.");
+        seen.add(ancestorId);
+        const ancestor = await tx.get(nodes.doc(ancestorId));
+        if (!ancestor.exists) break;
+        ancestorId = ancestor.get("parentId");
+      }
+      const children = await tx.get(nodes.where("parentId", "==", nodeId));
+      for (const child of children.docs) tx.update(child.ref, { parentId: targetId, updatedAt: FieldValue.serverTimestamp() });
+      tx.update(sourceRef, { status: "hidden", needsReview: false, mergedInto: targetId, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid });
+      return { nodeId, targetId, movedChildren: children.size, status: "hidden" };
+    });
+  }
+
   if (action === "reviewCurriculumNode") {
     const nodeId = requiredId(body.nodeId, "عنصر المنهاج");
     if (typeof body.approved !== "boolean") throw new CoreError("invalid-argument", "قرار اعتماد المنهاج غير صالح.");

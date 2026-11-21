@@ -1,26 +1,13 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { EmailAuthProvider, User, linkWithCredential, signOut } from 'firebase/auth';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { useRouter } from 'next/navigation';
+import { EmailAuthProvider, User, linkWithCredential } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import { auth, db, storage } from '@/lib/firebase/client';
-
-type ProfileData = {
-  displayName: string;
-  city: string;
-  photoPath?: string;
-};
+import { db } from '@/lib/firebase/client';
 
 export default function ProfilePanel({ user }: { user: User }) {
-  const router = useRouter();
   const [displayName, setDisplayName] = useState(user.displayName || '');
   const [city, setCity] = useState('');
-  const [photoPath, setPhotoPath] = useState('');
-  const [photoUrl, setPhotoUrl] = useState(user.photoURL || '');
-  const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -36,15 +23,6 @@ export default function ProfilePanel({ user }: { user: User }) {
       if (snapshot.exists()) {
         setDisplayName(snapshot.get('displayName') || user.displayName || '');
         setCity(snapshot.get('city') || '');
-        const path = snapshot.get('photoPath');
-        if (typeof path === 'string' && path) {
-          setPhotoPath(path);
-          getDownloadURL(ref(storage, path)).then(url => {
-            if (active) setPhotoUrl(url);
-          }).catch(() => {
-            if (active) setPhotoUrl('');
-          });
-        }
       } else {
         setDisplayName(user.displayName || user.email?.split('@')[0] || 'مستخدم IMI');
       }
@@ -68,56 +46,20 @@ export default function ProfilePanel({ user }: { user: User }) {
       setError('اسم المدينة طويل جداً.');
       return;
     }
-    if (file && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      setError('الصورة يجب أن تكون JPEG أو PNG أو WebP.');
-      return;
-    }
-    if (file && file.size >= 5 * 1024 * 1024) {
-      setError('حجم الصورة يجب أن يكون أقل من 5 ميغابايت.');
-      return;
-    }
-
     setSaving(true);
     setError('');
     setNotice('');
-    let uploadedPath = '';
     try {
-      let nextPhotoPath = photoPath;
-      if (file) {
-        const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
-        nextPhotoPath = `users/${user.uid}/avatars/avatar-${Date.now()}.${extension}`;
-        await uploadBytes(ref(storage, nextPhotoPath), file, { contentType: file.type });
-        uploadedPath = nextPhotoPath;
-      }
-
-      const profile: ProfileData = {
-        displayName: name,
-        city: location,
-        ...(nextPhotoPath ? { photoPath: nextPhotoPath } : {}),
-      };
+      const profile = { displayName: name, city: location };
       const batch = writeBatch(db);
-      batch.set(doc(db, 'users', user.uid), {
-        ...profile,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
+      batch.set(doc(db, 'users', user.uid), { ...profile, updatedAt: serverTimestamp() }, { merge: true });
       batch.set(doc(db, 'publicProfiles', user.uid), {
-        uid: user.uid,
-        ...profile,
-        updatedAt: serverTimestamp(),
+        uid: user.uid, ...profile, updatedAt: serverTimestamp(),
       }, { merge: true });
       await batch.commit();
-
-      if (file && uploadedPath) {
-        const url = await getDownloadURL(ref(storage, uploadedPath));
-        setPhotoPath(uploadedPath);
-        setPhotoUrl(url);
-        setFile(null);
-        const input = document.getElementById('imi-profile-photo') as HTMLInputElement | null;
-        if (input) input.value = '';
-      }
-      setNotice('تم حفظ ملفك الشخصي وتحديث بياناتك الظاهرة في دليل IMI.');
+      setNotice('تم حفظ الاسم والمدينة. رفع الصورة الشخصية مؤجل إلى مرحلة الوسائط.');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'تعذر حفظ الملف الشخصي. تحقق من اتصال Firebase وصلاحياته.');
+      setError(reason instanceof Error ? reason.message : 'تعذر حفظ الملف الشخصي.');
     } finally {
       setSaving(false);
     }
@@ -139,19 +81,16 @@ export default function ProfilePanel({ user }: { user: User }) {
     } finally { setAccountBusy(false); }
   }
 
-
-
   return <section dir="rtl" className="mx-auto max-w-2xl space-y-5">
     <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5">
       <div className="flex items-center gap-4">
-        {photoUrl
-          ? <img src={photoUrl} alt="الصورة الشخصية" className="h-20 w-20 rounded-full border border-white/10 object-cover" />
-          : <div className="grid h-20 w-20 place-items-center rounded-full bg-blue-600/20 text-2xl font-black text-blue-200">{(displayName || 'I').slice(0, 1)}</div>}
+        <div className="grid h-20 w-20 place-items-center rounded-full bg-blue-600/20 text-2xl font-black text-blue-200">{(displayName || 'I').slice(0, 1)}</div>
         <div className="min-w-0">
           <h2 className="text-xl font-bold">{displayName || 'ملفي الشخصي'}</h2>
           <p className="mt-1 truncate text-xs text-slate-400">{user.email || 'جلسة ضيف'} · {city || 'لم تحدد المدينة'}</p>
         </div>
       </div>
+      <p className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/5 p-3 text-xs leading-6 text-amber-100">رفع الصور والوسائط مؤجل في المرحلة المجانية الأولى. ستتوفر الصورة الشخصية بعد اعتماد مزود تخزين مناسب.</p>
     </div>
 
     <form onSubmit={save} className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/60 p-5">
@@ -162,14 +101,10 @@ export default function ProfilePanel({ user }: { user: User }) {
       <label className="block text-sm text-slate-300">المدينة
         <input value={city} onChange={event => setCity(event.target.value)} maxLength={80} disabled={loading || saving} placeholder="مثال: الدار البيضاء" className="mt-2 w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 outline-none focus:border-blue-500" />
       </label>
-      <label className="block text-sm text-slate-300">الصورة الشخصية
-        <input id="imi-profile-photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={event => setFile(event.target.files?.[0] ?? null)} disabled={loading || saving} className="mt-2 block w-full text-sm text-slate-300 file:ml-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-slate-100" />
-        <span className="mt-1 block text-xs text-slate-500">JPEG أو PNG أو WebP، أقل من 5 ميغابايت.</span>
-      </label>
       {error && <p role="alert" className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-6 text-amber-200">{error}</p>}
       {notice && <p role="status" className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs leading-6 text-emerald-200">{notice}</p>}
       <button disabled={loading || saving} className="w-full rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold disabled:opacity-40">{loading ? 'جارٍ تحميل الحساب…' : saving ? 'جارٍ الحفظ…' : 'حفظ الملف الشخصي'}</button>
-      <p className="text-xs leading-6 text-slate-500">الاسم والمدينة ومسار الصورة فقط تظهر في دليل المستخدمين للمسجلين. رقم الهاتف والبريد لا يُنشران في الملف العام.</p>
+      <p className="text-xs leading-6 text-slate-500">الاسم والمدينة فقط يظهران في دليل المستخدمين. رقم الهاتف والبريد لا يُنشران في الملف العام.</p>
     </form>
 
     <section className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/60 p-5">
@@ -181,11 +116,6 @@ export default function ProfilePanel({ user }: { user: User }) {
         <label className="block text-sm">كلمة المرور<input required minLength={6} type="password" value={linkPassword} onChange={e=>setLinkPassword(e.target.value)} className="mt-2 w-full rounded-xl bg-slate-900 p-3"/></label>
         <button disabled={accountBusy} className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold disabled:opacity-50">ربط البريد بالحساب الحالي</button>
       </form> : <p className="text-xs leading-6 text-slate-500">حسابك مرتبط بطريقة دخول دائمة. استخدم «نسيت كلمة المرور؟» من شاشة الدخول لاستعادتها.</p>}
-      <div className="space-y-3 rounded-xl border border-red-400/20 p-4">
-        <p className="text-sm font-bold text-red-200">حذف الحساب والبيانات</p>
-        <p className="text-xs leading-6 text-amber-200">الحذف معطّل مؤقتاً. لن نعرض زر تنفيذ حتى يثبت اختبار المحاكي إزالة كل البيانات والملفات والمراجع التابعة للحساب دون ترك بيانات يتيمة.</p>
-        <button type="button" disabled className="cursor-not-allowed rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-500 opacity-60">حذف الحساب غير متاح حالياً</button>
-      </div>
     </section>
   </section>;
 }

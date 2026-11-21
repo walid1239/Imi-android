@@ -4,6 +4,7 @@ import { getStorage } from "firebase-admin/storage";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import { reserveRateLimitWindows } from "./rate-limit-core.mjs";
+import { cleanupAccountData } from "../../../../functions/src/shared/accountDeletion";
 import { directConversationId } from "../../../../functions/src/conversationLogic";
 import { NextResponse } from "next/server";
 import {
@@ -14,7 +15,7 @@ import {
 } from "../../../../functions/src/shared/serverCore";
 import { authenticateBearer, publicErrorMessage } from "../../../../functions/src/shared/serverAuth";
 
-type Operation = "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend" | "blockUser" | "unblockUser" | "createGroupConversation" | "addGroupParticipants" | "prepareReel" | "submitReel" | "reviewReel";
+type Operation = "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend" | "blockUser" | "unblockUser" | "createGroupConversation" | "addGroupParticipants" | "prepareReel" | "submitReel" | "reviewReel" | "deleteMyAccount";
 const limits: Record<Operation, { count: number; windowMs: number }> = {
   createStatus: { count: 2, windowMs: 60_000 },
   sendFriendRequest: { count: 10, windowMs: 60 * 60_000 },
@@ -29,6 +30,7 @@ const limits: Record<Operation, { count: number; windowMs: number }> = {
   prepareReel: { count: 3, windowMs: 60 * 60_000 },
   submitReel: { count: 3, windowMs: 60 * 60_000 },
   reviewReel: { count: 60, windowMs: 60_000 },
+  deleteMyAccount: { count: 1, windowMs: 24 * 60 * 60_000 },
 };
 
 function adminApp(): App {
@@ -129,6 +131,61 @@ async function applyRateLimit(app: App, uid: string, operation: Operation): Prom
       })
     }))
   }, key, policies, now);
+}
+
+export async function handleDeleteAccount(request: Request): Promise<Response> {
+  try {
+    assertOrigin(request);
+    if (request.method !== "POST") return NextResponse.json({ error: "Method not allowed." }, { status: 405 });
+    if (process.env.IMI_ACCOUNT_DELETION_ENABLED !== "true") {
+      return NextResponse.json(
+        { error: "حذف الحساب معطّل افتراضياً حتى اكتمال التحقق من جميع مسارات التنظيف." },
+        { status: 503 }
+      );
+    }
+    if (!(request.headers.get("content-type") ?? "").toLowerCase().includes("application/json")) {
+      return NextResponse.json({ error: "Content-Type must be application/json." }, { status: 415 });
+    }
+    const raw = await request.text();
+    if (new TextEncoder().encode(raw).byteLength > 2048) {
+      return NextResponse.json({ error: "Request body is too large." }, { status: 413 });
+    }
+    let body: Record<string, unknown>;
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid");
+      body = parsed as Record<string, unknown>;
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    }
+    if (body.confirmation !== "DELETE") {
+      return NextResponse.json({ error: "اكتب DELETE لتأكيد حذف الحساب وبياناته." }, { status: 400 });
+    }
+
+    const app = adminApp();
+    const authorization = request.headers.get("authorization") ?? "";
+    const match = /^Bearer\s+(.+)$/i.exec(authorization);
+    if (!match) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    const decoded = await getAuth(app).verifyIdToken(match[1], true);
+    const authTime = Number(decoded.auth_time ?? 0) * 1000;
+    if (!authTime || Date.now() - authTime > 5 * 60_000) {
+      return NextResponse.json({ error: "لأمان حسابك، سجّل الدخول من جديد ثم أعد طلب الحذف." }, { status: 412 });
+    }
+
+    await applyRateLimit(app, decoded.uid, "deleteMyAccount");
+    await cleanupAccountData(getFirestore(app), getStorage(app).bucket(), decoded.uid);
+    await getAuth(app).deleteUser(decoded.uid);
+    return NextResponse.json({ ok: true, data: { deleted: true } });
+  } catch (error) {
+    const code = typeof error === "object" && error && "code" in error ? String((error as { code: unknown }).code) : "";
+    const status = code === "auth/id-token-expired" || code === "auth/invalid-id-token" ? 401
+      : code === "RATE_LIMIT" || code === "resource-exhausted" ? 429
+      : 500;
+    return NextResponse.json(
+      { error: status === 500 ? "تعذر حذف الحساب بالكامل. أعد المحاولة بعد مراجعة حالة التخزين." : "تعذر تنفيذ طلب الحذف." },
+      { status }
+    );
+  }
 }
 
 export async function handleImiPost(request: Request, operation: Operation): Promise<Response> {
@@ -247,6 +304,9 @@ export async function handleImiPost(request: Request, operation: Operation): Pro
           });
         });
         return { reelId, status: validDecision };
+      },
+      deleteMyAccount: async () => {
+        throw new CoreError("failed-precondition", "Use the dedicated account deletion route.");
       },
     };
     const result = await handlers[operation]();

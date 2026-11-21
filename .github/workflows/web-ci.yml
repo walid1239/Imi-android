@@ -95,7 +95,7 @@ jobs:
           npx --yes firebase-tools@15.37.0 emulators:exec
           --only auth,firestore,storage,functions
           --project demo-imi-teacher
-          "cd functions && FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 npm test && cd .. && FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIREBASE_STORAGE_EMULATOR_HOST=127.0.0.1:9199 node scripts/test-teacher-emulator.cjs"
+          "cd functions && FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 npm test && cd .. && FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIREBASE_STORAGE_EMULATOR_HOST=127.0.0.1:9199 node scripts/test-teacher-emulator.cjs && FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIREBASE_STORAGE_EMULATOR_HOST=127.0.0.1:9199 node scripts/test-account-deletion-emulator.cjs"
 
   turn-infra:
     name: Validate Coturn Compose configuration (no server start)

@@ -105,10 +105,22 @@ The current work branch now disables Firebase Storage-dependent user-facing feat
 - Web Reels is replaced by a clear deferred-feature notice; no Storage feed or upload request is made.
 - Web profile editing saves text fields only; avatar upload/download is deferred.
 - Teacher application submission is paused because proof documents require file storage. No incomplete application is submitted.
-- Teacher content authoring is limited to text lessons and externally hosted embeds; video/image/PDF upload options are removed.
+- Teacher application, teacher profile publication, and teacher content authoring are paused entirely until their trusted server workflows are migrated; no file picker or callable submission remains in the active teacher UI.
 - Android chat attachment picker and Storage-backed message upload implementation are disabled; historical media attachments are not downloaded.
 - Android Reels and profile avatar upload/download are removed from the active UI. Android status composer is temporarily paused while the text-only status flow is migrated to the trusted Next.js route.
+- The Firebase Storage SDK initialization and emulator connection were removed from the web client; the Android Storage dependency and unused media-player dependencies were removed. Camera/microphone permissions were removed from the Android manifest for this phase.
 
 This is a source change on `feature/free-server-core-poc`; it is not yet a verified build or deployed preview. The Android chat data model still retains legacy media fields for backwards compatibility, but the client UI no longer exposes new media uploads. Do not claim Android text statuses are available until the route integration is completed and tested.
 
 No Firebase project settings, Storage/Firestore rules, Cloud Functions, service-account secrets, Vercel production variables, production deployments, or PR merge were changed.
+
+
+## Phase-1 authentication and Academy route migration — 2026-11-21
+
+- Android no longer creates an anonymous Firebase session automatically at startup. It shows an explicit Arabic sign-in screen with email/password sign-in, account creation, password-reset email, Google sign-in, and optional guest sign-in. Guest accounts can be linked to email/password through Firebase `linkWithCredential`, preserving the existing UID; an email-already-in-use error is surfaced rather than silently switching accounts.
+- Android text profile updates write both `users/{uid}` and `publicProfiles/{uid}` to match the web profile schema.
+- Web learner Academy actions now use `POST /api/v1/academy/enroll`, `/complete-lesson`, and `/report-lesson`; the server verifies ID tokens, checks that courses/lessons are published, and rate-limits reports.
+- Academy admin operations use `POST /api/v1/academy/admin` with server-side admin-claim checks. Course creation, lesson creation/publication, teacher-content review, teacher-application review/claim synchronization, content-report review, and curriculum-node moderation no longer call the old callable functions from the active web UI.
+- Teacher applications and teacher studio/content authoring remain deliberately paused until their remaining workflows can be run entirely through trusted routes without Firebase Storage.
+- CI on commit `1238b404cf83a44812174c83f9d8024a3449f3c6` passed web typecheck/build, Functions tests, Firestore/Storage emulator rules tests, and Playwright browser E2E. The E2E suite reported 30 passed. This validates the Academy route migration at that commit; subsequent media configuration cleanup and Android changes are being re-tested separately.
+- The Firebase deployment workflow ran its non-deploying safety gate successfully; the actual Firebase deployment job was skipped. No Firebase project settings, rules, Cloud Functions, secrets, or production data were changed. No production Vercel deployment or PR merge occurred.

@@ -6,6 +6,7 @@ import {getFunctions,httpsCallable} from 'firebase/functions';
 import {db} from '@/lib/firebase/client';
 type Node={id:string;parentId:string|null;type:string;nameAr:string};
 export default function TeacherContentPanel({user}:{user:User}){
+ void user;
  const [nodes,setNodes]=useState<Node[]>([]),[levelId,setLevelId]=useState(''),[trackId,setTrackId]=useState(''),[subjectId,setSubjectId]=useState(''),[unitId,setUnitId]=useState('');
  const [title,setTitle]=useState(''),[kind,setKind]=useState<'text'|'embed'>('text'),[body,setBody]=useState('');
  const [sourceType,setSourceType]=useState('original'),[sourceName,setSourceName]=useState('محتوى أصلي من الأستاذ'),[sourceUrl,setSourceUrl]=useState(''),[license,setLicense]=useState('محتوى أصلي من الأستاذ'),[permissionNote,setPermissionNote]=useState('أؤكد امتلاك حقوق هذا المحتوى وأطلب مراجعته قبل النشر.');

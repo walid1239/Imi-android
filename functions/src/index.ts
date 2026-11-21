@@ -36,6 +36,7 @@ const coreStore: StorePort = {
     return typeof value === "number" ? value : undefined;
   },
   isVerifiedTeacher: async uid => (await getAuth().getUser(uid)).customClaims?.teacherVerified === true,
+  directConversationId,
 };
 async function runCore<T>(work: () => Promise<T>): Promise<T> {
   try { return await work(); }

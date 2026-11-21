@@ -159,7 +159,8 @@ test('teacher application and studio routes explain verification gate', async ({
   await login(page, email('b', test.info().project.name));
   await page.goto('/teacher/apply');
   await expect(page.getByRole('heading', { name: 'طلب الانضمام كأستاذ' })).toBeVisible();
-  await expect(page.getByLabel('الاسم الكامل')).toBeVisible();
+  await expect(page.getByText(/نموذج طلب الأستاذ متوقف مؤقتاً/)).toBeVisible();
+  await expect(page.getByText(/لن تُرسل أي وثيقة أو طلب غير مكتمل/)).toBeVisible();
   await page.goto('/teacher/studio');
   await expect(page.getByText('حسابك غير موثّق كأستاذ')).toBeVisible();
   await expect(page.getByRole('link', { name: 'طلب توثيق' })).toBeVisible();
@@ -172,7 +173,7 @@ test('guest sessions can be linked to a permanent email account without changing
   await page.getByRole('button', { name: /ملفي/ }).first().click();
   await expect(page.getByText('تحويل حساب الضيف إلى حساب دائم')).toBeVisible();
   await expect(page.getByRole('button', { name: 'ربط البريد بالحساب الحالي' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'حذف الحساب غير متاح حالياً' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /حذف الحساب/ })).toHaveCount(0);
 });
 
 test('login supports email and guest sessions without phone OTP', async ({ page }) => {

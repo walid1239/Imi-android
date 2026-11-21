@@ -2,6 +2,7 @@ package com.walid.chat.data.repository
 
 import android.content.Context
 import android.net.Uri
+import com.walid.chat.BuildConfig
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldPath
@@ -9,11 +10,18 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
-import com.google.firebase.functions.FirebaseFunctions
 import com.walid.chat.data.model.Chat
 import com.walid.chat.data.model.ChatMessage
 import com.walid.chat.data.model.PublicProfile
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
@@ -24,8 +32,14 @@ import kotlinx.coroutines.tasks.await
  */
 class FirebaseChatRepository(
     private val auth: FirebaseAuth,
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val apiBaseUrl: String = BuildConfig.IMI_API_BASE_URL,
+    private val httpClient: OkHttpClient = OkHttpClient.Builder()
+        .callTimeout(20, TimeUnit.SECONDS)
+        .build()
 ) : ChatRepository {
+
+    private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     override suspend fun getChats(): Result<List<Chat>> = runCatching {
         val uid = requireUid()
@@ -199,17 +213,39 @@ class FirebaseChatRepository(
         val uid = requireUid()
         require(otherUid.isNotBlank() && otherUid != uid) { "المستخدم الآخر غير صالح" }
 
-        // Conversation creation is server-authoritative. The callable enforces
-        // teacher/student restrictions, block checks, and profile requirements.
-        val response = FirebaseFunctions.getInstance()
-            .getHttpsCallable("createOrGetDirectConversation")
-            .call(mapOf("otherUid" to otherUid))
-            .await()
-        val data = response.getData() as? Map<*, *>
-            ?: error("استجابة إنشاء المحادثة غير صالحة")
-        val conversationId = data["conversationId"] as? String
-            ?: error("لم يُرجع الخادم معرّف المحادثة")
-        require(conversationId.isNotBlank()) { "معرّف المحادثة فارغ" }
+        // Native and web clients share the same authenticated Next.js route.
+        // Origin is intentionally omitted for native clients; the server still
+        // verifies the Firebase ID token and applies the same serverCore rules.
+        require(apiBaseUrl.startsWith("https://")) { "عنوان خادم IMI غير آمن أو غير مهيأ." }
+        val token = auth.currentUser?.getIdToken(false)?.await()?.token
+            ?.takeIf { it.isNotBlank() }
+            ?: error("تعذر الحصول على رمز جلسة Firebase؛ أعد تسجيل الدخول.")
+
+        val payload = JSONObject().put("otherUid", otherUid).toString()
+        val request = Request.Builder()
+            .url("${apiBaseUrl.trimEnd('/')}/api/v1/conversations/direct")
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .post(payload.toRequestBody(jsonMediaType))
+            .build()
+
+        val responseBody = withContext(Dispatchers.IO) {
+            httpClient.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    val message = runCatching { JSONObject(body).optString("error") }.getOrNull()
+                    error(message?.takeIf { it.isNotBlank() } ?: "تعذر إنشاء المحادثة عبر خادم IMI (HTTP ${response.code}).")
+                }
+                body
+            }
+        }
+        val envelope = JSONObject(responseBody)
+        if (!envelope.optBoolean("ok")) {
+            error(envelope.optString("error").takeIf { it.isNotBlank() } ?: "رفض الخادم إنشاء المحادثة.")
+        }
+        val conversationId = envelope.optJSONObject("data")?.optString("conversationId")
+            ?.takeIf { !it.isNullOrBlank() && it != "null" }
+            ?: error("استجابة الخادم لا تحتوي على معرّف المحادثة.")
         conversationId
     }
 

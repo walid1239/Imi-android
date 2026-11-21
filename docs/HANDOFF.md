@@ -5,7 +5,7 @@
 - Repository: `walid1239/Imi-android`
 - Working branch: `feature/imi-web-foundation`
 - Review baseline: `b7394dc15ac99e5274e3729c649b0bab6a0c2f5d`
-- Latest application/workflow code SHA: `d43a68259215cd5546d34288980af85fe8fd0b06`
+- Latest application/workflow SHA before this handoff refresh: `f46b2db0e52eb19e9c11b6dc170e7730ac90bc88`
 - Firebase project: `imi-indroid`
 - PR #2 remains open and unmerged. No Production deployment, Firebase Console mutation, Firebase rules/index deployment, billing-plan change, secret disclosure, or paid-service provisioning was performed.
 
@@ -16,24 +16,27 @@ Binding decisions: Firebase Spark only; no Cloud Functions; trusted server logic
 | Change | Commit SHA | Actual validation/evidence |
 |---|---|---|
 | Added Reels composite index (`status ASCENDING, createdAt DESCENDING`). | `5113260fc26736b83788e3f3cbf9a58622beb4f5` | Local Node JSON parse + index-shape assertion passed against a local copy of the authored index structure. Emulator/index deployment not run. |
-| Replaced deployment workflow with push/PR validation and a separate manual protected deploy concurrency group; deploy job requires `workflow_dispatch` and exact `DEPLOY`, protected `firebase-production`, and deploys Firestore rules/indexes only. | `d43a68259215cd5546d34288980af85fe8fd0b06` | Local PyYAML syntax parse passed on a local copy. actionlint and Emulator steps are running in CI; no deployment run/command occurred. Earlier intermediate workflow commits had invalid YAML and their runs failed before jobs; the current workflow revision corrects those syntax errors. |
-| Added CSP, X-Frame-Options, Referrer-Policy, X-Content-Type-Options. | `98313f9d2161f8418cd0dc483103e2e350cc4710` | Browser CSP compatibility not manually tested; Web CI pending on the current branch head. |
-| Removed Android CAMERA and RECORD_AUDIO permissions and disabled cleartext traffic. | `18a9dc4a962c0291ccab8290774b7ee0a5802a6e` | Local XML parse and assertions passed against a local copy: camera/microphone permissions absent, `usesCleartextTraffic=false`. Android CI pending. |
+| Replaced deployment workflow with push/PR validation and separate manual protected deploy concurrency; deploy job requires `workflow_dispatch` and exact `DEPLOY`, protected `firebase-production`, and deploys Firestore rules/indexes only. | `d43a68259215cd5546d34288980af85fe8fd0b06` | Local PyYAML syntax parse passed on a local copy. Current CI actionlint and Emulator steps are running; no deployment run/command occurred. Earlier intermediate workflow revisions had YAML syntax errors; the current revision corrects the identified errors. |
+| Added CSP, X-Frame-Options, Referrer-Policy, X-Content-Type-Options. | `98313f9d2161f8418cd0dc483103e2e350cc4710` | Browser CSP compatibility not manually tested; Web CI pending. |
+| Removed Android CAMERA and RECORD_AUDIO permissions and disabled cleartext traffic. | `18a9dc4a962c0291ccab8290774b7ee0a5802a6e` | Local XML parse/assertions passed against a local copy: camera/microphone permissions absent, `usesCleartextTraffic=false`. Android CI pending. |
 | Added explicit Arabic UI statement that Android calls are not ready. | `10393490d0e3860e644f974c29ea55247eb36e0e` | Source edit only; Android CI pending. |
 | Removed stale guest-login “(بدون OTP)” wording. | `246984fecee2fadf242572d41a27071d11efc6cc` | Web CI pending. |
 | Deleted unused Firebase SMS OTP form. | `f1db535ebd59b06adffcb9bb9b50d018b6383d66` | Web CI pending. |
 | Rewrote release gate for Spark-only/no-Functions architecture and full acceptance checklist. | `e1f296196c0c77d020816c01cd07e40efa09787d` | Documentation-only. |
 | Documented interim App Check risk and later monitor-then-enforce plan. | `53a90b114dbce858889fd2e866689bda3916f0f8` | Documentation-only; App Check is not enabled. |
-| Corrected stale teacherContent visibility comment. | `27ed62d95da4735ee07757e473f835d7ca78eb6c` | Comment-only source change; rules Emulator test still pending. |
+| Corrected stale teacherContent visibility comment. | `27ed62d95da4735ee07757e473f835d7ca78eb6c` | Comment-only source change; rules Emulator test pending. |
+| Added an owner-scoped Storage-path check for `publicProfiles/{uid}.photoPath` and an Emulator regression test rejecting external URLs and cross-user writes. | `265a8b6684ec9f8d6ab6e5572f35d645cd352f18` (rules), `f46b2db0e52eb19e9c11b6dc170e7730ac90bc88` (test) | Test added; latest Firestore/Storage Emulator CI is in progress, so pass/fail is not yet known. |
 
-## CI state on latest code SHA
+## CI state on latest application SHA
 
-Latest code/workflow SHA: `d43a68259215cd5546d34288980af85fe8fd0b06`.
+Latest application SHA: `f46b2db0e52eb19e9c11b6dc170e7730ac90bc88`.
 
-- Firebase workflow validation: [Run 44930952528](https://github.com/walid1239/Imi-android/actions/runs/44930952528) — in progress; actionlint, JSON validation, and Emulator steps not yet concluded.
-- Web CI: [Run 44930952535](https://github.com/walid1239/Imi-android/actions/runs/44930952535) — pending at last check.
-- Android CI: [Run 44930952587](https://github.com/walid1239/Imi-android/actions/runs/44930952587) — pending at last check.
-- Previous intermediate runs were cancelled or failed before jobs. They are not passing evidence.
+- Firebase rules workflow: [Run 44931100502](https://github.com/walid1239/Imi-android/actions/runs/44931100502) — in progress.
+- Web PR CI: [Run 44931100270](https://github.com/walid1239/Imi-android/actions/runs/44931100270) — in progress.
+- Android PR CI: [Run 44931100283](https://github.com/walid1239/Imi-android/actions/runs/44931100283) — in progress.
+- Duplicate push Web CI: [Run 44931094650](https://github.com/walid1239/Imi-android/actions/runs/44931094650) — in progress.
+- Duplicate push Android CI: [Run 44931094578](https://github.com/walid1239/Imi-android/actions/runs/44931094578) — in progress.
+- No run above has a completed green conclusion yet.
 - No Firebase deploy job was executed; no rules/index deployment occurred.
 
 ## Unresolved release blockers
@@ -42,7 +45,7 @@ Latest code/workflow SHA: `d43a68259215cd5546d34288980af85fe8fd0b06`.
 2. The Web Firebase client still imports/exports Firebase Functions and initializes an inert localhost fallback when Firebase configuration is missing.
 3. `imi-api.ts` persists rate-limit counters in Firestore collection `apiRateLimits` using transactions, but no dedicated threshold/concurrency/window-reset test has been verified.
 4. Reels API route and server-side moderation/metadata flow are not implemented. Reels media upload is Storage-dependent and must remain disabled until the Spark/free-storage question is resolved.
-5. `respondToCall` idempotency is not fixed. Storage rule grouping, Firestore metadata binding for Reels/teacher verification, public-profile `photoPath` validation, and legacy-chat block regression remain unverified.
+5. `respondToCall` idempotency is not fixed. Storage rule grouping, Firestore metadata binding for Reels/teacher-verification, and legacy-chat block regression remain unverified. The public profile `photoPath` guard is implemented but its Emulator test is pending.
 6. Account deletion is incomplete and must remain disabled until all nested/cross-user documents, Storage paths, partial-failure handling, and tests are complete.
 7. Android `users/{uid}` `updatedAt` write audit, WhatsApp package visibility/detection, and Release minification/ProGuard/environment-only signing remain incomplete.
 8. Firebase-not-configured screen and complete empty Academy hierarchy/verified-teacher publishing restrictions remain incomplete.

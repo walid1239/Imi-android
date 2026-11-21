@@ -23,11 +23,11 @@ test('public academy can be browsed without an account in Arabic RTL', async ({ 
   await expect(page.locator('main')).toHaveAttribute('dir', 'rtl');
   await expect.poll(async () => {
     const courseVisible = await page.getByRole('heading', { name: 'مهارة التعلم الذاتي' }).isVisible().catch(() => false);
-    const errorVisible = await page.getByRole('alert').isVisible().catch(() => false);
+    const errorVisible = await page.locator('[role="alert"]').first().isVisible().catch(() => false);
     return courseVisible || errorVisible;
   }, { timeout: 15000 }).toBe(true);
-  if (await page.getByRole('alert').isVisible().catch(() => false)) {
-    throw new Error('Public academy Firebase read failed: ' + await page.getByRole('alert').innerText());
+  if (await page.locator('[role="alert"]').first().isVisible().catch(() => false)) {
+    throw new Error('Public academy Firebase read failed: ' + await page.locator('[role="alert"]').first().innerText());
   }
   await expect(page.getByRole('heading', { name: 'مهارة التعلم الذاتي' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'ابدأ من مستواك، وتقدّم خطوة بخطوة' })).toBeVisible();

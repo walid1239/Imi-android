@@ -11,7 +11,7 @@
 | Firebase Storage | As of 2026-02-03, Cloud Storage for Firebase requires Blaze for bucket access. Spark projects lose read/write access even to existing buckets; requests can return 402/403. | **Not available** under this owner's no-Blaze decision. Do not keep UI promises that Firebase Storage uploads work. External storage provider needs separate owner approval and free-tier verification. |
 | Firebase Admin SDK | Admin SDK requires a server app and service-account credentials. Official docs support ID-token verification, privileged Firestore/Auth access and FCM. FCM is listed as no-cost. The docs do not state that all Admin operations are unmetered or guarantee Spark availability/quotas for every Auth admin method: mark that part **unconfirmed** until a sandbox integration test succeeds. | Server-only dependency; credentials only in host environment. Firestore operations still consume Spark quotas. |
 | Vercel Hobby | $0 plan, but official terms restrict Hobby to personal/non-commercial use. Current docs list 1M function invocations/month and 100 GB-hours function duration; default function duration is 10 seconds (configurable up to 60s in docs). Quota enforcement/feature limits can change. | Suitable only for a personal/non-commercial prototype if the account/project qualifies. A public social network's eligibility is **not guaranteed**; any commercial purpose requires a different plan/provider. |
-| Cloudflare Pages / Workers Free | Exact current request, CPU, storage and commercial-use limits for this app's intended deployment were not fully established from the official sources reviewed: **unconfirmed**. Firebase Admin SDK compatibility is also not assumed because Workers' runtime is not a conventional Node server. | Do not select as a drop-in host until a minimal compatibility and quota test passes. |
+| Cloudflare Pages / Workers Free | Pages static asset requests are free/unlimited. Pages Free documents 500 builds/month, one concurrent build, 20,000 files/site and 25 MiB/file. Pages Functions consume Workers Free quota: 100,000 requests/day, 10 ms CPU/request, 128 MB memory and 50 subrequests/request. Exact payment-card requirement and commercial-use eligibility for this public social-network use were not confirmed from the reviewed official pages: **unconfirmed**. | Strong candidate for static front-end delivery only. Do not deploy this Admin SDK route adapter there: Workers lists `node:http2` as a non-functional stub and the official Firebase Admin Firestore Node SDK uses gRPC; no official Firebase Admin Workers compatibility guarantee was found. A separate REST-based adapter and integration tests would be required. |
 
 ### Official sources
 
@@ -24,6 +24,11 @@
 - [Firebase Cloud Messaging pricing](https://firebase.google.com/pricing)
 - [Vercel Hobby plan](https://vercel.com/docs/plans/hobby)
 - [Vercel Terms of Service](https://vercel.com/legal/terms)
+- [Cloudflare Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/)
+- [Cloudflare Workers limits](https://developers.cloudflare.com/workers/platform/limits/)
+- [Cloudflare Pages Functions pricing](https://developers.cloudflare.com/pages/functions/pricing/)
+- [Cloudflare Pages limits](https://developers.cloudflare.com/pages/platform/limits/)
+- [Cloudflare Node.js compatibility](https://developers.cloudflare.com/workers/runtime-apis/nodejs/)
 
 ## Server architecture
 
@@ -67,7 +72,7 @@
 
 ## Hosting and rate limits
 
-Vercel Hobby is not a general-purpose free commercial hosting commitment. If the project is non-commercial and eligible, a personal prototype may use it within documented limits. Before public launch, confirm current Vercel terms or choose a provider whose free terms explicitly fit the intended use. Cloudflare is not approved until Admin SDK compatibility is proven.
+Vercel Hobby is not a general-purpose free commercial hosting commitment. If the project is non-commercial and eligible, a personal prototype may use it within documented limits. Before public/commercial launch, confirm current Vercel terms or choose a provider whose free terms explicitly fit the intended use. Cloudflare Pages has a more generous documented static tier, but the current Admin SDK route adapter is not a drop-in Workers runtime target; only a static frontend could be considered without a separate Worker-compatible backend adapter. Whether Cloudflare's terms and account signup meet the owner's no-card/public-commercial requirements remains **unconfirmed**.
 
 Initial per-UID limits (implemented in the Next.js adapter, tunable after load tests): status create 1/30 seconds; friend request 10/hour and 30/day; direct conversation creation 20/minute. Per-IP ceilings and abuse monitoring remain a follow-up because a trustworthy client IP header depends on the selected host; never trust arbitrary X-Forwarded-For values. Store counters transactionally in Firestore with TTL-free manual cleanup; avoid billing-dependent TTL. These are application safety limits, not Firebase or host quotas.
 

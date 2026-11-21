@@ -22,6 +22,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.GoogleAuthProvider
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -54,8 +55,18 @@ fun LoginScreen() {
                     busy = true
                     scope.launch {
                         runCatching {
-                            auth.signInWithCredential(GoogleAuthProvider.getCredential(idToken, null)).await()
-                        }.onFailure { message = it.localizedMessage ?: "تعذر تسجيل الدخول عبر Google." }
+                            val credential = GoogleAuthProvider.getCredential(idToken, null)
+                            val currentUser = auth.currentUser
+                            if (currentUser?.isAnonymous == true) {
+                                currentUser.linkWithCredential(credential).await()
+                            } else {
+                                auth.signInWithCredential(credential).await()
+                            }
+                        }.onFailure {
+                            message = if (it is FirebaseAuthUserCollisionException) {
+                                "حساب Google مرتبط بحساب موجود. لم نغيّر جلسة الضيف الحالية؛ سجّل الدخول بالحساب الموجود."
+                            } else it.localizedMessage ?: "تعذر تسجيل الدخول عبر Google."
+                        }
                         busy = false
                     }
                 }
@@ -93,9 +104,21 @@ fun LoginScreen() {
                         message = null
                         scope.launch {
                             runCatching {
-                                if (createAccount) auth.createUserWithEmailAndPassword(email, password).await()
-                                else auth.signInWithEmailAndPassword(email, password).await()
-                            }.onFailure { message = it.localizedMessage ?: "تعذر إتمام العملية." }
+                                if (createAccount) {
+                                    val currentUser = auth.currentUser
+                                    if (currentUser?.isAnonymous == true) {
+                                        currentUser.linkWithCredential(EmailAuthProvider.getCredential(email, password)).await()
+                                    } else {
+                                        auth.createUserWithEmailAndPassword(email, password).await()
+                                    }
+                                } else {
+                                    auth.signInWithEmailAndPassword(email, password).await()
+                                }
+                            }.onFailure {
+                                message = if (it is FirebaseAuthUserCollisionException) {
+                                    "البريد مرتبط بحساب موجود. لم نغيّر جلسة الضيف الحالية؛ سجّل الدخول بالحساب الموجود."
+                                } else it.localizedMessage ?: "تعذر إتمام العملية."
+                            }
                             busy = false
                         }
                     }

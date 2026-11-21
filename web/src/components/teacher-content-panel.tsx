@@ -2,7 +2,6 @@
 import {useEffect,useMemo,useState} from 'react';
 import {User} from 'firebase/auth';
 import {collection,doc,getDocs,query,where} from 'firebase/firestore';
-import {getFunctions,httpsCallable} from 'firebase/functions';
 import {ref,uploadBytes} from 'firebase/storage';
 import {db,storage} from '@/lib/firebase/client';
 type Node={id:string;parentId:string|null;type:string;nameAr:string};
@@ -13,7 +12,7 @@ export default function TeacherContentPanel({user}:{user:User}){
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  useEffect(()=>{getDocs(query(collection(db,'curriculumNodes'),where('status','==','published'))).then(s=>setNodes(s.docs.map(d=>({id:d.id,parentId:d.get('parentId')??null,type:String(d.get('type')),nameAr:String(d.get('nameAr')||'')})))).catch(()=>setError('تعذر تحميل فهرس المواد.'));},[]);
  const levels=useMemo(()=>nodes.filter(n=>n.type==='level'&&n.parentId===null),[nodes]),tracks=useMemo(()=>nodes.filter(n=>n.type==='track'&&n.parentId===levelId),[nodes,levelId]),subjects=useMemo(()=>nodes.filter(n=>n.type==='subject'&&n.parentId===trackId),[nodes,trackId]),units=useMemo(()=>nodes.filter(n=>n.type==='unit'&&n.parentId===subjectId),[nodes,subjectId]);
- async function submit(e:React.FormEvent){e.preventDefault();setBusy(true);setError('');setNotice('');
+ async function submit(e:React.FormEvent){e.preventDefault();setError('رفع ونشر محتوى الأستاذ متوقفان مؤقتاً حتى نقل العملية إلى IMI API؛ لم يتم رفع أي ملف.');setNotice('');return;
   try{
    if(!levelId||!trackId||!subjectId)throw new Error('اختر المستوى والشعبة والمادة.');
    if(kind==='text'&&body.trim().length<50)throw new Error('الدرس النصي يحتاج إلى 50 حرفاً على الأقل.');
@@ -27,7 +26,7 @@ export default function TeacherContentPanel({user}:{user:User}){
     fileName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_').slice(-100);contentType=file.type;mediaPath='teacher-content/'+user.uid+'/'+id+'/'+fileName;
     await uploadBytes(ref(storage,mediaPath),file,{contentType});
    }
-   await httpsCallable(getFunctions(),'createTeacherContent')({contentId:id,title,kind,content:body,levelId,trackId,subjectId,unitId:unitId||null,mediaPath,contentType,fileName,sourceType,sourceName,sourceUrl,license,permissionNote});
+   throw new Error('هذه العملية غير متاحة حتى نقلها إلى IMI API.');
    setNotice('حُفظ المحتوى كمسودة تنتظر مراجعة المشرف. لن يظهر للمتعلمين قبل اعتماده.');setTitle('');setBody('');setFile(null);
   }catch(e){setError(e instanceof Error?e.message:'تعذر حفظ المحتوى.');}finally{setBusy(false);}
  }

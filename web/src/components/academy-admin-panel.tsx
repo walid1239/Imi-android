@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { User, getIdTokenResult } from 'firebase/auth';
 import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getDownloadURL, ref as storageRef } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase/client';
 import CurriculumAdminPanel from '@/components/curriculum-admin-panel';
@@ -111,14 +110,9 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
     }, reason => setError(reason.message));
   }, [authorized, selectedId]);
 
-  async function call<T extends Record<string, unknown>>(name: string, payload: T, success: string) {
-    setBusy(true); setError(''); setNotice('');
-    try {
-      await httpsCallable(getFunctions(), name)(payload);
-      setNotice(success);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'تعذر تنفيذ العملية.');
-    } finally { setBusy(false); }
+  async function call<T extends Record<string, unknown>>(_name: string, _payload: T, _success: string) {
+    setError('عمليات إدارة الأكاديمية متوقفة مؤقتاً حتى نقلها إلى IMI API؛ لم يُرسل أي طلب إلى Cloud Functions.');
+    setNotice('');
   }
 
   async function loadTeacherEvidence(uid: string, path: string) {

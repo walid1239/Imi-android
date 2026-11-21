@@ -2,7 +2,6 @@ import { getApp, getApps, initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
-import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { connectAuthEmulator } from 'firebase/auth';
 import { connectFirestoreEmulator } from 'firebase/firestore';
 
@@ -36,15 +35,10 @@ const app = getApps().length
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
-// Private compatibility instance for the remaining teacher/Academy callable screens.
-// Remove it after those call sites are migrated to /api/v1.
-const legacyFunctions = getFunctions(app);
-
 // Emulator endpoints are enabled only in explicit local/CI test mode.
 // This flag is public by design and must never be enabled in production builds.
 if (process.env.NEXT_PUBLIC_FIREBASE_EMULATORS === 'true' && typeof window !== 'undefined') {
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
   connectFirestoreEmulator(db, '127.0.0.1', 8080);
-  connectFunctionsEmulator(legacyFunctions, '127.0.0.1', 5001);
   connectStorageEmulator(storage, '127.0.0.1', 9199);
 }

@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { User } from 'firebase/auth';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db, firebaseConfigured } from '@/lib/firebase/client';
 
 type Course = { id: string; title: string; description: string; category: string; coverUrl?: string };
@@ -97,34 +96,15 @@ export default function AcademyPanel({ user }: { user: User | null }) {
     }, reason => setError(reason.message));
   }, [courseId, user?.uid]);
 
-  async function runCallable(name: 'enrollInCourse' | 'completeCourseLesson', payload: Record<string, string>, success: string) {
-    setBusy(true);
-    setError('');
+  async function runCallable(_name: 'enrollInCourse' | 'completeCourseLesson', _payload: Record<string, string>, _success: string) {
+    setError('التسجيل وإكمال الدروس متوقفان مؤقتاً حتى نقل العمليات إلى IMI API؛ لم يُرسل أي طلب إلى Cloud Functions.');
     setNotice('');
-    try {
-      const action = httpsCallable<Record<string, string>, { status: string }>(getFunctions(), name);
-      await action(payload);
-      setNotice(success);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'تعذر تنفيذ العملية التعليمية.');
-    } finally {
-      setBusy(false);
-    }
   }
 
   async function submitReport(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!user || !selectedLesson || busy) return;
-    setBusy(true); setError(''); setNotice('');
-    try {
-      const action = httpsCallable(getFunctions(), 'reportAcademyLesson');
-      await action({ courseId, lessonId: selectedLesson.id, reason: reportReason, details: reportDetails });
-      setNotice('تم إرسال البلاغ إلى فريق الإشراف للمراجعة.');
-      setReportDetails('');
-      setReportOpen(false);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'تعذر إرسال البلاغ.');
-    } finally { setBusy(false); }
+    setError('إرسال بلاغات الأكاديمية متوقف مؤقتاً حتى نقل العملية إلى IMI API؛ لم يُرسل أي طلب إلى Cloud Functions.');
+    setNotice('');
   }
 
   function completeGuestLesson(lessonId: string) {

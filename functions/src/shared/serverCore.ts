@@ -260,20 +260,20 @@ export async function blockUser(store: StorePort, uidValue: unknown, input: { ta
   const uid = requireUid(uidValue, "معرّف المستخدم غير صالح.");
   const targetUid = requireUid(input.targetUid, "معرّف المستخدم المستهدف غير صالح.");
   if (uid === targetUid) throw new CoreError("invalid-argument", "لا يمكنك حظر حسابك.");
-  const [profile, outgoingCalls, incomingCalls] = await Promise.all([
-    store.getDocument(`publicProfiles/${targetUid}`),
-    store.getActiveCalls(uid, targetUid),
-    store.getActiveCalls(targetUid, uid),
-  ]);
+  const profile = await store.getDocument(`publicProfiles/${targetUid}`);
   if (!profile.exists) throw new CoreError("not-found", "الحساب غير موجود.");
-  const callPaths = [...new Set([...outgoingCalls, ...incomingCalls].map(call => `calls/${call.id}`))];
   const directPath = `conversations/${store.directConversationId(uid, targetUid)}`;
   const forward = `friendRequests/${friendRequestId(uid, targetUid)}`;
   const reverse = `friendRequests/${friendRequestId(targetUid, uid)}`;
+
+  // Commit the block first. Call creation reads both block documents in its own
+  // transaction, so calls starting after this commit are rejected. Query active
+  // calls only after the block is committed to also catch a call created while
+  // the original block request was in flight.
   await store.runTransaction(async tx => {
     const paths = [
       `users/${uid}/blockedUsers/${targetUid}`, `users/${uid}/friends/${targetUid}`,
-      `users/${targetUid}/friends/${uid}`, forward, reverse, directPath, ...callPaths,
+      `users/${targetUid}/friends/${uid}`, forward, reverse, directPath,
     ];
     const snapshots = await Promise.all(paths.map(path => tx.get(path)));
     const byPath = new Map(paths.map((path, index) => [path, snapshots[index]]));
@@ -281,13 +281,28 @@ export async function blockUser(store: StorePort, uidValue: unknown, input: { ta
     tx.delete(paths[1]); tx.delete(paths[2]); tx.delete(forward); tx.delete(reverse);
     const direct = byPath.get(directPath)!;
     if (direct.exists) tx.update(directPath, { status: "blocked", lastMessage: "", updatedAt: store.serverTimestamp() });
-    for (const path of callPaths) {
-      if (byPath.get(path)?.exists) tx.update(path, {
-        status: "ended", endedBy: uid, endReason: "blocked",
-        endedAt: store.serverTimestamp(), updatedAt: store.serverTimestamp(),
-      });
-    }
   });
+
+  const [outgoingCalls, incomingCalls] = await Promise.all([
+    store.getActiveCalls(uid, targetUid),
+    store.getActiveCalls(targetUid, uid),
+  ]);
+  const callPaths = [...new Set([...outgoingCalls, ...incomingCalls].map(call => `calls/${call.id}`))];
+  if (callPaths.length) {
+    await store.runTransaction(async tx => {
+      const snapshots = await Promise.all(callPaths.map(path => tx.get(path)));
+      for (let index = 0; index < callPaths.length; index += 1) {
+        const path = callPaths[index];
+        const call = snapshots[index];
+        if (call.exists && (call.data.status === "ringing" || call.data.status === "accepted")) {
+          tx.update(path, {
+            status: "ended", endedBy: uid, endReason: "blocked",
+            endedAt: store.serverTimestamp(), updatedAt: store.serverTimestamp(),
+          });
+        }
+      }
+    });
+  }
   return { status: "blocked" as const };
 }
 

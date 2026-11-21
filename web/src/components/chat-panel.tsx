@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { User } from 'firebase/auth';
 import {
-  collection, doc, documentId, endAt, getDoc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp,
+  collection, doc, documentId, endAt, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp,
   setDoc, startAfter, startAt, where, writeBatch, Timestamp
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';

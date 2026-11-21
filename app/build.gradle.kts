@@ -33,7 +33,24 @@ android {
         jvmTarget = "17"
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
+
+    // Android uses the same server-authoritative Next.js API as the web client.
+    // Override with -PimiApiBaseUrl=https://... for a controlled Preview build.
+    val imiApiBaseUrl = providers.gradleProperty("imiApiBaseUrl")
+        .orElse("https://imi-chi.vercel.app")
+        .get()
+        .trim()
+        .trimEnd('/')
+    require(imiApiBaseUrl.matches(Regex("^https://[A-Za-z0-9.-]+(?::[0-9]{1,5})?$"))) {
+        "imiApiBaseUrl must be an HTTPS origin without a path."
+    }
+    defaultConfig {
+        buildConfigField("String", "IMI_API_BASE_URL", "\\"$imiApiBaseUrl\\"")
+    }
 }
 
 dependencies {

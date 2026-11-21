@@ -2,6 +2,7 @@ import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
+import { directConversationId } from "../../../../functions/src/conversationLogic";
 import { NextResponse } from "next/server";
 import {
   createStatus, sendFriendRequest, createOrGetDirectConversation,
@@ -68,6 +69,7 @@ function makeStore(app: App): StorePort {
       return typeof value === "number" ? value : undefined;
     },
     isVerifiedTeacher: async uid => (await auth.getUser(uid)).customClaims?.teacherVerified === true,
+    directConversationId,
   };
 }
 

@@ -33,10 +33,16 @@ internal object ImiApiHttp {
 
     fun buildRequest(baseUrl: String, path: String, idToken: String, payloadJson: String): Request {
         require(idToken.isNotBlank()) { "جلسة Firebase غير صالحة؛ أعد تسجيل الدخول." }
-        require(path.startsWith("/api/v1/")) { "مسار API غير صالح." }
+        require(path == "/api/v1/status" || path == "/api/v1/conversations/direct") {
+            "مسار API غير مسموح لهذا العميل."
+        }
         val root = baseUrl.toHttpUrlOrNull()
             ?: throw IllegalStateException("عنوان خادم IMI غير مضبوط. أعد البناء مع IMI_API_BASE_URL.")
         require(root.isHttps) { "يجب أن يستخدم خادم IMI اتصال HTTPS." }
+        require(root.encodedPath == "/" && root.encodedQuery == null && root.encodedFragment == null
+            && root.username.isEmpty() && root.password.isEmpty()) {
+            "يجب أن يكون عنوان خادم IMI أساسياً دون مسار أو بيانات اعتماد إضافية."
+        }
         val url = root.newBuilder().addPathSegments(path.removePrefix("/")).build()
         return Request.Builder()
             .url(url)

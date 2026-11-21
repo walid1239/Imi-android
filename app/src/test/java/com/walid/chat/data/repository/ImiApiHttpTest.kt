@@ -35,6 +35,18 @@ class ImiApiHttpTest {
             assertTrue(error.message!!.contains("جلسة Firebase"))
         }
         try {
+            ImiApiHttp.buildRequest("https://imi.example.test", "/api/v1/../../admin", "token", """{}""")
+            fail("Expected unknown API path to be rejected")
+        } catch (error: IllegalArgumentException) {
+            assertTrue(error.message!!.contains("مسار API"))
+        }
+        try {
+            ImiApiHttp.buildRequest("https://imi.example.test/base", "/api/v1/status", "token", """{}""")
+            fail("Expected non-root API base URL to be rejected")
+        } catch (error: IllegalArgumentException) {
+            assertTrue(error.message!!.contains("عنوان خادم"))
+        }
+        try {
             ImiApiHttp.buildRequest("http://imi.example.test", "/api/v1/status", "token", """{}""")
             fail("Expected non-HTTPS URL to be rejected")
         } catch (error: IllegalArgumentException) {

@@ -1,0 +1,73 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const {
+  CoreError, createStatus, sendFriendRequest, createOrGetDirectConversation,
+} = require("../lib/shared/serverCore.js");
+
+function makeStore(seed = {}, teachers = {}) {
+  const docs = new Map(Object.entries(seed));
+  let nextId = 0;
+  const now = 1_800_000_000_000;
+  return {
+    docs,
+    runTransaction: async work => work({
+      get: async path => ({ exists: docs.has(path), data: docs.get(path) ?? {} }),
+      create: (path, data) => {
+        if (docs.has(path)) throw new Error("already exists");
+        docs.set(path, data);
+      },
+      set: (path, data) => docs.set(path, data),
+    }),
+    newId: () => `status-${++nextId}`,
+    nowMillis: () => now,
+    serverTimestamp: () => ({ serverTimestamp: true }),
+    timestampFromMillis: value => ({ millis: value, toMillis() { return value; } }),
+    timestampToMillis: value => value && typeof value.toMillis === "function" ? value.toMillis() : undefined,
+    isVerifiedTeacher: async uid => teachers[uid] === true,
+  };
+}
+
+test("createStatus creates text-only status with exact 28-hour expiry", async () => {
+  const store = makeStore();
+  const result = await createStatus(store, "user_A", { text: " مرحبا " });
+  assert.equal(result.statusId, "status-1");
+  assert.equal(result.expiresAtMillis, 1_800_100_800_000);
+  assert.equal(result.mediaPath, null);
+  assert.equal(store.docs.get("users/user_A/statuses/status-1").text, "مرحبا");
+});
+
+test("createStatus rejects media on Spark and enforces the cooldown", async () => {
+  const store = makeStore();
+  await assert.rejects(createStatus(store, "user_A", { text: "", mediaType: "image/png" }),
+    error => error instanceof CoreError && error.code === "failed-precondition");
+  await createStatus(store, "user_A", { text: "first" });
+  await assert.rejects(createStatus(store, "user_A", { text: "second" }),
+    error => error instanceof CoreError && error.code === "resource-exhausted");
+});
+
+test("sendFriendRequest validates target and stores a pending request atomically", async () => {
+  const store = makeStore({ "publicProfiles/user_B": { displayName: "B" } });
+  const result = await sendFriendRequest(store, "user_A", { toUid: "user_B" });
+  assert.equal(result.status, "pending");
+  assert.equal(store.docs.get("friendRequests/user_A__user_B").fromUid, "user_A");
+  await assert.rejects(sendFriendRequest(store, "user_A", { toUid: "user_B" }),
+    error => error instanceof CoreError && error.code === "already-exists");
+});
+
+test("sendFriendRequest refuses teacher/student private relationships", async () => {
+  const store = makeStore({ "publicProfiles/student": {} }, { teacher: true });
+  await assert.rejects(sendFriendRequest(store, "teacher", { toUid: "student" }),
+    error => error instanceof CoreError && error.code === "permission-denied");
+});
+
+test("direct conversation ID is symmetric and conversation creation checks both profiles", async () => {
+  const store = makeStore({
+    "publicProfiles/user_A": {},
+    "publicProfiles/user_B": {},
+  });
+  const result = await createOrGetDirectConversation(store, "user_A", { otherUid: "user_B" });
+  const reverse = await createOrGetDirectConversation(store, "user_B", { otherUid: "user_A" });
+  assert.equal(result.conversationId, reverse.conversationId);
+  const conversation = store.docs.get(`conversations/${result.conversationId}`);
+  assert.deepEqual(conversation.participants, ["user_A", "user_B"]);
+});

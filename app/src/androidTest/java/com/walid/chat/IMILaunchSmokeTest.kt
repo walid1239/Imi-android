@@ -7,16 +7,18 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * Device-level smoke test: launches the real Activity and checks the Arabic home screen.
- * Firebase is intentionally not required for this UI-only test; MainActivity must show
- * an explicit cloud-configuration error rather than crashing when config is absent.
+ * Device-level smoke test: launches the real Activity and verifies the Arabic
+ * Firebase sign-in gate. No anonymous identity is created automatically.
  */
 class IMILaunchSmokeTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun launchesAndShowsArabicHomeScreen() {
-        composeRule.onNodeWithText("مساحتك للتواصل والتعلّم").assertIsDisplayed()
+    fun launchesAndShowsArabicSignInScreen() {
+        composeRule.onNodeWithText("تسجيل الدخول").assertIsDisplayed()
+        composeRule.onNodeWithText("البريد الإلكتروني").assertIsDisplayed()
+        composeRule.onNodeWithText("المتابعة باستخدام Google").assertIsDisplayed()
+        composeRule.onNodeWithText("الدخول كضيف").assertIsDisplayed()
     }
 }

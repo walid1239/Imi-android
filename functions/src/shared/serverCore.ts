@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 export type CoreErrorCode =
   | "unauthenticated" | "invalid-argument" | "resource-exhausted"
   | "permission-denied" | "not-found" | "already-exists" | "failed-precondition";
@@ -25,6 +23,7 @@ export interface StorePort {
   timestampFromMillis(value: number): unknown;
   timestampToMillis(value: unknown): number | undefined;
   isVerifiedTeacher(uid: string): Promise<boolean>;
+  directConversationId(firstUid: string, secondUid: string): string;
 }
 
 function requireUid(value: unknown, message: string, maxLength = 128): string {
@@ -38,14 +37,6 @@ function assertSamePrivateChatRole(firstTeacher: boolean, secondTeacher: boolean
   if (firstTeacher !== secondTeacher) {
     throw new CoreError("permission-denied", "التواصل الخاص بين الأستاذ والتلميذ غير متاح. استخدم قنوات الأكاديمية العامة والمراقبة.");
   }
-}
-
-export function directConversationId(firstUid: string, secondUid: string): string {
-  if (!firstUid || !secondUid || firstUid === secondUid) {
-    throw new CoreError("invalid-argument", "يلزم حسابان مختلفان لبدء المحادثة.");
-  }
-  const pair = [firstUid, secondUid].sort().map(uid => `${uid.length}:${uid}`).join("");
-  return `direct_${createHash("sha256").update(pair).digest("hex")}`;
 }
 
 export function validateStatusInput(textValue: unknown, mediaTypeValue: unknown) {
@@ -147,7 +138,7 @@ export async function createOrGetDirectConversation(
   ]);
   assertSamePrivateChatRole(firstTeacher, secondTeacher);
   const participants = [uid, otherUid].sort();
-  const conversationId = directConversationId(uid, otherUid);
+  const conversationId = store.directConversationId(uid, otherUid);
   await store.runTransaction(async tx => {
     const [conversation, ownProfile, otherProfile, ownBlock, otherBlock] = await Promise.all([
       tx.get(`conversations/${conversationId}`),

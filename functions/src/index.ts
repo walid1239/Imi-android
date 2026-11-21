@@ -11,7 +11,7 @@ import { createIceServerConfiguration, nextIceRestartCount, nextRateLimitState, 
 import { directConversationId } from "./conversationLogic";
 import { messageNotificationPreview } from "./notificationLogic";
 import { canPublishLessonSource, validateLessonSource } from "./academyContent";
-import { CoreError, createStatus as coreCreateStatus, sendFriendRequest as coreSendFriendRequest, createOrGetDirectConversation as coreCreateOrGetDirectConversation, type StorePort, type TransactionPort } from "./shared/serverCore";
+import { CoreError, createStatus as coreCreateStatus, sendFriendRequest as coreSendFriendRequest, createOrGetDirectConversation as coreCreateOrGetDirectConversation, acceptFriendRequest as coreAcceptFriendRequest, rejectFriendRequest as coreRejectFriendRequest, removeFriend as coreRemoveFriend, type StorePort, type TransactionPort } from "./shared/serverCore";
 
 const configuredStorageBucket = process.env.IMI_STORAGE_BUCKET?.trim();
 initializeApp(configuredStorageBucket ? { storageBucket: configuredStorageBucket } : undefined);
@@ -108,94 +108,19 @@ export const sendFriendRequest = onCall<SendFriendRequestInput>(async request =>
   return runCore(() => coreSendFriendRequest(coreStore, request.auth!.uid, request.data ?? {}));
 });
 
-export const acceptFriendRequest = onCall<FriendRequestActionInput>(async (request) => {
-  const uid = request.auth?.uid;
-  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
-  const requestId = requireUid(request.data?.requestId, "معرّف طلب الصداقة غير صالح.", 300);
-  const requestRef = db.collection("friendRequests").doc(requestId);
-
-  await db.runTransaction(async (transaction) => {
-    const requestSnapshot = await transaction.get(requestRef);
-    if (!requestSnapshot.exists) throw new HttpsError("not-found", "طلب الصداقة غير موجود.");
-    const fromUid = requestSnapshot.get("fromUid");
-    const toUid = requestSnapshot.get("toUid");
-    const status = requestSnapshot.get("status");
-    if (toUid !== uid) throw new HttpsError("permission-denied", "لا يمكنك قبول طلب موجّه إلى مستخدم آخر.");
-    if (status === "accepted") return;
-    if (status !== "pending" || typeof fromUid !== "string" || fromUid === uid) {
-      throw new HttpsError("failed-precondition", "هذا الطلب لم يعد صالحاً للقبول.");
-    }
-    const ownFriendRef = db.collection("users").doc(uid).collection("friends").doc(fromUid);
-    const senderFriendRef = db.collection("users").doc(fromUid).collection("friends").doc(uid);
-    const ownBlockRef = db.collection("users").doc(uid).collection("blockedUsers").doc(fromUid);
-    const senderBlockRef = db.collection("users").doc(fromUid).collection("blockedUsers").doc(uid);
-    const [ownFriend, senderFriend, ownBlock, senderBlock] = await Promise.all([
-      transaction.get(ownFriendRef),
-      transaction.get(senderFriendRef),
-      transaction.get(ownBlockRef),
-      transaction.get(senderBlockRef),
-    ]);
-    if (ownBlock.exists || senderBlock.exists) throw new HttpsError("permission-denied", "لا يمكن قبول طلب الصداقة بسبب إعدادات الحظر.");
-    if ((ownFriend.exists && ownFriend.get("status") !== "accepted")
-      || (senderFriend.exists && senderFriend.get("status") !== "accepted")) {
-      throw new HttpsError("failed-precondition", "توجد علاقة صداقة غير متسقة؛ لم يتم تغييرها.");
-    }
-    const now = FieldValue.serverTimestamp();
-    transaction.update(requestRef, { status: "accepted", respondedAt: now, updatedAt: now });
-    transaction.set(ownFriendRef, { uid: fromUid, status: "accepted", createdAt: now, updatedAt: now });
-    transaction.set(senderFriendRef, { uid, status: "accepted", createdAt: now, updatedAt: now });
-  });
-  return { status: "accepted" };
+export const acceptFriendRequest = onCall<FriendRequestActionInput>(async request => {
+  if (!request.auth?.uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  return runCore(() => coreAcceptFriendRequest(coreStore, request.auth!.uid, request.data ?? {}));
 });
 
-export const rejectFriendRequest = onCall<FriendRequestActionInput>(async (request) => {
-  const uid = request.auth?.uid;
-  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
-  const requestId = requireUid(request.data?.requestId, "معرّف طلب الصداقة غير صالح.");
-  const requestRef = db.collection("friendRequests").doc(requestId);
-  await db.runTransaction(async (transaction) => {
-    const snapshot = await transaction.get(requestRef);
-    if (!snapshot.exists) throw new HttpsError("not-found", "طلب الصداقة غير موجود.");
-    if (snapshot.get("toUid") !== uid) throw new HttpsError("permission-denied", "لا يمكنك رفض طلب موجّه إلى مستخدم آخر.");
-    if (snapshot.get("status") === "rejected") return;
-    if (snapshot.get("status") !== "pending") throw new HttpsError("failed-precondition", "هذا الطلب لم يعد قيد الانتظار.");
-    transaction.update(requestRef, { status: "rejected", respondedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
-  });
-  return { status: "rejected" };
+export const rejectFriendRequest = onCall<FriendRequestActionInput>(async request => {
+  if (!request.auth?.uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  return runCore(() => coreRejectFriendRequest(coreStore, request.auth!.uid, request.data ?? {}));
 });
 
-export const removeFriend = onCall<RemoveFriendInput>(async (request) => {
-  const uid = request.auth?.uid;
-  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
-  const friendUid = requireUid(request.data?.friendUid, "معرّف الصديق غير صالح.");
-  if (friendUid === uid) throw new HttpsError("invalid-argument", "لا يمكن حذف نفسك من قائمة الأصدقاء.");
-
-  const ownFriendRef = db.collection("users").doc(uid).collection("friends").doc(friendUid);
-  const otherFriendRef = db.collection("users").doc(friendUid).collection("friends").doc(uid);
-  const forwardRequestRef = db.collection("friendRequests").doc(friendRequestId(uid, friendUid));
-  const reverseRequestRef = db.collection("friendRequests").doc(friendRequestId(friendUid, uid));
-  await db.runTransaction(async (transaction) => {
-    const [ownFriend, otherFriend, forwardRequest, reverseRequest] = await Promise.all([
-      transaction.get(ownFriendRef),
-      transaction.get(otherFriendRef),
-      transaction.get(forwardRequestRef),
-      transaction.get(reverseRequestRef),
-    ]);
-    if (!ownFriend.exists || !otherFriend.exists
-      || ownFriend.get("status") !== "accepted"
-      || otherFriend.get("status") !== "accepted") {
-      throw new HttpsError("not-found", "هذه العلاقة ليست صداقة مؤكدة بين الحسابين.");
-    }
-    transaction.delete(ownFriendRef);
-    transaction.delete(otherFriendRef);
-    if (forwardRequest.exists && forwardRequest.get("status") === "accepted") {
-      transaction.update(forwardRequestRef, { status: "removed", updatedAt: FieldValue.serverTimestamp() });
-    }
-    if (reverseRequest.exists && reverseRequest.get("status") === "accepted") {
-      transaction.update(reverseRequestRef, { status: "removed", updatedAt: FieldValue.serverTimestamp() });
-    }
-  });
-  return { status: "removed" };
+export const removeFriend = onCall<RemoveFriendInput>(async request => {
+  if (!request.auth?.uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  return runCore(() => coreRemoveFriend(coreStore, request.auth!.uid, request.data ?? {}));
 });
 
 

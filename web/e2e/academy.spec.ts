@@ -102,7 +102,7 @@ test('signed-in learner sees the same empty curriculum without legacy course les
   await expect(page.getByRole('heading', { name: 'ابدأ من مستواك، وتقدّم خطوة بخطوة' })).toBeVisible();
   await page.getByLabel('المستوى').selectOption('e2e-primary');
   await page.getByLabel('الشعبة أو المسلك').selectOption('e2e-primary-track');
-  await page.getByRole('button', { name: /الرياضيات - اختبار/ }).click();
+  await page.getByRole('button', { name: /مادة بلا دروس - اختبار/ }).click();
   await expect(page.getByText('لا وحدات بعد.')).toBeVisible();
   await expect(page.getByText('لا دروس بعد. سيضيفها أساتذتنا قريباً')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'مهارة التعلم الذاتي' })).toHaveCount(0);

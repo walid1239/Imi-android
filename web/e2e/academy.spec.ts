@@ -17,32 +17,23 @@ async function login(page: Page, address: string) {
   }
 }
 
-test('public academy can be browsed without an account in Arabic RTL', async ({ page }) => {
+test('public academy shows the empty curriculum hierarchy without fake lessons', async ({ page }) => {
   const response = await page.goto('/academy');
-  console.log('E2E academy response', response?.status(), page.url(), (await page.locator('body').innerText().catch(() => '')).slice(0, 500));
   await expect(response).not.toBeNull();
+  await expect(response).toHaveStatus(200);
   await expect(page.getByRole('heading', { name: 'ابدأ من مستواك، وتقدّم خطوة بخطوة' })).toBeVisible();
   await expect(page.locator('main')).toHaveAttribute('dir', 'rtl');
-  await expect.poll(async () => {
-    const courseVisible = await page.getByRole('heading', { name: 'مهارة التعلم الذاتي' }).isVisible().catch(() => false);
-    const errorVisible = await page.locator('[role="alert"]').first().isVisible().catch(() => false);
-    return courseVisible || errorVisible;
-  }, { timeout: 15000 }).toBe(true);
-  if (await page.locator('[role="alert"]').first().isVisible().catch(() => false)) {
-    throw new Error('Public academy Firebase read failed: ' + await page.locator('[role="alert"]').first().innerText());
-  }
-  await expect(page.getByRole('heading', { name: 'مهارة التعلم الذاتي' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'ابدأ من مستواك، وتقدّم خطوة بخطوة' })).toBeVisible();
   await expect(page.getByLabel('المستوى')).toBeVisible();
   await page.getByLabel('المستوى').selectOption('e2e-primary');
   await page.getByLabel('الشعبة أو المسلك').selectOption('e2e-primary-track');
   await expect(page.getByRole('button', { name: /الرياضيات - اختبار/ })).toBeVisible();
   await page.getByRole('button', { name: /الرياضيات - اختبار/ }).click();
-  await expect(page.getByRole('heading', { name: 'الرياضيات - اختبار' })).toBeVisible();
+  await expect(page.getByText('لا وحدات بعد.')).toBeVisible();
+  await expect(page.getByText('لا دروس بعد. سيضيفها أساتذتنا قريباً')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'مهارة التعلم الذاتي' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'تسجيل الدخول لحفظ التقدم سحابياً' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'أصبح أستاذاً' })).toBeVisible();
 });
-
 test('two learners can befriend each other, exchange a message and publish a status', async ({ page, browser }) => {
   const project = test.info().project.name;
   const fixtureBase = suffix(project);
@@ -105,25 +96,17 @@ test('two learners can befriend each other, exchange a message and publish a sta
   }
 });
 
-test('learner can enroll in a general-skills course and complete its lesson', async ({ page }) => {
-  const project = test.info().project.name;
-  const fixture = test.info().retry > 0 ? `${suffix(project)}-retry${test.info().retry}` : suffix(project);
-  await login(page, `e2e-a-${fixture}@imi.test`);
+test('signed-in learner sees the same empty curriculum without legacy course lessons', async ({ page }) => {
+  await login(page, email('a', test.info().project.name));
   await page.getByRole('button', { name: /الأكاديمية/ }).first().click();
-  await expect(page.getByText('مهارة التعلم الذاتي').first()).toBeVisible();
-  await page.getByRole('button', { name: 'سجّل في هذه الدورة' }).click();
-  await expect(page.getByText(/تقدمك في الدورة/)).toBeVisible();
-  await page.getByRole('button', { name: /مهارة التعلم الذاتي/ }).click();
-  await expect(page.getByRole('heading', { name: 'خطوات عملية لبناء عادة تعلم مستمرة' })).toBeVisible();
-  await page.getByRole('button', { name: 'وضع علامة: أكملت الدرس' }).click();
-  await expect(page.getByRole('status')).toContainText('تم تسجيل إكمال الدرس');
-  await page.getByRole('button', { name: 'الإبلاغ عن الدرس' }).click();
-  await page.getByLabel('سبب البلاغ').selectOption('incorrect');
-  await page.getByPlaceholder('تفاصيل إضافية (اختياري)').fill('ملاحظة اختبار آلية');
-  await page.getByRole('button', { name: 'إرسال البلاغ' }).click();
-  await expect(page.getByRole('status')).toContainText('تم إرسال البلاغ إلى فريق الإشراف');
+  await expect(page.getByRole('heading', { name: 'ابدأ من مستواك، وتقدّم خطوة بخطوة' })).toBeVisible();
+  await page.getByLabel('المستوى').selectOption('e2e-primary');
+  await page.getByLabel('الشعبة أو المسلك').selectOption('e2e-primary-track');
+  await page.getByRole('button', { name: /الرياضيات - اختبار/ }).click();
+  await expect(page.getByText('لا وحدات بعد.')).toBeVisible();
+  await expect(page.getByText('لا دروس بعد. سيضيفها أساتذتنا قريباً')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'مهارة التعلم الذاتي' })).toHaveCount(0);
 });
-
 test('admin claim exposes the protected Academy administration panel', async ({ page }) => {
   const project = test.info().project.name;
   const fixture = test.info().retry > 0 ? `${suffix(project)}-retry${test.info().retry}` : suffix(project);
@@ -209,7 +192,7 @@ test('mobile academy keeps RTL direction without horizontal overflow', async ({ 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/academy');
   await expect(page.locator('main')).toHaveAttribute('dir', 'rtl');
-  await expect(page.getByRole('heading', { name: 'تعلّم وتقدّم' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'ابدأ من مستواك، وتقدّم خطوة بخطوة' })).toBeVisible();
   const width = await page.locator('body').evaluate(element => element.scrollWidth);
   expect(width).toBeLessThanOrEqual(390);
 });

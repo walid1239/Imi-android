@@ -11,7 +11,7 @@ import ReelsPanel from '@/components/reels-panel';
 import StatusPanel from '@/components/status-panel';
 import ProfilePanel from '@/components/profile-panel';
 import FriendsPanel from '@/components/friends-panel';
-import AcademyPanel from '@/components/academy-panel';
+import CurriculumBrowser from '@/components/curriculum-browser';
 import AcademyAdminPanel from '@/components/academy-admin-panel';
 import NotificationsPanel from '@/components/notifications-panel';
 
@@ -67,7 +67,7 @@ export default function AppHomePage() {
     <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-4 sm:p-5">
       <div className="flex flex-wrap gap-2">{visibleTabs.map((tab, index) => <button key={tab.label} onClick={() => setActive(index)} aria-pressed={active === index} className={`rounded-xl px-4 py-3 text-sm font-semibold ${active === index ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-300'}`}>{tab.icon} {tab.label}</button>)}</div>
       <div className="mt-5">
-        {active === 0 ? <ChatPanel user={user} /> : active === 1 ? <StatusPanel user={user} /> : active === 2 ? <ReelsPanel user={user} /> : active === 4 ? <ProfilePanel user={user} /> : active === 5 ? <FriendsPanel user={user} /> : active === 3 ? <AcademyPanel user={user} /> : active === 6 && isAdmin ? <AcademyAdminPanel user={user} /> : <div className="min-h-48 rounded-2xl bg-white/[.035] p-6"><h2 className="text-xl font-bold">{visibleTabs[active]?.label ?? tabs[0].label}</h2><p className="mt-3 leading-7 text-slate-400">{visibleTabs[active]?.description ?? tabs[0].description}</p><p className="mt-4 text-xs text-slate-500">هذا القسم لم يُربط ببيانات Firebase بعد؛ لا نعرض محتوى تجريبياً على أنه حقيقي.</p></div>}
+        {active === 0 ? <ChatPanel user={user} /> : active === 1 ? <StatusPanel user={user} /> : active === 2 ? <ReelsPanel user={user} /> : active === 4 ? <ProfilePanel user={user} /> : active === 5 ? <FriendsPanel user={user} /> : active === 3 ? <CurriculumBrowser /> : active === 6 && isAdmin ? <AcademyAdminPanel user={user} /> : <div className="min-h-48 rounded-2xl bg-white/[.035] p-6"><h2 className="text-xl font-bold">{visibleTabs[active]?.label ?? tabs[0].label}</h2><p className="mt-3 leading-7 text-slate-400">{visibleTabs[active]?.description ?? tabs[0].description}</p><p className="mt-4 text-xs text-slate-500">هذا القسم لم يُربط ببيانات Firebase بعد؛ لا نعرض محتوى تجريبياً على أنه حقيقي.</p></div>}
       </div>
     </section>
     <nav aria-label="التنقل الرئيسي" className="fixed inset-x-0 bottom-0 z-10 border-t border-white/10 bg-slate-950/95 px-2 py-3 backdrop-blur sm:hidden"><div className="mx-auto flex max-w-lg justify-around">{visibleTabs.map((tab, index) => <button key={tab.label} onClick={() => setActive(index)} aria-pressed={active === index} className={`flex flex-col items-center gap-1 text-xs ${active === index ? 'text-blue-300' : 'text-slate-400'}`}><span className="text-lg">{tab.icon}</span>{tab.label}</button>)}</div></nav>

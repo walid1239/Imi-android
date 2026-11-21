@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { User } from 'firebase/auth';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db, firebaseConfigured } from '@/lib/firebase/client';
 
 type Course = { id: string; title: string; description: string; category: string; coverUrl?: string };
@@ -97,13 +96,20 @@ export default function AcademyPanel({ user }: { user: User | null }) {
     }, reason => setError(reason.message));
   }, [courseId, user?.uid]);
 
-  async function runCallable(name: 'enrollInCourse' | 'completeCourseLesson', payload: Record<string, string>, success: string) {
+  async function runAcademyApi(path: 'enroll' | 'complete-lesson', payload: Record<string, string>, success: string) {
+    if (!user) return;
     setBusy(true);
     setError('');
     setNotice('');
     try {
-      const action = httpsCallable<Record<string, string>, { status: string }>(getFunctions(), name);
-      await action(payload);
+      const token = await user.getIdToken();
+      const response = await fetch(`/api/v1/academy/${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || 'تعذر تنفيذ العملية التعليمية.');
       setNotice(success);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'تعذر تنفيذ العملية التعليمية.');
@@ -117,8 +123,14 @@ export default function AcademyPanel({ user }: { user: User | null }) {
     if (!user || !selectedLesson || busy) return;
     setBusy(true); setError(''); setNotice('');
     try {
-      const action = httpsCallable(getFunctions(), 'reportAcademyLesson');
-      await action({ courseId, lessonId: selectedLesson.id, reason: reportReason, details: reportDetails });
+      const token = await user.getIdToken();
+      const response = await fetch('/api/v1/academy/report-lesson', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ courseId, lessonId: selectedLesson.id, reason: reportReason, details: reportDetails }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || 'تعذر إرسال البلاغ.');
       setNotice('تم إرسال البلاغ إلى فريق الإشراف للمراجعة.');
       setReportDetails('');
       setReportOpen(false);
@@ -167,7 +179,7 @@ export default function AcademyPanel({ user }: { user: User | null }) {
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-blue-500" style={{ width: `${progress}%` }} /></div>
               <p className="mt-2 text-[11px] text-slate-500">{completed.size} من {lessons.length} دروس مكتملة{user ? '' : ' · محفوظ على هذا الجهاز'}</p>
             </div>
-            : user ? <button disabled={busy} onClick={() => runCallable('enrollInCourse', { courseId }, 'تم تسجيلك في الدورة.')} className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold disabled:opacity-40">{busy ? 'جارٍ التسجيل…' : 'سجّل في هذه الدورة'}</button> : null}
+            : user ? <button disabled={busy} onClick={() => runAcademyApi('enroll', { courseId }, 'تم تسجيلك في الدورة.')} className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold disabled:opacity-40">{busy ? 'جارٍ التسجيل…' : 'سجّل في هذه الدورة'}</button> : null}
 
           <div className="space-y-2">
             <h4 className="font-bold">محتوى الدورة</h4>
@@ -194,7 +206,7 @@ export default function AcademyPanel({ user }: { user: User | null }) {
             </form>}
             {!selectedLesson.videoUrl && !selectedLesson.content && <p className="mt-3 text-xs text-slate-500">لم يضف المشرف محتوى لهذا الدرس بعد.</p>}
             {enrollment && <button disabled={busy || completed.has(selectedLesson.id)} onClick={() => user
-              ? runCallable('completeCourseLesson', { courseId, lessonId: selectedLesson.id }, 'تم تسجيل إكمال الدرس.')
+              ? runAcademyApi('complete-lesson', { courseId, lessonId: selectedLesson.id }, 'تم تسجيل إكمال الدرس.')
               : completeGuestLesson(selectedLesson.id)} className="mt-4 w-full rounded-lg bg-emerald-700 px-4 py-3 text-sm font-bold disabled:opacity-40">{completed.has(selectedLesson.id) ? 'أكملت هذا الدرس' : busy ? 'جارٍ الحفظ…' : 'وضع علامة: أكملت الدرس'}</button>}
           </article>}
         </div>}
@@ -202,6 +214,6 @@ export default function AcademyPanel({ user }: { user: User | null }) {
 
     {error && <p role="alert" className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-6 text-amber-200">{error}</p>}
     {notice && <p role="status" className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs leading-6 text-emerald-200">{notice}</p>}
-    <p className="text-xs leading-6 text-slate-500">يُسجّل التقدم عبر Cloud Functions بعد التحقق من نشر الدورة والدرس. إنشاء المحتوى ونشره محصوران بالمشرفين من جهة موثوقة.</p>
+    <p className="text-xs leading-6 text-slate-500">يُسجّل التقدم عبر خادم IMI بعد التحقق من هوية المستخدم ونشر الدورة والدرس. إنشاء المحتوى ونشره محصوران بالمشرفين من جهة موثوقة.</p>
   </section>;
 }

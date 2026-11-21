@@ -11,15 +11,40 @@ import { createIceServerConfiguration, nextIceRestartCount, nextRateLimitState, 
 import { directConversationId } from "./conversationLogic";
 import { messageNotificationPreview } from "./notificationLogic";
 import { canPublishLessonSource, validateLessonSource } from "./academyContent";
-import {
-  isStatusCooldownActive,
-  statusExpiryMillis,
-  validateStatusInput,
-} from "./statusLogic";
+import { CoreError, createStatus as coreCreateStatus, sendFriendRequest as coreSendFriendRequest, createOrGetDirectConversation as coreCreateOrGetDirectConversation, type StorePort, type TransactionPort } from "./shared/serverCore";
 
 const configuredStorageBucket = process.env.IMI_STORAGE_BUCKET?.trim();
 initializeApp(configuredStorageBucket ? { storageBucket: configuredStorageBucket } : undefined);
 const db = getFirestore();
+
+const coreStore: StorePort = {
+  runTransaction: <T>(work: (tx: TransactionPort) => Promise<T>) => db.runTransaction(async transaction => work({
+    get: async path => {
+      const snapshot = await transaction.get(db.doc(path));
+      return { exists: snapshot.exists, data: snapshot.data() ?? {} };
+    },
+    create: (path, data) => transaction.create(db.doc(path), data),
+    set: (path, data) => transaction.set(db.doc(path), data),
+  })),
+  newId: () => db.collection("_ids").doc().id,
+  nowMillis: () => Date.now(),
+  serverTimestamp: () => FieldValue.serverTimestamp(),
+  timestampFromMillis: value => Timestamp.fromMillis(value),
+  timestampToMillis: value => {
+    if (value && typeof (value as { toMillis?: unknown }).toMillis === "function") return (value as Timestamp).toMillis();
+    if (value instanceof Date) return value.getTime();
+    return typeof value === "number" ? value : undefined;
+  },
+  isVerifiedTeacher: async uid => (await getAuth().getUser(uid)).customClaims?.teacherVerified === true,
+};
+async function runCore<T>(work: () => Promise<T>): Promise<T> {
+  try { return await work(); }
+  catch (error) {
+    if (error instanceof CoreError) throw new HttpsError(error.code, error.message);
+    throw error;
+  }
+}
+
 
 async function assertNoTeacherStudentPrivateChat(firstUid: string, secondUid: string) {
   const [first, second] = await Promise.all([
@@ -44,55 +69,10 @@ type CreateStatusInput = {
   mediaType?: unknown;
 };
 
-export const createStatus = onCall<CreateStatusInput>(async (request) => {
-  const uid = request.auth?.uid;
-  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
-
-  let validated: ReturnType<typeof validateStatusInput>;
-  try {
-    validated = validateStatusInput(request.data?.text, request.data?.mediaType);
-  } catch (error) {
-    throw new HttpsError("invalid-argument", error instanceof Error ? error.message : "بيانات الحالة غير صالحة.");
-  }
-  const { text, mediaType } = validated;
-
-  const statusRef = db.collection("users").doc(uid).collection("statuses").doc();
-  const rateRef = db.collection("statusRateLimits").doc(uid);
-  let expiresAtMillis = 0;
-  let mediaPath: string | undefined;
-
-  await db.runTransaction(async (transaction) => {
-    const rate = await transaction.get(rateRef);
-    const lastCreatedAt = rate.get("lastCreatedAt") as Timestamp | undefined;
-    const createdAt = Timestamp.now();
-    if (isStatusCooldownActive(lastCreatedAt?.toMillis(), createdAt.toMillis())) {
-      throw new HttpsError("resource-exhausted", "انتظر قليلاً قبل نشر حالة أخرى.");
-    }
-
-    expiresAtMillis = statusExpiryMillis(createdAt.toMillis());
-    const expiresAt = Timestamp.fromMillis(expiresAtMillis);
-    transaction.set(rateRef, { lastCreatedAt: createdAt, uid });
-
-    const mediaExtension = mediaType === "image/png" ? "png"
-      : mediaType === "image/webp" ? "webp" : "jpg";
-    mediaPath = mediaType ? `users/${uid}/statuses/${statusRef.id}/status.${mediaExtension}` : undefined;
-    const status: Record<string, unknown> = {
-      ownerUid: uid,
-      createdAt,
-      expiresAt,
-    };
-    if (text) status.text = text;
-    if (mediaPath) status.mediaPath = mediaPath;
-    transaction.create(statusRef, status);
-  });
-
-  return {
-    statusId: statusRef.id,
-    expiresAtMillis,
-    mediaPath: mediaPath ?? null,
-  };
+export const createStatus = onCall<CreateStatusInput>(async request => {
+  if (!request.auth?.uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  return runCore(() => coreCreateStatus(coreStore, request.auth!.uid, request.data ?? {}));
 });
-
 
 type SendFriendRequestInput = { toUid?: unknown };
 type FriendRequestActionInput = { requestId?: unknown };
@@ -115,99 +95,14 @@ type CreateOrGetDirectConversationInput = { otherUid?: unknown };
  * Creates a deterministic direct conversation using Admin SDK. The browser
  * never needs permission to read a not-yet-created private conversation ID.
  */
-export const createOrGetDirectConversation = onCall<CreateOrGetDirectConversationInput>(async (request) => {
-  const uid = request.auth?.uid;
-  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
-  const otherUid = requireUid(request.data?.otherUid, "معرّف المستخدم الآخر غير صالح.");
-  if (otherUid === uid) throw new HttpsError("invalid-argument", "لا يمكنك بدء محادثة مع نفسك.");
-
-  await assertNoTeacherStudentPrivateChat(uid, otherUid);
-  const participants = [uid, otherUid].sort();
-  const conversationId = directConversationId(uid, otherUid);
-  const conversationRef = db.collection("conversations").doc(conversationId);
-  const ownProfileRef = db.collection("publicProfiles").doc(uid);
-  const otherProfileRef = db.collection("publicProfiles").doc(otherUid);
-  const ownBlockRef = db.collection("users").doc(uid).collection("blockedUsers").doc(otherUid);
-  const otherBlockRef = db.collection("users").doc(otherUid).collection("blockedUsers").doc(uid);
-
-  await db.runTransaction(async (transaction) => {
-    const [conversation, ownProfile, otherProfile, ownBlock, otherBlock] = await Promise.all([
-      transaction.get(conversationRef),
-      transaction.get(ownProfileRef),
-      transaction.get(otherProfileRef),
-      transaction.get(ownBlockRef),
-      transaction.get(otherBlockRef),
-    ]);
-    if (ownBlock.exists || otherBlock.exists) throw new HttpsError("permission-denied", "لا يمكن بدء محادثة بسبب إعدادات الحظر.");
-    if (!ownProfile.exists || !otherProfile.exists) {
-      throw new HttpsError("not-found", "يجب أن يكون الطرفان قد نشرا ملفيهما في دليل IMI أولاً.");
-    }
-    if (conversation.exists) {
-      const current = conversation.get("participants");
-      if (!Array.isArray(current) || current.length !== 2
-        || current[0] !== participants[0] || current[1] !== participants[1]) {
-        throw new HttpsError("failed-precondition", "معرّف المحادثة مرتبط بأعضاء مختلفين.");
-      }
-      return;
-    }
-    transaction.create(conversationRef, {
-      participants,
-      createdBy: uid,
-      createdAt: FieldValue.serverTimestamp(),
-      lastMessage: "",
-      lastMessageAt: FieldValue.serverTimestamp(),
-    });
-  });
-
-  return { conversationId };
+export const createOrGetDirectConversation = onCall<CreateOrGetDirectConversationInput>(async request => {
+  if (!request.auth?.uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  return runCore(() => coreCreateOrGetDirectConversation(coreStore, request.auth!.uid, request.data ?? {}));
 });
 
-export const sendFriendRequest = onCall<SendFriendRequestInput>(async (request) => {
-  const uid = request.auth?.uid;
-  if (!uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
-  const toUid = requireUid(request.data?.toUid, "معرّف المستخدم المستهدف غير صالح.");
-  if (toUid === uid) throw new HttpsError("invalid-argument", "لا يمكنك إرسال طلب صداقة إلى نفسك.");
-
-  await assertNoTeacherStudentPrivateChat(uid, toUid);
-  const outgoingRef = db.collection("friendRequests").doc(friendRequestId(uid, toUid));
-  const incomingRef = db.collection("friendRequests").doc(friendRequestId(toUid, uid));
-  const targetProfileRef = db.collection("publicProfiles").doc(toUid);
-  const ownFriendRef = db.collection("users").doc(uid).collection("friends").doc(toUid);
-  const targetFriendRef = db.collection("users").doc(toUid).collection("friends").doc(uid);
-  const ownBlockRef = db.collection("users").doc(uid).collection("blockedUsers").doc(toUid);
-  const targetBlockRef = db.collection("users").doc(toUid).collection("blockedUsers").doc(uid);
-
-  await db.runTransaction(async (transaction) => {
-    const [targetProfile, outgoing, incoming, ownFriend, targetFriend, ownBlock, targetBlock] = await Promise.all([
-      transaction.get(targetProfileRef),
-      transaction.get(outgoingRef),
-      transaction.get(incomingRef),
-      transaction.get(ownFriendRef),
-      transaction.get(targetFriendRef),
-      transaction.get(ownBlockRef),
-      transaction.get(targetBlockRef),
-    ]);
-    if (ownBlock.exists || targetBlock.exists) throw new HttpsError("permission-denied", "لا يمكن إرسال طلب صداقة بسبب إعدادات الحظر.");
-    if (!targetProfile.exists) throw new HttpsError("not-found", "لم نعثر على هذا المستخدم في دليل IMI.");
-    if (ownFriend.exists && ownFriend.get("status") === "accepted"
-      && targetFriend.exists && targetFriend.get("status") === "accepted") {
-      throw new HttpsError("already-exists", "هذا المستخدم موجود بالفعل ضمن أصدقائك.");
-    }
-    if (incoming.exists && incoming.get("status") === "pending") {
-      throw new HttpsError("failed-precondition", "لديك طلب صداقة وارد من هذا المستخدم؛ افتح الطلبات الواردة لقبوله.");
-    }
-    if (outgoing.exists && outgoing.get("status") === "pending") {
-      throw new HttpsError("already-exists", "سبق أن أرسلت طلب صداقة وما زال قيد الانتظار.");
-    }
-    transaction.set(outgoingRef, {
-      fromUid: uid,
-      toUid,
-      status: "pending",
-      createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-  });
-  return { requestId: outgoingRef.id, status: "pending" };
+export const sendFriendRequest = onCall<SendFriendRequestInput>(async request => {
+  if (!request.auth?.uid) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  return runCore(() => coreSendFriendRequest(coreStore, request.auth!.uid, request.data ?? {}));
 });
 
 export const acceptFriendRequest = onCall<FriendRequestActionInput>(async (request) => {

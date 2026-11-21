@@ -1,24 +1,14 @@
-name: IMI Firebase Cloud Deployment
+name: IMI Firebase Rules and Indexes Deployment
 
 on:
-  push:
-    branches:
-      - main
-      - master
-      - 'feature/**'
-  pull_request:
-    branches:
-      - main
-      - master
-      - 'feature/**'
   workflow_dispatch:
     inputs:
       project_id:
-        description: "Exact Firebase project ID (must match the protected environment allowlist)"
+        description: "Exact Firebase project ID from the protected environment allowlist"
         required: true
         type: string
       confirm_deploy:
-        description: "Type DEPLOY to authorize deploying Cloud Functions only (Firebase Rules are not deployed)"
+        description: "Type DEPLOY to request Firestore rules and indexes deployment; leave blank for validation only"
         required: true
         type: string
 
@@ -26,20 +16,33 @@ permissions:
   contents: read
 
 concurrency:
-  group: imi-firebase-production-deploy
+  group: imi-firebase-rules-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  no-deploy:
-    name: Non-deploying safety gate
+  validate:
+    name: Validate workflow and Firebase rules configuration
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Explain the deployment boundary
-        run: echo "::notice::This job never deploys. The separate deploy job requires workflow_dispatch, the exact DEPLOY confirmation, and protected-environment approval."
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go for actionlint
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Lint GitHub Actions workflow
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@latest .github/workflows/firebase-deploy.yml
+
+      - name: Validate Firestore indexes JSON
+        run: node -e "JSON.parse(require('node:fs').readFileSync('firestore.indexes.json', 'utf8')); console.log('firestore.indexes.json: valid JSON')"
 
   deploy:
-    name: Validate, test, and deploy Firebase backend
+    name: Deploy Firestore rules and indexes only
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_deploy == 'DEPLOY' }}
+    needs: validate
     runs-on: ubuntu-latest
     environment: firebase-production
     permissions:
@@ -74,15 +77,12 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Install security test dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Build trusted Functions
+      - name: Install Firebase CLI and security test dependencies
         run: |
-          npm ci --prefix functions --no-audit --no-fund
-          npm run build --prefix functions
+          npm ci --no-audit --no-fund
+          npx --yes firebase-tools@15.37.0 --version
 
-      - name: Run Firestore and Storage rules tests before deployment
+      - name: Run Firestore and Storage rules Emulator tests
         run: npx --yes firebase-tools@15.37.0 emulators:exec --only firestore,storage --project demo-imi-security "npm run test:rules"
 
       - name: Authenticate to Google Cloud using GitHub OIDC
@@ -91,15 +91,13 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
 
-      - name: Deploy Cloud Functions only
+      - name: Deploy Firestore rules and indexes only
         env:
           PROJECT_ID: ${{ inputs.project_id }}
-        run: |
-          npx --yes firebase-tools@15.37.0 deploy --project "$PROJECT_ID" --only functions
+        run: npx --yes firebase-tools@15.37.0 deploy --project "$PROJECT_ID" --only firestore:rules,firestore:indexes
 
       - name: Report deployed target
         if: success()
         env:
           PROJECT_ID: ${{ inputs.project_id }}
-        run: |
-          echo "Cloud Functions deployment completed for explicitly selected project: $PROJECT_ID"
+        run: echo "Firestore rules and indexes deployed for explicitly approved project: $PROJECT_ID"

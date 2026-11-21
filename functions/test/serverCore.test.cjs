@@ -38,6 +38,31 @@ function makeStore(seed = {}, teachers = {}, activeCalls = []) {
   };
 }
 
+test("blockUser commits the block before querying calls created during the request", async () => {
+  const store = makeStore({
+    "publicProfiles/target": {},
+    "calls/call-created-during-block": {
+      callerUid: "actor", calleeUid: "target", status: "accepted",
+    },
+  });
+  const originalGetActiveCalls = store.getActiveCalls;
+  store.getActiveCalls = async (callerUid, calleeUid) => {
+    // Simulate a call becoming visible only after the block transaction commits.
+    if (!store.docs.has("users/actor/blockedUsers/target")) return [];
+    return originalGetActiveCalls(callerUid, calleeUid).concat(
+      callerUid === "actor" && calleeUid === "target"
+        ? [{ id: "call-created-during-block", callerUid, calleeUid }]
+        : [],
+    );
+  };
+
+  const result = await blockUser(store, "actor", { targetUid: "target" });
+  assert.equal(result.status, "blocked");
+  assert.equal(store.docs.get("users/actor/blockedUsers/target").uid, "target");
+  assert.equal(store.docs.get("calls/call-created-during-block").status, "ended");
+  assert.equal(store.docs.get("calls/call-created-during-block").endReason, "blocked");
+});
+
 test("createStatus creates text-only status with exact 28-hour expiry", async () => {
   const store = makeStore();
   const result = await createStatus(store, "user_A", { text: " مرحبا " });

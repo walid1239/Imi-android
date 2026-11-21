@@ -48,22 +48,47 @@ private enum class ImiTab(val label: String) {
 
 @Composable
 fun IMIApp(cloudSessionMessage: String? = null) {
-    var selected by remember { mutableStateOf(ImiTab.Home) }
+    val context = LocalContext.current
+    val firebaseReady = FirebaseApp.getApps(context.applicationContext).isNotEmpty()
+    val auth = remember(firebaseReady) { if (firebaseReady) FirebaseAuth.getInstance() else null }
+    var currentUser by remember(auth) { mutableStateOf(auth?.currentUser) }
+    DisposableEffect(auth) {
+        if (auth == null) {
+            onDispose { }
+        } else {
+            val listener = FirebaseAuth.AuthStateListener { currentUser = it.currentUser }
+            auth.addAuthStateListener(listener)
+            onDispose { auth.removeAuthStateListener(listener) }
+        }
+    }
     IMITheme {
-        Scaffold(
-            containerColor = ImiBackground,
-            bottomBar = { ImiBottomBar(selected) { selected = it } }
-        ) { padding ->
-            Column(Modifier.fillMaxSize().background(ImiBackground).padding(padding)) {
-                if (cloudSessionMessage != null) {
-                    Text(
-                        cloudSessionMessage,
-                        color = if (cloudSessionMessage.startsWith("متصل")) ImiGreen else ImiMuted,
-                        fontSize = 10.sp,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
-                    )
-                }
-                Box(Modifier.weight(1f).fillMaxWidth()) {
+        when {
+            !firebaseReady -> Surface(Modifier.fillMaxSize(), color = ImiBackground) {
+                Text("إعداد Firebase غير موجود. أضف إعداد تطبيق Android الصحيح قبل تسجيل الدخول.", color = ImiMuted, modifier = Modifier.padding(24.dp))
+            }
+            currentUser == null -> LoginScreen()
+            else -> AuthenticatedIMIApp(cloudSessionMessage)
+        }
+    }
+}
+
+@Composable
+private fun AuthenticatedIMIApp(cloudSessionMessage: String?) {
+    var selected by remember { mutableStateOf(ImiTab.Home) }
+    Scaffold(
+        containerColor = ImiBackground,
+        bottomBar = { ImiBottomBar(selected) { selected = it } }
+    ) { padding ->
+        Column(Modifier.fillMaxSize().background(ImiBackground).padding(padding)) {
+            if (cloudSessionMessage != null) {
+                Text(
+                    cloudSessionMessage,
+                    color = ImiMuted,
+                    fontSize = 10.sp,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+                )
+            }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (selected) {
                     ImiTab.Home -> HomeScreen(
                         onChats = { selected = ImiTab.Chats },
@@ -74,7 +99,6 @@ fun IMIApp(cloudSessionMessage: String? = null) {
                     ImiTab.Reels -> ReelsScreen()
                     ImiTab.Academy -> AcademyScreen()
                     ImiTab.Profile -> ProfileScreen()
-                }
                 }
             }
         }

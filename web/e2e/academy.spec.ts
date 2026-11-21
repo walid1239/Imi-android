@@ -18,8 +18,10 @@ async function login(page: Page, address: string) {
 }
 
 test('public academy can be browsed without an account in Arabic RTL', async ({ page }) => {
-  await page.goto('/academy');
-  await expect(page.getByRole('heading', { name: 'تعلّم وتقدّم' })).toBeVisible();
+  const response = await page.goto('/academy');
+  console.log('E2E academy response', response?.status(), page.url(), (await page.locator('body').innerText().catch(() => '')).slice(0, 500));
+  await expect(response).not.toBeNull();
+  await expect(page.getByRole('heading', { name: 'ابدأ من مستواك، وتقدّم خطوة بخطوة' })).toBeVisible();
   await expect(page.locator('main')).toHaveAttribute('dir', 'rtl');
   await expect.poll(async () => {
     const courseVisible = await page.getByRole('heading', { name: 'مهارة التعلم الذاتي' }).isVisible().catch(() => false);

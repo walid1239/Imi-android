@@ -23,7 +23,7 @@
 - [ ] `respondToCall` is idempotent when the call is already ended/rejected.
 - [ ] Firestore/Storage rules have explicit parentheses, metadata ownership/publish checks, valid public-profile photo paths, and regression tests for legacy-chat blocks.
 - [ ] Account deletion is disabled behind a feature flag until complete cross-document, nested-collection, Storage, and cross-user cleanup is implemented and failure-tested. Storage errors must not be swallowed.
-- [ ] App Check is documented as a currently accepted risk, with a concrete later enforcement plan and no false claim that it is enabled.
+- [ ] App Check remains an explicitly accepted interim risk, not an enabled control. Until enforcement, rely on Firebase Auth, strict Firestore/Storage rules, server-side ID-token verification, rate limits, and abuse monitoring; these controls do not replace App Check. Later rollout plan: register the Web and Android apps, integrate App Check providers appropriate to each client, observe metrics in monitoring mode, verify legitimate traffic and emulator behavior, then enforce per Firebase product only after a reviewed test window. Recheck free-tier eligibility and quotas before enabling; never enable a paid provider or upgrade billing. Record the enforcement date and rollback switch.
 - [ ] Academy has no seeded lessons and no unverified-teacher publishing path.
 
 ### Web security and UX

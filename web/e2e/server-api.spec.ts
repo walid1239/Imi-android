@@ -93,7 +93,7 @@ test('friend request accept, reject and remove routes enforce ownership and reci
   const rejectSenderUid = `imi-e2e-d-${suffix}`;
   const requestId = `${senderUid}__${recipientUid}`;
   const rejectRequestId = `${rejectSenderUid}__${recipientUid}`;
-  const base = 'http://127.0.0.1:8080/emulator/v1/projects/demo-imi-playwright/databases/(default)/documents/friendRequests/';
+  const base = 'http://127.0.0.1:8080/v1/projects/demo-imi-playwright/databases/(default)/documents/friendRequests/';
   const seed = (id: string, fromUid: string) => fetch(base + id, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },

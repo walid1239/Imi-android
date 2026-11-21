@@ -509,7 +509,6 @@ private fun ReelsScreen() {
     var selected by remember { mutableStateOf<CloudReel?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var caption by remember { mutableStateOf("") }
     val configured = remember(context) {
         FirebaseApp.getApps(context.applicationContext).isNotEmpty()
             && FirebaseAuth.getInstance().currentUser != null
@@ -555,50 +554,6 @@ private fun ReelsScreen() {
         }
     }
 
-    val picker = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) {
-            val uid = auth?.currentUser?.uid
-            if (uid == null || storage == null || db == null) {
-                error = "يجب تسجيل الدخول إلى Firebase قبل نشر مقطع."
-            } else {
-                scope.launch {
-                    busy = true
-                    error = null
-                    runCatching {
-                        val mime = context.contentResolver.getType(uri)
-                            ?: throw IllegalArgumentException("تعذر تحديد نوع الفيديو")
-                        require(mime in listOf("video/mp4", "video/webm")) { "الصيغة المدعومة حالياً MP4 أو WebM فقط." }
-                        val id = db.collection("reels").document().id
-                        val extension = if (mime == "video/webm") "webm" else "mp4"
-                        val path = "reels/$uid/$id/video.$extension"
-                        val ref = storage.reference.child(path)
-                        val metadata = StorageMetadata.Builder().setContentType(mime).build()
-                        ref.putFile(uri, metadata).await()
-                        val idToken = auth?.currentUser?.getIdToken(false)?.await()?.token
-                            ?: error("جلسة Firebase غير صالحة؛ أعد تسجيل الدخول.")
-                        com.walid.chat.data.repository.ImiApiClient().post(
-                            "/api/v1/reels/submit",
-                            idToken,
-                            JSONObject()
-                                .put("reelId", id)
-                                .put("caption", caption.trim().take(300))
-                                .put("storagePath", path)
-                                .put("contentType", mime)
-                        )
-                        caption = ""
-                        Toast.makeText(context, "تم رفع المقطع وإرساله للمراجعة؛ سيظهر بعد موافقة المشرف.", Toast.LENGTH_LONG).show()
-                    }.onFailure {
-                        error = "فشل رفع المقطع أو نشره: ${it.localizedMessage ?: "خطأ غير معروف"}"
-                    }
-                    busy = false
-                    loadReels()
-                }
-            }
-        }
-    }
-
     val player = remember(selected?.videoUrl) {
         selected?.videoUrl?.let { url ->
             ExoPlayer.Builder(context).build().apply {
@@ -618,21 +573,13 @@ private fun ReelsScreen() {
         PageHeader("Reels", "موجز فيديوهات منشورة على سحابة IMI") {
             IconAction(Icons.Filled.Refresh, "تحديث الموجز") { loadReels() }
         }
-        OutlinedTextField(
-            value = caption,
-            onValueChange = { caption = it.take(300) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text("وصف المقطع (اختياري)") }
-        )
-        Button(
-            onClick = { picker.launch(arrayOf("video/mp4", "video/webm")) },
-            enabled = configured && !busy,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Filled.CloudUpload, null)
-            Spacer(Modifier.width(8.dp))
-            Text("نشر فيديو من الهاتف إلى السحابة")
+        Surface(color = ImiSurface, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+            Text(
+                "رفع فيديوهات Reels متوقف مؤقتاً؛ خدمة Firebase Storage غير مؤكدة على الخطة المجانية. سيُعاد تفعيل الرفع بعد تأكيد المالك توفر Storage واختباره.",
+                color = ImiMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(14.dp)
+            )
         }
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         error?.let { Text(it, color = ImiMuted, fontSize = 12.sp) }

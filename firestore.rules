@@ -483,7 +483,7 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
-    // Mock sessions are private to their teacher/admin; real scheduled/live sessions can be public.
+    // Published teacher content is readable publicly; drafts remain restricted to the owner and admins.
     match /teacherContent/{contentId} {
       allow read: if ('published' in resource.data && resource.data.published == true)
         || (signedIn() && (isAdmin() || resource.data.ownerUid == request.auth.uid));

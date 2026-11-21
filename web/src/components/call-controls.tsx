@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { User } from 'firebase/auth';
 import {
-  addDoc, collection, doc, getDoc, limit, onSnapshot, query, updateDoc, where, Timestamp
+  addDoc, collection, doc, limit, onSnapshot, query, updateDoc, where, Timestamp
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '@/lib/firebase/client';

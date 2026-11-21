@@ -1,67 +1,60 @@
 # IMI handoff — 2026-11-21
 
-## Scope and safety
+## Repository and safety boundary
 
 - Repository: `walid1239/Imi-android`
-- Working branch: `feature/imi-web-foundation`
-- Review baseline: `b7394dc15ac99e5274e3729c649b0bab6a0c2f5d`
-- Latest application/workflow SHA before this handoff refresh: `f46b2db0e52eb19e9c11b6dc170e7730ac90bc88`
+- Branch: `feature/imi-web-foundation`
+- Verified HEAD at this handoff: `94b7d8acd4edeaf2ef8efea2851cb113e59899f2`
 - Firebase project: `imi-indroid`
-- PR #2 remains open and unmerged. No Production deployment, Firebase Console mutation, Firebase rules/index deployment, billing-plan change, secret disclosure, or paid-service provisioning was performed.
+- PR #2 remains open and unmerged.
+- No Production deployment, PR merge, Firebase Console mutation, rules/index deployment, Blaze upgrade, payment card, paid service, or secret publication was performed.
 
-Binding decisions: Firebase Spark only; no Cloud Functions; trusted server logic under Next.js `/api/v1`; Cloudflare first only after real Firebase Admin `verifyIdToken` plus Firestore-write proof; otherwise Vercel Hobby preview only subject to plan eligibility/commercial-use restrictions. Firebase is the default Storage adapter, but dependent features remain disabled until Spark eligibility is confirmed. Do not switch to Supabase without explicit owner confirmation. Phone login remains disabled by default.
+Owner constraints remain binding: Firebase Spark only; no Cloud Functions usage; Next.js `/api/v1` is the intended trusted server layer; do not switch Storage to Supabase without explicit approval; keep phone login disabled; keep account deletion disabled until its cleanup is fully verified.
 
-## Changes after review baseline
+## Work verified in the current source
 
-| Change | Commit SHA | Actual validation/evidence |
+| Area | Current source state | Evidence / limitation |
 |---|---|---|
-| Added Reels composite index (`status ASCENDING, createdAt DESCENDING`). | `5113260fc26736b83788e3f3cbf9a58622beb4f5` | Local Node JSON parse + index-shape assertion passed against a local copy of the authored index structure. Emulator/index deployment not run. |
-| Replaced deployment workflow with push/PR validation and separate manual protected deploy concurrency; deploy job requires `workflow_dispatch` and exact `DEPLOY`, protected `firebase-production`, and deploys Firestore rules/indexes only. | `d43a68259215cd5546d34288980af85fe8fd0b06` | Local PyYAML syntax parse passed on a local copy. Current CI actionlint and Emulator steps are running; no deployment run/command occurred. Earlier intermediate workflow revisions had YAML syntax errors; the current revision corrects the identified errors. |
-| Added CSP, X-Frame-Options, Referrer-Policy, X-Content-Type-Options. | `98313f9d2161f8418cd0dc483103e2e350cc4710` | Browser CSP compatibility not manually tested; Web CI pending. |
-| Removed Android CAMERA and RECORD_AUDIO permissions and disabled cleartext traffic. | `18a9dc4a962c0291ccab8290774b7ee0a5802a6e` | Local XML parse/assertions passed against a local copy: camera/microphone permissions absent, `usesCleartextTraffic=false`. Android CI pending. |
-| Added explicit Arabic UI statement that Android calls are not ready. | `10393490d0e3860e644f974c29ea55247eb36e0e` | Source edit only; Android CI pending. |
-| Removed stale guest-login “(بدون OTP)” wording. | `246984fecee2fadf242572d41a27071d11efc6cc` | Web CI pending. |
-| Deleted unused Firebase SMS OTP form. | `f1db535ebd59b06adffcb9bb9b50d018b6383d66` | Web CI pending. |
-| Rewrote release gate for Spark-only/no-Functions architecture and full acceptance checklist. | `e1f296196c0c77d020816c01cd07e40efa09787d` | Documentation-only. |
-| Documented interim App Check risk and later monitor-then-enforce plan. | `53a90b114dbce858889fd2e866689bda3916f0f8` | Documentation-only; App Check is not enabled. |
-| Corrected stale teacherContent visibility comment. | `27ed62d95da4735ee07757e473f835d7ca78eb6c` | Comment-only source change; rules Emulator test pending. |
-| Added an owner-scoped Storage-path check for `publicProfiles/{uid}.photoPath` and an Emulator regression test rejecting external URLs and cross-user writes. | `265a8b6684ec9f8d6ab6e5572f35d645cd352f18` (rules), `f46b2db0e52eb19e9c11b6dc170e7730ac90bc88` (test) | Test added; latest Firestore/Storage Emulator CI is in progress, so pass/fail is not yet known. |
+| Android Functions removal | Android source uses `ImiApiClient` for status and direct-conversation API calls; no Android Firebase Functions dependency remains in `app/build.gradle.kts`. | Inspected `IMIApp.kt`, `FirebaseChatRepository.kt`, `ImiApiClient.kt`, and Gradle dependencies at HEAD. |
+| Android API transport | HTTPS-only base URL from `IMI_API_BASE_URL` BuildConfig; Firebase ID token Bearer header; JSON POST; Arabic error mapping. | `ImiApiHttpTest.kt` covers request construction, missing token/non-HTTPS rejection, successful envelope, 401/429 mapping, and Arabic server errors. Test execution is part of Android CI and is not yet confirmed green. |
+| Android Reels | Video upload path is disabled with an Arabic message pending owner confirmation of Spark Storage availability. | Inspected Android Reels UI at HEAD. Do not re-enable based on assumption. |
+| Web Firebase Functions removal | Web Firebase client no longer imports or initializes Firebase Functions; call controls are intentionally disabled with an Arabic explanation. | Source audit of `web/src` found no `httpsCallable`, `getFunctions(`, or Functions emulator binding. |
+| Rate limiting | API rate limits are stored in one hashed per-user/per-operation document; multiple windows are in one transaction. | `web/scripts/rate-limit.test.mjs` covers configured threshold, rejection, window reset, concurrency, and no partial counter increment. `docs/free-tier-rate-limits.md` documents the 20,000/day Spark write budget and counter overhead. Firestore rules deny client access to `apiRateLimits`. |
+| Account deletion | Next.js endpoint exists but is guarded by `IMI_ACCOUNT_DELETION_ENABLED !== "true"`; default response is 503. | Do not enable. Cleanup implementation has some target collections/paths, but comprehensive partial-failure and emulator proof remain outstanding. |
+| Security rules | Current CI rules job and separate protected rules/index workflow have passed validation; deployment job was skipped. | No rules or indexes were deployed to the real Firebase project. Storage rule emulator coverage is not evidence of real-project deployment. |
+| Calls | Web call controls display “المكالمات غير جاهزة حالياً”; no call request or media permission is issued. | Safe temporary disablement, not a completed call implementation. |
+| Signing/minification | Release minification/resource shrinking and environment-only signing configuration exist in Gradle. | No signed release APK has been built or tested. |
+| Firebase client fallback | Missing public Firebase env uses an inert build-only Firebase configuration for prerender/CI. | This is not a real Firebase configuration and must not be mistaken for a usable production client. User-facing missing-config behavior still needs full E2E verification. |
 
-## CI state on latest application SHA
+## CI evidence at HEAD
 
-Latest application SHA: `f46b2db0e52eb19e9c11b6dc170e7730ac90bc88`.
+All run IDs below are tied to `94b7d8acd4edeaf2ef8efea2851cb113e59899f2`.
 
-- Firebase rules workflow: [Run 44931100502](https://github.com/walid1239/Imi-android/actions/runs/44931100502) — **success**. actionlint, Firestore index JSON validation, dependency installation, and Firestore/Storage Emulator rules tests all passed; protected deploy job was skipped.
-- Web PR CI: [Run 44931100270](https://github.com/walid1239/Imi-android/actions/runs/44931100270) — cancelled by a newer run; not a pass.
-- Android PR CI: [Run 44931100283](https://github.com/walid1239/Imi-android/actions/runs/44931100283) — rules job passed; Android build job was cancelled before unit tests/assembly; not a full pass.
-- Duplicate push Web CI: [Run 44931094650](https://github.com/walid1239/Imi-android/actions/runs/44931094650) — Web typecheck, build, health smoke, Functions unit tests, rules tests, and seed verification passed; Playwright E2E was still in progress at last check.
-- Duplicate push Android CI: [Run 44931094578](https://github.com/walid1239/Imi-android/actions/runs/44931094578) — Firebase security rules tests passed; Android build was still in progress before unit tests/assembly at last check.
-- No run yet proves both Web E2E and Android build/emulator complete green on the final SHA.
-- No Firebase deploy job was executed; no rules/index deployment occurred.
+- Web CI: [Run 44954068846](https://github.com/walid1239/Imi-android/actions/runs/44954068846) — at last API observation the workflow was still `in_progress`. The `web`, `functions`, `rules`, and Coturn configuration jobs were `success`; the Playwright emulator E2E job was still `in_progress`. This is not a full Web CI pass.
+- Android CI: [Run 44954068814](https://github.com/walid1239/Imi-android/actions/runs/44954068814) — at last API observation the workflow was still `in_progress`. Firebase security rules tests passed; Android unit tests/build and emulator verification had not yet completed. This is not a full Android CI pass.
+- Firebase rules/index workflow: [Run 44954068797](https://github.com/walid1239/Imi-android/actions/runs/44954068797) — `success`; the protected deploy job was skipped. No deployment occurred.
 
-## Unresolved release blockers
+CI status can change after this document is committed. Re-query the run IDs before asserting a final result.
 
-1. Android still calls Cloud Functions for `createStatus` and `submitReel` in `app/src/main/java/com/walid/chat/ui/IMIApp.kt`. `FirebaseChatRepository.kt` still calls `createOrGetDirectConversation`. The Android Firebase Functions dependency is still present.
-2. The Web Firebase client still imports/exports Firebase Functions and initializes an inert localhost fallback when Firebase configuration is missing.
-3. `imi-api.ts` persists rate-limit counters in Firestore collection `apiRateLimits` using transactions, but no dedicated threshold/concurrency/window-reset test has been verified.
-4. Reels API route and server-side moderation/metadata flow are not implemented. Reels media upload is Storage-dependent and must remain disabled until the Spark/free-storage question is resolved.
-5. `respondToCall` idempotency is not fixed. Storage rule grouping, Firestore metadata binding for Reels/teacher-verification, and legacy-chat block regression remain unverified. The public profile `photoPath` guard is implemented but its Emulator test is pending.
-6. Account deletion is incomplete and must remain disabled until all nested/cross-user documents, Storage paths, partial-failure handling, and tests are complete.
-7. Android `users/{uid}` `updatedAt` write audit, WhatsApp package visibility/detection, and Release minification/ProGuard/environment-only signing remain incomplete.
-8. Firebase-not-configured screen and complete empty Academy hierarchy/verified-teacher publishing restrictions remain incomplete.
-9. WhatsApp inbound challenge, Meta signature verification, sender matching, single-use six-digit code, UID derivation, Custom Token, and provider adapters are not implemented. Keep `PHONE_LOGIN_ENABLED=false`.
-10. Cloudflare Firebase Admin compatibility has not been proven. No Cloudflare preview has been deployed. Existing Vercel previews are not evidence of Cloudflare compatibility or commercial plan eligibility.
-11. Latest-head CI is not green yet. No real Firebase Auth/Firestore test, two-device/two-network call acceptance, production rules deployment, or signed Release APK test has been completed.
+## Remaining blockers — do not mark release-ready
+
+1. Confirm the Web Playwright E2E and Android unit/build/emulator CI jobs finish green on the final HEAD; fix any failures, then re-run both.
+2. Verify the Firebase-not-configured screen in a real browser and confirm Google/Email Auth with real project configuration; emulator-only E2E does not prove production provider configuration.
+3. Complete empty Academy hierarchy (levels/tracks/subjects/units) and verified-teacher-only content publishing; ensure no lessons are fabricated and empty states are explicit.
+4. Finish Storage rule grouping/metadata binding and Emulator tests for teacher-verification and teacher-content paths. Storage availability on Spark remains unconfirmed; keep dependent uploads disabled.
+5. Complete account deletion: all nested/cross-user documents, blocked/friends records, Storage paths, partial-failure handling, and emulator tests. Keep `IMI_ACCOUNT_DELETION_ENABLED` false.
+6. Audit every Android `users/{uid}` write for `updatedAt`; confirm WhatsApp package visibility only if that feature is actually implemented.
+7. Cloudflare Firebase Admin `verifyIdToken` plus Firestore write proof has not been completed. Do not claim Cloudflare compatibility. Any Vercel preview must remain within actual Hobby plan eligibility and its terms.
+8. WhatsApp inbound challenge, Meta signature verification, sender matching, six-digit single-use code, attempt limit, Custom Token, and provider adapter are not complete. Keep `PHONE_LOGIN_ENABLED=false`.
+9. No two-device/two-network call acceptance, signed Release APK acceptance, production Auth/Firestore acceptance, or production rules deployment has been completed.
+10. Review CSP against real Google and Email Auth in a browser; emulator E2E alone does not settle real OAuth iframe/connect-src behavior.
+11. Review Firestore Spark write/read/storage quota consumption under realistic use before enabling higher-volume features.
 
 ## Free-tier and deployment controls
 
-- No Blaze, payment card, paid services, Cloud Functions, or paid WhatsApp templates/outbound messages.
-- Do not deploy Firestore rules/indexes until the owner separately approves the protected manual workflow.
-- Do not deploy Production or merge PR #2.
-- Stop/disable features before free quotas are reached. No automatic plan upgrade or provider switch.
-- Keep Storage-dependent uploads disabled if Firebase Storage is not usable on the approved Spark-only plan. Do not switch to Supabase without explicit owner confirmation.
-- App Check is not enabled; the interim risk and later rollout plan are documented in `docs/RELEASE_GATE.md`.
-
-## Next steps
-
-Finish the remaining checklist items in small commits. For each, record the exact commit SHA, exact test command or CI Run ID, observed result, and remaining limitations. The branch is not release-ready until every required gate has direct passing evidence.
+- No Blaze, billing card, paid service, Cloud Functions invocation, or paid WhatsApp template/outbound message.
+- No production deployment, PR merge, Firebase Console mutation, or rules/index deployment without separate owner approval.
+- Keep Storage-dependent features disabled until Spark availability and rules are confirmed.
+- Keep calls disabled until the server API and media flow are implemented and tested.
+- Keep account deletion disabled until all cleanup paths and failure cases are verified.
+- Do not claim “ready” from partial CI jobs; require green Web E2E and Android tests on the same final SHA.

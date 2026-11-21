@@ -60,6 +60,31 @@ test('Next.js server routes reject missing and forged tokens without echoing cre
   expect(body).not.toContain('private_key');
 });
 
+test('Academy admin route rejects non-admins and records curriculum changes server-side', async () => {
+  const suffix = fixtureSuffix(test.info().project.name, test.info().retry);
+  const learnerToken = await idToken(`e2e-b-${suffix}@imi.test`);
+  const denied = await post('/api/v1/academy/admin', {
+    action: 'createCurriculumNode', nodeId: `api-denied-${suffix}`, type: 'level',
+    nameAr: 'غير مصرح', nameFr: '', language: 'ar', order: 900,
+  }, learnerToken);
+  expect(denied.status).toBe(403);
+
+  const adminToken = await idToken(`e2e-admin-${suffix}@imi.test`);
+  const nodeId = `api-route-test-${suffix}`;
+  const created = await post('/api/v1/academy/admin', {
+    action: 'createCurriculumNode', nodeId, parentId: null, type: 'level',
+    nameAr: 'عنصر اختبار API', nameFr: '', language: 'ar', order: 900,
+  }, adminToken);
+  expect(created.status).toBe(200);
+  expect((await created.json()).data).toMatchObject({ nodeId, status: 'hidden', needsReview: true });
+
+  const approved = await post('/api/v1/academy/admin', {
+    action: 'reviewCurriculumNode', nodeId, approved: true,
+  }, adminToken);
+  expect(approved.status).toBe(200);
+  expect((await approved.json()).data).toMatchObject({ status: 'published', needsReview: false });
+});
+
 test('authenticated Next.js routes create a status, friend request and direct conversation in Emulator', async () => {
   const suffix = fixtureSuffix(test.info().project.name, test.info().retry);
   const token = await idToken(`e2e-b-${suffix}@imi.test`);

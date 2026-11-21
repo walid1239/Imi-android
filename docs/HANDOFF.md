@@ -31,12 +31,12 @@ Binding decisions: Firebase Spark only; no Cloud Functions; trusted server logic
 
 Latest application SHA: `f46b2db0e52eb19e9c11b6dc170e7730ac90bc88`.
 
-- Firebase rules workflow: [Run 44931100502](https://github.com/walid1239/Imi-android/actions/runs/44931100502) — in progress.
-- Web PR CI: [Run 44931100270](https://github.com/walid1239/Imi-android/actions/runs/44931100270) — in progress.
-- Android PR CI: [Run 44931100283](https://github.com/walid1239/Imi-android/actions/runs/44931100283) — in progress.
-- Duplicate push Web CI: [Run 44931094650](https://github.com/walid1239/Imi-android/actions/runs/44931094650) — in progress.
-- Duplicate push Android CI: [Run 44931094578](https://github.com/walid1239/Imi-android/actions/runs/44931094578) — in progress.
-- No run above has a completed green conclusion yet.
+- Firebase rules workflow: [Run 44931100502](https://github.com/walid1239/Imi-android/actions/runs/44931100502) — **success**. actionlint, Firestore index JSON validation, dependency installation, and Firestore/Storage Emulator rules tests all passed; protected deploy job was skipped.
+- Web PR CI: [Run 44931100270](https://github.com/walid1239/Imi-android/actions/runs/44931100270) — cancelled by a newer run; not a pass.
+- Android PR CI: [Run 44931100283](https://github.com/walid1239/Imi-android/actions/runs/44931100283) — rules job passed; Android build job was cancelled before unit tests/assembly; not a full pass.
+- Duplicate push Web CI: [Run 44931094650](https://github.com/walid1239/Imi-android/actions/runs/44931094650) — Web typecheck, build, health smoke, Functions unit tests, rules tests, and seed verification passed; Playwright E2E was still in progress at last check.
+- Duplicate push Android CI: [Run 44931094578](https://github.com/walid1239/Imi-android/actions/runs/44931094578) — Firebase security rules tests passed; Android build was still in progress before unit tests/assembly at last check.
+- No run yet proves both Web E2E and Android build/emulator complete green on the final SHA.
 - No Firebase deploy job was executed; no rules/index deployment occurred.
 
 ## Unresolved release blockers

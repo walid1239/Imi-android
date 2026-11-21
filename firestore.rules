@@ -207,6 +207,9 @@ service cloud.firestore {
         && request.resource.data.uid == uid
         && request.resource.data.displayName is string
         && request.resource.data.displayName.size() <= 60
+        && (!('photoPath' in request.resource.data)
+          || (request.resource.data.photoPath is string
+            && request.resource.data.photoPath.matches('users/' + uid + '/avatars/.*')))
         && request.resource.data.updatedAt == request.time;
       allow delete: if isSelf(uid);
     }

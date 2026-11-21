@@ -76,10 +76,12 @@ export default function AcademyPanel({ user }: { user: User | null }) {
     }, reason => setError(reason.message));
   }, [courseId]);
 
+  const uid = user?.uid;
+
   useEffect(() => {
     setEnrollment(null);
     if (!courseId) return;
-    if (!user) {
+    if (!uid) {
       try {
         const saved = localStorage.getItem(`imi-academy-progress:${courseId}`);
         const ids: unknown = saved ? JSON.parse(saved) : [];
@@ -89,12 +91,12 @@ export default function AcademyPanel({ user }: { user: User | null }) {
       }
       return;
     }
-    return onSnapshot(doc(db, 'users', user.uid, 'enrollments', courseId), snapshot => {
+    return onSnapshot(doc(db, 'users', uid, 'enrollments', courseId), snapshot => {
       if (!snapshot.exists()) { setEnrollment(null); return; }
       const ids = snapshot.get('completedLessonIds');
       setEnrollment({ completedLessonIds: Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [] });
     }, reason => setError(reason.message));
-  }, [courseId, user?.uid]);
+  }, [courseId, uid]);
 
   async function runAcademyApi(path: 'enroll' | 'complete-lesson', payload: Record<string, string>, success: string) {
     if (!user) return;

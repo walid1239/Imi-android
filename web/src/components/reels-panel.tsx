@@ -1,6 +1,9 @@
 'use client';
 
-export default function ReelsPanel() {
+import { User } from 'firebase/auth';
+
+export default function ReelsPanel({ user }: { user: User }) {
+  void user;
   return <section dir="rtl" className="rounded-2xl border border-white/10 bg-slate-950/60 p-6">
     <h2 className="text-xl font-bold">مقاطع IMI</h2>
     <p className="mt-3 text-sm leading-7 text-slate-300">ميزة Reels ورفع الفيديوهات مؤجلة في المرحلة المجانية الأولى، حتى نعتمد مزود تخزين متوافقاً مع شروط الاستخدام المجاني.</p>

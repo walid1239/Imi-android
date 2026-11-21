@@ -43,7 +43,11 @@ function assertOrigin(request: Request): void {
   const origin = request.headers.get("origin");
   if (!origin) return; // Native clients do not send Origin; bearer auth remains mandatory.
   const url = new URL(request.url);
-  if (origin !== url.origin) {
+  const host = request.headers.get("host");
+  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const protocol = forwardedProto || url.protocol.slice(0, -1);
+  const requestOrigin = host ? `${protocol}://${host}` : url.origin;
+  if (origin !== requestOrigin && origin !== url.origin) {
     throw new Error("ORIGIN_REJECTED");
   }
 }

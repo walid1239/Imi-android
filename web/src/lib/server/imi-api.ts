@@ -317,28 +317,47 @@ async function academyAdminAction(app: App, uid: string, body: Record<string, un
     const desiredStatus = approved ? "approved" : "rejected";
     const note = title(body.note, "ملاحظة المراجعة", 500, true);
     const applicationRef = firestore.collection("teacherApplications").doc(targetUid);
-    const outboxRef = firestore.collection("teacherClaimsOutbox").doc(`route-${targetUid}-${Date.now()}`);
-    const auditRef = firestore.collection("moderationAudit").doc();
-    await firestore.runTransaction(async tx => {
+    const result = await firestore.runTransaction(async tx => {
       const application = await tx.get(applicationRef);
       if (!application.exists) throw new CoreError("not-found", "طلب الأستاذ غير موجود.");
-      if (application.get("status") === desiredStatus) return;
-      if (application.get("status") !== "pending") throw new CoreError("failed-precondition", "تمت مراجعة هذا الطلب بقرار مختلف أو لم يعد قيد الانتظار.");
-      tx.update(applicationRef, { status: desiredStatus, reviewedBy: uid, reviewedAt: FieldValue.serverTimestamp(),
-        reviewNote: note, reviewOperationId: outboxRef.id });
-      tx.create(auditRef, { actorUid: uid, targetUid, action: approved ? "teacher_application_approved" : "teacher_application_rejected",
-        note, operationId: outboxRef.id, createdAt: FieldValue.serverTimestamp() });
-      tx.create(outboxRef, { operationId: outboxRef.id, targetUid, desiredTeacher: approved,
-        status: "pending", attempts: 0, actorUid: uid, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+      if (application.get("status") === desiredStatus) {
+        const existingOperation = application.get("reviewOperationId");
+        const operationId = typeof existingOperation === "string" && existingOperation
+          ? existingOperation
+          : `route-teacher-${targetUid}-${application.updateTime?.toMillis() ?? 0}`;
+        return { operationId, idempotent: true };
+      }
+      if (application.get("status") !== "pending") {
+        throw new CoreError("failed-precondition", "تمت مراجعة هذا الطلب بقرار مختلف أو لم يعد قيد الانتظار.");
+      }
+      const operationId = `route-teacher-${targetUid}-${application.updateTime?.toMillis() ?? Date.now()}`;
+      const outboxRef = firestore.collection("teacherClaimsOutbox").doc(operationId);
+      const auditRef = firestore.collection("moderationAudit").doc(operationId);
+      tx.update(applicationRef, {
+        status: desiredStatus, reviewedBy: uid, reviewedAt: FieldValue.serverTimestamp(),
+        reviewNote: note, reviewOperationId: operationId,
+      });
+      tx.create(auditRef, {
+        actorUid: uid, targetUid,
+        action: approved ? "teacher_application_approved" : "teacher_application_rejected",
+        note, operationId, createdAt: FieldValue.serverTimestamp(),
+      });
+      tx.create(outboxRef, {
+        operationId, targetUid, desiredTeacher: approved, status: "pending",
+        attempts: 0, actorUid: uid, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+      });
+      return { operationId, idempotent: false };
     });
     const target = await getAuth(app).getUser(targetUid);
     const claims = { ...(target.customClaims ?? {}) };
     if (approved) { claims.teacher = true; claims.teacherVerified = true; }
     else { delete claims.teacher; delete claims.teacherVerified; }
     await getAuth(app).setCustomUserClaims(targetUid, claims);
-    await outboxRef.set({ status: "applied", appliedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
-      attempts: FieldValue.increment(1) }, { merge: true });
-    return { status: desiredStatus, claimsSync: "applied" };
+    await firestore.collection("teacherClaimsOutbox").doc(result.operationId).set({
+      status: "applied", appliedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+      attempts: FieldValue.increment(1),
+    }, { merge: true });
+    return { status: desiredStatus, claimsSync: "applied", idempotent: result.idempotent };
   }
 
   throw new CoreError("invalid-argument", "عملية إدارة الأكاديمية غير معروفة.");

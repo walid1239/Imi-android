@@ -4,8 +4,8 @@ import { FormEvent, useEffect, useState } from 'react';
 import { getIdTokenResult, User } from 'firebase/auth';
 import { collection, doc, limit, onSnapshot, query, where, Timestamp } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
-import { httpsCallable } from 'firebase/functions';
-import { db, functions, storage } from '@/lib/firebase/client';
+import { postAuthenticated } from '@/lib/api';
+import { db, storage } from '@/lib/firebase/client';
 
 type Reel = { id: string; ownerUid: string; caption: string; videoUrl: string; createdAt: Timestamp | null };
 
@@ -77,7 +77,7 @@ export default function ReelsPanel({ user }: { user: User }) {
     if (!isAdmin || reviewingId) return;
     setReviewingId(reelId); setError('');
     try {
-      await httpsCallable(functions, 'reviewReel')({ reelId, decision });
+      await postAuthenticated(user, '/api/v1/reels/review', { reelId, decision });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'تعذرت مراجعة المقطع.');
     } finally {
@@ -103,8 +103,7 @@ export default function ReelsPanel({ user }: { user: User }) {
           () => resolve()
         );
       });
-      const submit = httpsCallable(functions, 'submitReel');
-      await submit({
+      await postAuthenticated(user, '/api/v1/reels/submit', {
         reelId: id,
         caption: caption.trim().slice(0, 300),
         storagePath: path,

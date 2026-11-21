@@ -50,12 +50,12 @@
 | `rejectFriendRequest` | `POST /api/v1/friends/requests/reject` | Verify recipient and update only a pending request; repeat rejection is idempotent. |
 | `removeFriend` | `POST /api/v1/friends/remove` | Verify reciprocal accepted edges, delete both, and mark accepted request records removed transactionally. |
 | `createOrGetDirectConversation` | `POST /api/v1/conversations/direct` | Preserve deterministic ID, profile existence, mutual-block and teacher/student restrictions. |
-| `createGroupConversation`, `addGroupParticipants` | Later route handlers | Preserve role checks, membership caps and block checks. |
-| `blockUser`, `unblockUser` | Later route handlers | Keep server-authoritative cleanup of friendships, requests and calls. |
-| `enrollInCourse`, `completeCourseLesson`, `reportAcademyLesson` | Later route handlers | Preserve published-content and enrollment checks. |
-| `createCourse`, `createCourseLesson`, `publishCourse`, `publishCourseLesson`, `reviewCurriculumNode`, `reviewContentReport` | Admin-only routes or deferred | Require verified server-side admin claim; no client-controlled role assignment. |
+| `createGroupConversation`, `addGroupParticipants` | `POST /api/v1/conversations/groups` and `/groups/members` | Preserve role checks, membership caps, friendship and bilateral block checks transactionally. |
+| `blockUser`, `unblockUser` | `POST /api/v1/users/block` and `/users/unblock` | Server-authoritative cleanup of friendships, requests, direct conversations and active calls. |
+| `enrollInCourse`, `completeCourseLesson`, `reportAcademyLesson` | `POST /api/v1/academy/enroll`, `/complete-lesson`, `/report-lesson` | Verify published content, enrollment and report limits on the server. |
+| `createCourse`, `createCourseLesson`, `publishCourse`, `publishCourseLesson`, `reviewCurriculumNode`, `reviewContentReport` | `POST /api/v1/academy/admin` | Admin claim checked on the server; curriculum create/import/reorder/merge/review and content-report moderation are server-side. |
 | `submitReel`, `reviewReel` | Defer; submit route only after external media storage approved | Spark Storage unavailable; do not accept public media metadata without a verified object and moderation state. |
-| `submitTeacherApplication`, `reviewTeacherApplication`, `saveTeacherProfile`, `scheduleTeacherLiveSession`, `createTeacherContent`, `reviewTeacherContent` | Later route handlers | Teacher/admin permissions remain server-owned. Teacher content upload waits for storage provider. |
+| `reviewTeacherApplication`, `reviewTeacherContent` | `POST /api/v1/academy/admin` | Admin-only review and teacher-claim synchronization are server-side. |\n| `submitTeacherApplication`, `saveTeacherProfile`, `scheduleTeacherLiveSession`, `createTeacherContent` | Deferred / UI paused | Teacher workflows remain disabled until their trusted routes and no-media behavior are completed. |
 | `applyTeacherClaimsOutbox` | Explicit admin workflow / later route | Custom claims must only be set by privileged server code after reviewing the outbox and verifying authorization. |
 | `reconcileTeacherClaims` | Manual admin maintenance initially; scheduled GitHub Action only if safe/idempotent | GitHub schedule is not guaranteed exact timing; repository secrets must never contain service-account JSON unless owner separately approves that risk. |
 | `notifyConversationMessage`, `notifyIncomingCall` | Later outbox + route/worker | Firestore triggers are not available in Next.js; client-side push would be forgeable. FCM itself is no-cost, but reliable event processing needs a trusted worker. |
@@ -66,11 +66,11 @@
 ## MVP boundaries
 
 - Keep Firebase Auth and Firestore on Spark.
-- Initial proof of concept covers only text status creation, friend-request creation and direct-conversation creation.
+- Current branch also routes group/block lifecycle, Academy enrollment/completion/reporting and admin Academy moderation through authenticated Next.js handlers; text-only UI remains the intended Spark boundary.
 - No media uploads or reels until a separate provider is selected and its free quota, no-card requirement, privacy and abuse controls are verified.
 - STUN only. No TURN server, no promise of reliable calls across NAT/mobile networks.
 - Teacher live sessions use an official YouTube embed; this is not an IMI-originated live broadcast.
-- Defer push-trigger automation, automated expiry scheduler, teacher/admin workflows and account deletion until separately migrated and tested.
+- Defer push-trigger automation, automated expiry scheduler, teacher submission/profile/live-session workflows, and account deletion until separately migrated and tested.
 
 ## Hosting and rate limits
 

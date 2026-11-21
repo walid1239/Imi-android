@@ -15,8 +15,16 @@ export default function TeacherStudioPanel(){
  useEffect(()=>onAuthStateChanged(auth,async u=>{setUser(u);if(!u){setVerified(false);return;}try{const token=await getIdTokenResult(u,true);setVerified(token.claims.teacherVerified===true);}catch{setVerified(false);}}),[]);
  useEffect(()=>{if(!user||!verified||!firebaseConfigured)return;getDoc(doc(db,'teacherProfiles',user.uid)).then(s=>setProfileComplete(s.exists()&&s.get('profileComplete')===true&&s.get('published')===true)).catch(()=>setProfileComplete(false));},[user,verified]);
  useEffect(()=>{if(!firebaseConfigured)return;getDocs(query(collection(db,'curriculumNodes'),where('status','==','published'))).then(s=>{const rows=s.docs.map(d=>({id:d.id,type:d.get('type'),nameAr:String(d.get('nameAr')||'')}));setLevels(rows.filter(x=>x.type==='level'));setSubjects(rows.filter(x=>x.type==='subject'));}).catch(()=>setError('تعذر تحميل فهرس الأكاديمية.'));},[]);
- async function saveProfile(e:React.FormEvent){e.preventDefault();setError('حفظ صفحة الأستاذ متوقف مؤقتاً حتى نقل العملية إلى IMI API؛ لم يتم رفع أي صورة.');setNotice('');return;if(!user||!verified){setError('يجب تسجيل الدخول وتوثيق حساب الأستاذ أولاً.');return;}if(!photo||photo.size>5*1024*1024||!['image/jpeg','image/png','image/webp'].includes(photo.type)){setError('اختر صورة JPEG/PNG/WebP لا تتجاوز 5 ميغابايت.');return;}if(levelIds.length===0||subjectIds.length===0||!contentAgreement||!childSafetyAgreement){setError('اختر مستوى ومادة واقبل اتفاقيتي المحتوى وحماية القاصرين.');return;}setBusy(true);try{const path='teachers/'+user.uid+'/avatar/'+Date.now()+'-'+photo.name.replace(/[^a-zA-Z0-9._-]/g,'_');await uploadBytes(ref(storage,path),photo,{contentType:photo.type});throw new Error('هذه العملية غير متاحة حتى نقلها إلى IMI API.');setProfileComplete(true);setNotice('اكتملت صفحة الأستاذ ونُشرت بعد التحقق السيرفري من الشروط.');}catch(e){setError(e instanceof Error?e.message:'تعذر حفظ صفحة الأستاذ.');}finally{setBusy(false);}}
- async function schedule(e:React.FormEvent){e.preventDefault();setError('جدولة الجلسات متوقفة مؤقتاً حتى نقل العملية إلى IMI API؛ لم يُرسل أي طلب.');setNotice('');return;try{throw new Error('هذه العملية غير متاحة حتى نقلها إلى IMI API.');setNotice('تم إنشاء موعد تجريبي فقط ('+data.status+'). البث الحقيقي غير مفعّل ولا يوجد رابط انضمام.');setTitle('');}catch(e){setError(e instanceof Error?e.message:'تعذرت جدولة الموعد.');}finally{setBusy(false);}}
+ async function saveProfile(e:React.FormEvent){
+  e.preventDefault();
+  setError('حفظ صفحة الأستاذ متوقف مؤقتاً حتى نقل العملية إلى IMI API؛ لم يتم رفع أي صورة.');
+  setNotice('');
+ }
+ async function schedule(e:React.FormEvent){
+  e.preventDefault();
+  setError('جدولة الجلسات متوقفة مؤقتاً حتى نقل العملية إلى IMI API؛ لم يُرسل أي طلب.');
+  setNotice('');
+ }
  if(!firebaseConfigured)return <main dir="rtl" className="mx-auto max-w-3xl p-6 text-amber-200">إعداد Firebase غير مكتمل.</main>;
  if(!user)return <main dir="rtl" className="mx-auto max-w-3xl p-6 text-slate-300">سجّل الدخول للوصول إلى استوديو الأستاذ.</main>;
  if(!verified)return <main dir="rtl" className="mx-auto max-w-3xl p-6"><h1 className="text-2xl font-black">استوديو الأستاذ</h1><p className="mt-3 text-slate-400">حسابك غير موثّق كأستاذ. قدّم طلب التوثيق أولاً.</p><a href="/teacher/apply" className="mt-4 inline-block rounded-xl bg-violet-600 px-4 py-2 font-bold">طلب توثيق</a></main>;

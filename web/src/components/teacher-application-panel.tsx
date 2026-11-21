@@ -11,22 +11,10 @@ export default function TeacherApplicationPanel(){
  const [file,setFile]=useState<File|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  useEffect(()=>onAuthStateChanged(auth,setUser),[]);
  useEffect(()=>{if(!firebaseConfigured)return;getDocs(query(collection(db,'curriculumNodes'),where('status','==','published'))).then(s=>{const a=s.docs.map(d=>({id:d.id,type:d.get('type'),nameAr:String(d.get('nameAr')||'')}));setLevels(a.filter(x=>x.type==='level'));setSubjects(a.filter(x=>x.type==='subject'));}).catch(()=>setError('تعذر تحميل مستويات ومواد الأكاديمية.'));},[]);
- async function submit(e:React.FormEvent){e.preventDefault();setError('إرسال طلبات توثيق الأساتذة متوقف مؤقتاً حتى نقل العملية إلى IMI API؛ لم يتم رفع أي ملف.');setNotice('');return;
-  if(!firebaseConfigured){setError('إعداد Firebase غير مكتمل. أكمل إعداد تطبيق الويب أولاً.');return;}
-  if(!user){setError('سجّل الدخول قبل إرسال طلب الأستاذ.');return;}
-  if(!file||file.size>10*1024*1024||!['application/pdf','image/jpeg','image/png'].includes(file.type)){setError('اختر ملف PDF أو صورة JPEG/PNG لا يتجاوز 10 ميغابايت.');return;}
-  if(!levelIds.length||!subjectIds.length){setError('اختر مستوى واحداً ومادة واحدة على الأقل.');return;}
-  setBusy(true);
-  try{
-   const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_').slice(-80);
-   const evidencePath='teacher-verification/'+user.uid+'/'+Date.now()+'-'+safeName;
-   await setDoc(doc(db,'teacherApplications',user.uid),{uid:user.uid,evidencePath,status:'uploading',createdAt:serverTimestamp()});
-   await uploadBytes(ref(storage,evidencePath),file,{contentType:file.type});
-   throw new Error('هذه العملية غير متاحة حتى نقلها إلى IMI API.');
-   setNotice('تم إرسال طلب التوثيق. ستراجعه إدارة IMI؛ لا تُمنح شارة الأستاذ تلقائياً.');
-   setFile(null);
-  }catch(reason){setError(reason instanceof Error?reason.message:'تعذر إرسال الطلب. تحقق من تسجيل الدخول وحجم الملف.');}
-  finally{setBusy(false);}
+ async function submit(e:React.FormEvent){
+  e.preventDefault();
+  setError('إرسال طلبات توثيق الأساتذة متوقف مؤقتاً حتى نقل العملية إلى IMI API؛ لم يتم رفع أي ملف.');
+  setNotice('');
  }
  return <main dir="rtl" className="mx-auto min-h-screen max-w-3xl px-4 py-8 text-slate-100">
   <header className="rounded-3xl border border-violet-400/20 bg-gradient-to-br from-violet-500/10 to-slate-950 p-6"><p className="text-xs font-bold text-violet-300">IMI ACADEMY · TEACHERS</p><h1 className="mt-3 text-2xl font-black">طلب الانضمام كأستاذ</h1><p className="mt-2 text-sm leading-7 text-slate-400">وثيقة الإثبات تُرفع في مسار خاص ولا يستطيع قراءتها إلا المشرف الموثق. لا تُمنح صلاحية الأستاذ من الواجهة.</p></header>

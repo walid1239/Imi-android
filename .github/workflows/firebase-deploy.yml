@@ -24,7 +24,7 @@ on:
         required: true
         type: string
       confirm_deploy:
-        description: "Type DEPLOY to request Firestore rules and indexes deployment; leave blank for validation only"
+        description: "Type DEPLOY only after owner approval; any other value validates only"
         required: true
         type: string
 
@@ -51,7 +51,8 @@ jobs:
         run: go run github.com/rhysd/actionlint/cmd/actionlint@latest .github/workflows/firebase-deploy.yml
 
       - name: Validate Firestore indexes JSON
-        run: node -e "JSON.parse(require('node:fs').readFileSync('firestore.indexes.json', 'utf8')); console.log('firestore.indexes.json: valid JSON')"
+        run: |
+          node -e 'const x = JSON.parse(require("node:fs").readFileSync("firestore.indexes.json", "utf8")); if (!Array.isArray(x.indexes)) process.exit(1); console.log("Firestore indexes JSON: valid")'
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

@@ -21,7 +21,9 @@ function adminApp(): App {
   const existing = getApps().find(app => app.name === "imi-server-api");
   if (existing) return existing;
   const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-  const usingEmulators = Boolean(process.env.FIREBASE_AUTH_EMULATOR_HOST && process.env.FIRESTORE_EMULATOR_HOST);
+  const usingEmulators = process.env.IMI_USE_FIREBASE_EMULATORS === "true"
+    && Boolean(process.env.FIREBASE_AUTH_EMULATOR_HOST && process.env.FIRESTORE_EMULATOR_HOST)
+    && Boolean(projectId?.startsWith("demo-"));
   if (!projectId || (!usingEmulators && projectId !== "imi-indroid")) {
     throw new Error("Firebase project configuration is unavailable.");
   }
@@ -41,8 +43,7 @@ function assertOrigin(request: Request): void {
   const origin = request.headers.get("origin");
   if (!origin) return; // Native clients do not send Origin; bearer auth remains mandatory.
   const url = new URL(request.url);
-  const configured = (process.env.IMI_ALLOWED_ORIGINS ?? "").split(",").map(x => x.trim()).filter(Boolean);
-  if (origin !== url.origin && !configured.includes(origin)) {
+  if (origin !== url.origin) {
     throw new Error("ORIGIN_REJECTED");
   }
 }

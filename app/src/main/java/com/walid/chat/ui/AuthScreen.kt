@@ -10,6 +10,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -18,7 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.ApiException
+import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
@@ -28,6 +29,11 @@ import kotlinx.coroutines.tasks.await
 @Composable
 fun LoginScreen() {
     val context = LocalContext.current
+    val background = Color(0xFF07090F)
+    val surface = Color(0xFF111522)
+    val blue = Color(0xFF3D6BFF)
+    val textColor = Color(0xFFF4F6FC)
+    val muted = Color(0xFF929BB0)
     val auth = remember { FirebaseAuth.getInstance() }
     val scope = rememberCoroutineScope()
     var email by remember { mutableStateOf("") }
@@ -60,14 +66,14 @@ fun LoginScreen() {
     }
 
     Column(
-        Modifier.fillMaxSize().background(ImiBackground).padding(22.dp),
+        Modifier.fillMaxSize().background(background).padding(22.dp),
         verticalArrangement = Arrangement.Center
     ) {
-        Surface(color = ImiSurface, shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
+        Surface(color = surface, shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text("IMI", color = ImiBlue, fontSize = 30.sp, fontWeight = FontWeight.Black)
-                Text(if (createAccount) "إنشاء حساب جديد" else "تسجيل الدخول", color = ImiText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text("استخدم الحساب نفسه على الويب وAndroid. لا نستخدم OTP في هذه المرحلة.", color = ImiMuted, fontSize = 12.sp, lineHeight = 19.sp)
+                Text("IMI", color = blue, fontSize = 30.sp, fontWeight = FontWeight.Black)
+                Text(if (createAccount) "إنشاء حساب جديد" else "تسجيل الدخول", color = textColor, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("استخدم الحساب نفسه على الويب وAndroid. لا نستخدم OTP في هذه المرحلة.", color = muted, fontSize = 12.sp, lineHeight = 19.sp)
                 OutlinedTextField(
                     value = email, onValueChange = { email = it.trim() },
                     modifier = Modifier.fillMaxWidth(), label = { Text("البريد الإلكتروني") },

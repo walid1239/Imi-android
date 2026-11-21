@@ -9,6 +9,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { createIceServerConfiguration, nextIceRestartCount, nextRateLimitState, resolveIceUid } from "./turnCredentials";
 import { directConversationId } from "./conversationLogic";
+import { terminalCallResponse } from "./shared/callLogic";
 import { messageNotificationPreview } from "./notificationLogic";
 import { canPublishLessonSource, validateLessonSource } from "./academyContent";
 import { CoreError, createStatus as coreCreateStatus, sendFriendRequest as coreSendFriendRequest, createOrGetDirectConversation as coreCreateOrGetDirectConversation, acceptFriendRequest as coreAcceptFriendRequest, rejectFriendRequest as coreRejectFriendRequest, removeFriend as coreRemoveFriend, type StorePort, type TransactionPort } from "./shared/serverCore";
@@ -705,7 +706,11 @@ export const respondToCall = onCall<CallActionInput & { decision?: unknown }>(as
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError("not-found", "المكالمة غير موجودة.");
     if (snap.get("calleeUid") !== uid) throw new HttpsError("permission-denied", "المتلقي فقط يمكنه الرد.");
-    if (snap.get("status") !== "ringing") throw new HttpsError("failed-precondition", "لم تعد المكالمة في حالة رنين.");
+    const currentStatus = snap.get("status");
+    if (currentStatus !== "ringing") {
+      if (terminalCallResponse(currentStatus)) return;
+      throw new HttpsError("failed-precondition", "لم تعد المكالمة في حالة رنين.");
+    }
     const callerUid = String(snap.get("callerUid") ?? "");
     const conversationId = String(snap.get("conversationId") ?? "");
     const [callerBlock, calleeBlock, conversation] = await Promise.all([
@@ -728,11 +733,9 @@ export const respondToCall = onCall<CallActionInput & { decision?: unknown }>(as
   });
   const latest = await ref.get();
   const finalStatus = latest.get("status");
-  if (finalStatus === "missed") return { status: "missed" };
-  if (finalStatus !== decision) {
-    throw new HttpsError("permission-denied", "تم إنهاء المكالمة أو منعها بسبب الحظر.");
-  }
-  return { status: decision };
+  const terminalResult = terminalCallResponse(finalStatus);
+  if (terminalResult) return terminalResult;
+  throw new HttpsError("permission-denied", "تم إنهاء المكالمة أو منعها بسبب الحظر.");
 });
 
 type RestartCallIceInput = { callId?: unknown; sdp?: unknown };

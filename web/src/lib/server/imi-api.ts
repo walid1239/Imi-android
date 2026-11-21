@@ -358,13 +358,14 @@ async function academyAdminAction(app: App, uid: string, body: Record<string, un
 
   if (action === "reorderCurriculumNode") {
     const nodeId = requiredId(body.nodeId, "عنصر المنهاج");
-    if (body.delta !== -1 && body.delta !== 1) throw new CoreError("invalid-argument", "قيمة تغيير الترتيب غير صالحة.");
+    const delta = body.delta === -1 ? -1 : body.delta === 1 ? 1 : null;
+    if (delta === null) throw new CoreError("invalid-argument", "قيمة تغيير الترتيب غير صالحة.");
     const ref = firestore.collection("curriculumNodes").doc(nodeId);
     return firestore.runTransaction(async tx => {
       const node = await tx.get(ref);
       if (!node.exists) throw new CoreError("not-found", "عنصر المنهاج غير موجود.");
       const current = node.get("order");
-      const order = Math.max(1, (typeof current === "number" && Number.isSafeInteger(current) ? current : 1) + body.delta);
+      const order = Math.max(1, (typeof current === "number" && Number.isSafeInteger(current) ? current : 1) + delta);
       tx.update(ref, { order, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid });
       return { nodeId, order };
     });

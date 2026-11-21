@@ -50,7 +50,6 @@
 | `rejectFriendRequest` | `POST /api/v1/friends/requests/reject` | Verify recipient and update only a pending request; repeat rejection is idempotent. |
 | `removeFriend` | `POST /api/v1/friends/remove` | Verify reciprocal accepted edges, delete both, and mark accepted request records removed transactionally. |
 | `createOrGetDirectConversation` | `POST /api/v1/conversations/direct` | Preserve deterministic ID, profile existence, mutual-block and teacher/student restrictions. |
-| `acceptFriendRequest`, `rejectFriendRequest`, `removeFriend` | Later authenticated route handlers | Keep all relationship writes server-only; do not replace with direct client writes. |
 | `createGroupConversation`, `addGroupParticipants` | Later route handlers | Preserve role checks, membership caps and block checks. |
 | `blockUser`, `unblockUser` | Later route handlers | Keep server-authoritative cleanup of friendships, requests and calls. |
 | `enrollInCourse`, `completeCourseLesson`, `reportAcademyLesson` | Later route handlers | Preserve published-content and enrollment checks. |

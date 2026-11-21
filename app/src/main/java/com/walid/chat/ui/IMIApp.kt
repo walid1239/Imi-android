@@ -182,7 +182,7 @@ private fun HomeScreen(onChats: () -> Unit, onReels: () -> Unit, onAcademy: () -
                 }
             }
         }
-        item { Text("المحادثات والملفات العامة تعتمد على إعداد Firebase؛ ميزات الوسائط والمكالمات والتحقق عبر WhatsApp لم تُفعّل بعد.", color = ImiMuted, fontSize = 11.sp) }
+        item { Text("المحادثات والملفات العامة تعتمد على إعداد Firebase؛ مكالمات أندرويد غير جاهزة حالياً، وميزات الوسائط والتحقق عبر WhatsApp غير مفعّلة.", color = ImiMuted, fontSize = 11.sp) }
     }
     if (showNotifications) {
         AlertDialog(

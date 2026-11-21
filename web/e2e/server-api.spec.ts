@@ -146,3 +146,29 @@ test('group and block lifecycle routes enforce friendship, admin and bilateral s
   expect(newFriend.status).toBe(200);
   expect((await newFriend.json()).data.status).toBe('pending');
 });
+
+
+test('Reels API validates submissions and keeps moderation admin-only', async () => {
+  const suffix = fixtureSuffix(test.info().project.name, test.info().retry);
+  const token = await idToken(`e2e-b-${suffix}@imi.test`);
+
+  const invalidSubmission = await post('/api/v1/reels/submit', {
+    reelId: 'bad',
+    caption: 'invalid fixture',
+    storagePath: 'reels/attacker/bad/video.mp4',
+    contentType: 'video/mp4',
+  }, token);
+  expect(invalidSubmission.status).toBe(400);
+
+  const nonAdminReview = await post('/api/v1/reels/review', {
+    reelId: 'imi-reel-e2e-0001',
+    decision: 'approved',
+  }, token);
+  expect(nonAdminReview.status).toBe(403);
+
+  const missingAuth = await post('/api/v1/reels/review', {
+    reelId: 'imi-reel-e2e-0001',
+    decision: 'approved',
+  });
+  expect(missingAuth.status).toBe(401);
+});

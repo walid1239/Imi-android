@@ -202,19 +202,20 @@ export async function handleImiPost(request: Request, operation: Operation): Pro
         if (!/^[A-Za-z0-9_-]{8,128}$/.test(reelId) || !["approved", "rejected"].includes(String(decision))) {
           throw new CoreError("invalid-argument", "طلب المراجعة غير صالح.");
         }
+        const validDecision = decision as "approved" | "rejected";
         const db = getFirestore(app);
         const reelRef = db.collection("reels").doc(reelId);
         await db.runTransaction(async transaction => {
           const reel = await transaction.get(reelRef);
           if (!reel.exists) throw new CoreError("not-found", "المقطع غير موجود.");
           if (reel.get("status") !== "pending") throw new CoreError("failed-precondition", "تمت مراجعة هذا المقطع مسبقاً.");
-          transaction.update(reelRef, { status: decision, reviewedBy: uid, reviewedAt: FieldValue.serverTimestamp(), reviewNote: note });
+          transaction.update(reelRef, { status: validDecision, reviewedBy: uid, reviewedAt: FieldValue.serverTimestamp(), reviewNote: note });
           transaction.create(db.collection("moderationLogs").doc(), {
-            actorUid: uid, action: decision === "approved" ? "reel_approved" : "reel_rejected",
+            actorUid: uid, action: validDecision === "approved" ? "reel_approved" : "reel_rejected",
             targetId: reelId, createdAt: FieldValue.serverTimestamp(),
           });
         });
-        return { reelId, status: decision };
+        return { reelId, status: validDecision };
       },
     };
     const result = await handlers[operation]();

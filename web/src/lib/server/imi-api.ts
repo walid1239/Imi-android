@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { directConversationId } from "../../../../functions/src/conversationLogic";
 import { NextResponse } from "next/server";
 import {
-  createStatus, sendFriendRequest, createOrGetDirectConversation,
+  CoreError, createStatus, sendFriendRequest, createOrGetDirectConversation,
   acceptFriendRequest, rejectFriendRequest, removeFriend,
   blockUser, unblockUser, createGroupConversation, addGroupParticipants,
   type StorePort, type TransactionPort,
@@ -115,7 +115,7 @@ async function applyRateLimit(app: App, uid: string, operation: Operation): Prom
       const snapshot = snapshots[index];
       const start = snapshot.exists ? (snapshot.get("windowStartedAt") as Timestamp).toMillis() : now;
       const current = snapshot.exists && now - start < policy.windowMs ? Number(snapshot.get("count") ?? 0) : 0;
-      if (current >= policy.count) throw Object.assign(new Error("RATE_LIMIT"), { code: "resource-exhausted" });
+      if (current >= policy.count) throw new CoreError("resource-exhausted", "RATE_LIMIT");
       tx.set(policy.ref, {
         operation, uidHash: policy.key, windowStartedAt: Timestamp.fromMillis(current ? start : now),
         count: current + 1,
@@ -126,17 +126,17 @@ async function applyRateLimit(app: App, uid: string, operation: Operation): Prom
 
 function requiredId(value: unknown, label: string): string {
   if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(value.trim())) {
-    throw Object.assign(new Error(`معرّف ${label} غير صالح.`), { code: "invalid-argument" });
+    throw new CoreError("invalid-argument", `معرّف ${label} غير صالح.`);
   }
   return value.trim();
 }
 
 function academyText(value: unknown, label: string, max: number, optional = false): string {
   if (optional && (value === undefined || value === null || value === "")) return "";
-  if (typeof value !== "string") throw Object.assign(new Error(`حقل ${label} يجب أن يكون نصاً.`), { code: "invalid-argument" });
+  if (typeof value !== "string") throw new CoreError("invalid-argument", `حقل ${label} يجب أن يكون نصاً.`);
   const normalized = value.trim();
   if ((!optional && !normalized) || normalized.length > max) {
-    throw Object.assign(new Error(`حقل ${label} فارغ أو يتجاوز الحد المسموح.`), { code: "invalid-argument" });
+    throw new CoreError("invalid-argument", `حقل ${label} فارغ أو يتجاوز الحد المسموح.`);
   }
   return normalized;
 }
@@ -149,7 +149,7 @@ async function enrollInCourse(app: App, uid: string, body: Record<string, unknow
   return firestore.runTransaction(async tx => {
     const [course, enrollment] = await Promise.all([tx.get(courseRef), tx.get(enrollmentRef)]);
     if (!course.exists || course.get("published") !== true) {
-      throw Object.assign(new Error("هذه الدورة غير متاحة حالياً."), { code: "not-found" });
+      throw new CoreError("not-found", "هذه الدورة غير متاحة حالياً.");
     }
     if (!enrollment.exists) {
       tx.create(enrollmentRef, {
@@ -173,10 +173,10 @@ async function completeCourseLesson(app: App, uid: string, body: Record<string, 
       tx.get(courseRef), tx.get(lessonRef), tx.get(enrollmentRef),
     ]);
     if (!course.exists || course.get("published") !== true || !lesson.exists || lesson.get("published") !== true) {
-      throw Object.assign(new Error("الدورة أو الدرس غير متاح."), { code: "not-found" });
+      throw new CoreError("not-found", "الدورة أو الدرس غير متاح.");
     }
     if (!enrollment.exists) {
-      throw Object.assign(new Error("سجّل في الدورة قبل إكمال الدروس."), { code: "failed-precondition" });
+      throw new CoreError("failed-precondition", "سجّل في الدورة قبل إكمال الدروس.");
     }
     const completed = enrollment.get("completedLessonIds");
     if (Array.isArray(completed) && completed.includes(lessonId)) return;
@@ -194,7 +194,7 @@ async function reportAcademyLesson(app: App, uid: string, body: Record<string, u
   const lessonId = requiredId(body.lessonId, "الدرس");
   const reason = academyText(body.reason, "سبب البلاغ", 32);
   if (!["incorrect", "inappropriate", "copyright", "other"].includes(reason)) {
-    throw Object.assign(new Error("سبب البلاغ غير مدعوم."), { code: "invalid-argument" });
+    throw new CoreError("invalid-argument", "سبب البلاغ غير مدعوم.");
   }
   const details = academyText(body.details, "تفاصيل البلاغ", 500, true);
   const courseRef = firestore.collection("courses").doc(courseId);
@@ -204,12 +204,12 @@ async function reportAcademyLesson(app: App, uid: string, body: Record<string, u
   await firestore.runTransaction(async tx => {
     const [course, lesson, rate] = await Promise.all([tx.get(courseRef), tx.get(lessonRef), tx.get(rateRef)]);
     if (!course.exists || course.get("published") !== true || !lesson.exists || lesson.get("published") !== true) {
-      throw Object.assign(new Error("المحتوى غير متاح للإبلاغ."), { code: "not-found" });
+      throw new CoreError("not-found", "المحتوى غير متاح للإبلاغ.");
     }
     const now = Timestamp.now();
     const lastReportAt = rate.get("lastReportAt") as Timestamp | undefined;
     if (lastReportAt && now.toMillis() - lastReportAt.toMillis() < 30_000) {
-      throw Object.assign(new Error("انتظر 30 ثانية قبل إرسال بلاغ آخر."), { code: "resource-exhausted" });
+      throw new CoreError("resource-exhausted", "انتظر 30 ثانية قبل إرسال بلاغ آخر.");
     }
     tx.create(reportRef, {
       reporterUid: uid, targetType: "academyLesson", courseId, lessonId, reason, details,

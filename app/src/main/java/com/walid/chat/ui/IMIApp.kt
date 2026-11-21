@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FieldValue
 
@@ -437,11 +438,16 @@ private fun AcademyScreen() {
 @Composable
 private fun ProfileScreen() {
     val context = LocalContext.current
+    val auth = remember { FirebaseAuth.getInstance() }
+    val currentUser = auth.currentUser
     val prefs = remember(context) { context.getSharedPreferences("imi_local_profile", android.content.Context.MODE_PRIVATE) }
     var name by remember(prefs) { mutableStateOf(prefs.getString("display_name", "مستخدم IMI") ?: "مستخدم IMI") }
     var city by remember(prefs) { mutableStateOf(prefs.getString("city", "المغرب") ?: "المغرب") }
     var bio by remember(prefs) { mutableStateOf(prefs.getString("bio", "") ?: "") }
     var languages by remember(prefs) { mutableStateOf(prefs.getString("languages", "العربية") ?: "العربية") }
+    var linkEmail by remember { mutableStateOf("") }
+    var linkPassword by remember { mutableStateOf("") }
+    var accountMessage by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -453,6 +459,7 @@ private fun ProfileScreen() {
                 Icon(Icons.Filled.Person, null, tint = ImiBlue, modifier = Modifier.size(48.dp))
                 Text(name, color = ImiText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Text(city, color = ImiMuted, fontSize = 12.sp)
+                Text(if (currentUser?.isAnonymous == true) "حساب ضيف — اربطه ببريد وكلمة مرور للاحتفاظ به على أجهزتك." else "حساب Firebase موحّد", color = ImiMuted, fontSize = 11.sp)
                 Text("رفع الصور الشخصية مؤجل في المرحلة المجانية الأولى.", color = ImiMuted, fontSize = 11.sp)
                 OutlinedButton(onClick = { editing = !editing }) { Text(if (editing) "إغلاق التعديل" else "تعديل الملف") }
                 if (editing) {
@@ -464,9 +471,7 @@ private fun ProfileScreen() {
                         saving = true
                         scope.launch {
                             runCatching {
-                                check(FirebaseApp.getApps(context.applicationContext).isNotEmpty()) { "إعداد Firebase غير موجود." }
-                                val auth = FirebaseAuth.getInstance()
-                                val uid = auth.currentUser?.uid ?: auth.signInAnonymously().await().user?.uid ?: error("تعذر إنشاء الجلسة")
+                                val uid = auth.currentUser?.uid ?: error("انتهت جلسة الدخول. سجّل الدخول مجدداً.")
                                 FirebaseFirestore.getInstance().collection("users").document(uid).set(
                                     mapOf("displayName" to name.trim().take(60), "city" to city.trim().take(80), "bio" to bio.trim().take(300),
                                         "languages" to languages.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(10),
@@ -485,6 +490,38 @@ private fun ProfileScreen() {
                     }
                 }
                 message?.let { Text(it, color = ImiMuted, fontSize = 11.sp) }
+            }
+        }
+        if (currentUser?.isAnonymous == true) {
+            Surface(color = ImiSurface, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("تحويل حساب الضيف إلى حساب دائم", color = ImiText, fontWeight = FontWeight.Bold)
+                    Text("يربط Firebase البريد بالحساب الحالي ويحافظ على UID وبيانات هذا الحساب. إذا كان البريد مستخدماً في حساب آخر، لن نستبدل الحساب تلقائياً.", color = ImiMuted, fontSize = 11.sp, lineHeight = 18.sp)
+                    OutlinedTextField(value = linkEmail, onValueChange = { linkEmail = it.trim() }, label = { Text("البريد الإلكتروني") }, singleLine = true)
+                    OutlinedTextField(value = linkPassword, onValueChange = { linkPassword = it }, label = { Text("كلمة المرور (6 أحرف على الأقل)") }, singleLine = true)
+                    Button(enabled = !saving && linkEmail.contains("@") && linkPassword.length >= 6, onClick = {
+                        saving = true
+                        accountMessage = null
+                        scope.launch {
+                            runCatching {
+                                val guest = auth.currentUser ?: error("انتهت جلسة الضيف.")
+                                check(guest.isAnonymous) { "هذا الحساب ليس حساب ضيف." }
+                                guest.linkWithCredential(EmailAuthProvider.getCredential(linkEmail, linkPassword)).await()
+                            }.onSuccess {
+                                accountMessage = "تم ربط البريد بالحساب الحالي مع الحفاظ على UID."
+                                linkPassword = ""
+                            }.onFailure {
+                                accountMessage = it.localizedMessage ?: "تعذر ربط البريد. إذا كان مستخدماً بحساب آخر فسجّل الدخول بذلك الحساب بعد التأكد من نقل بياناتك."
+                            }
+                            saving = false
+                        }
+                    }) { Text(if (saving) "جارٍ الربط…" else "ربط البريد بالحساب الحالي") }
+                    accountMessage?.let { Text(it, color = ImiMuted, fontSize = 11.sp) }
+                }
+            }
+        } else {
+            currentUser?.email?.let { email ->
+                Text("البريد المرتبط: $email", color = ImiMuted, fontSize = 12.sp)
             }
         }
     }

@@ -34,7 +34,6 @@ permissions:
 jobs:
   validate:
     name: Validate workflow and Firebase rules configuration
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.confirm_deploy != 'DEPLOY' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     concurrency:
       group: imi-firebase-rules-validation-${{ github.event.pull_request.head.ref || github.ref_name }}

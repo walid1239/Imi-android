@@ -9,13 +9,26 @@ async function login(page: Page, address: string) {
   await page.getByLabel('البريد الإلكتروني').fill(address);
   await page.getByLabel('كلمة المرور').fill(password);
   await page.getByRole('button', { name: 'تسجيل الدخول' }).click();
-  await expect(page).toHaveURL(/\/app$/, { timeout: 15000 });
+  try {
+    await expect(page).toHaveURL(/\\/app$/, { timeout: 15000 });
+  } catch {
+    const messages = await page.locator('[role="status"], [role="alert"]').allTextContents();
+    throw new Error(`Login did not reach /app. Visible Firebase/auth messages: ${messages.join(' | ') || 'none'}`);
+  }
 }
 
 test('public academy can be browsed without an account in Arabic RTL', async ({ page }) => {
   await page.goto('/academy');
   await expect(page.getByRole('heading', { name: 'تعلّم وتقدّم' })).toBeVisible();
   await expect(page.locator('main')).toHaveAttribute('dir', 'rtl');
+  await expect.poll(async () => {
+    const courseVisible = await page.getByRole('heading', { name: 'مهارة التعلم الذاتي' }).isVisible().catch(() => false);
+    const errorVisible = await page.getByRole('alert').isVisible().catch(() => false);
+    return courseVisible || errorVisible;
+  }, { timeout: 15000 }).toBe(true);
+  if (await page.getByRole('alert').isVisible().catch(() => false)) {
+    throw new Error('Public academy Firebase read failed: ' + await page.getByRole('alert').innerText());
+  }
   await expect(page.getByRole('heading', { name: 'مهارة التعلم الذاتي' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'ابدأ من مستواك، وتقدّم خطوة بخطوة' })).toBeVisible();
   await expect(page.getByLabel('المستوى')).toBeVisible();

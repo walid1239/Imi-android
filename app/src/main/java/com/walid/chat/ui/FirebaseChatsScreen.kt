@@ -66,42 +66,6 @@ internal fun FirebaseChatsScreen() {
     var creatingChatUid by remember { mutableStateOf<String?>(null) }
     var searchError by remember { mutableStateOf<String?>(null) }
 
-    val mediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        val chatId = selectedChat?.id
-        val repo = repository
-        if (uri != null && chatId != null && repo != null && !sending) {
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            var fileName = "attachment"
-            var sizeBytes = -1L
-            context.contentResolver.query(
-                uri,
-                arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
-                null,
-                null,
-                null
-            )?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    if (nameIndex >= 0) fileName = cursor.getString(nameIndex) ?: fileName
-                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-                    if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) sizeBytes = cursor.getLong(sizeIndex)
-                }
-            }
-            val contentType = context.contentResolver.getType(uri).orEmpty()
-            sending = true
-            errorText = null
-            scope.launch {
-                repo.sendMediaMessage(chatId, uri, contentType, fileName, sizeBytes).fold(
-                    onSuccess = { errorText = null },
-                    onFailure = { errorText = it.localizedMessage ?: "تعذر إرسال المرفق" }
-                )
-                sending = false
-            }
-        }
-    }
-
     LaunchedEffect(Unit) {
         try {
             if (FirebaseApp.getApps(context.applicationContext).isEmpty()) {
@@ -264,32 +228,7 @@ internal fun FirebaseChatsScreen() {
                                     Text("مرفق: ${item.type}", color = CloudText)
                                 }
                                 if (item.mediaPath != null) {
-                                    var downloadUrl by remember(item.id) { mutableStateOf<String?>(null) }
-                                    var mediaLoadFailed by remember(item.id) { mutableStateOf(false) }
-                                    LaunchedEffect(item.mediaPath) {
-                                        try {
-                                            downloadUrl = FirebaseStorage.getInstance().reference
-                                                .child(item.mediaPath)
-                                                .downloadUrl
-                                                .await()
-                                                .toString()
-                                        } catch (_: Exception) {
-                                            mediaLoadFailed = true
-                                        }
-                                    }
-                                    if (downloadUrl != null) {
-                                        TextButton(onClick = {
-                                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)))
-                                        }) {
-                                            Text("فتح ${item.fileName ?: "المرفق"}", color = CloudText)
-                                        }
-                                    } else {
-                                        Text(
-                                            if (mediaLoadFailed) "تعذر تحميل المرفق" else "جارٍ تجهيز المرفق…",
-                                            color = CloudMuted,
-                                            fontSize = 11.sp
-                                        )
-                                    }
+                                    Text("هذا المرفق من إصدار سابق؛ فتح الوسائط مؤجل في النسخة المجانية الأولى.", color = CloudMuted, fontSize = 10.sp)
                                 }
                             }
                         }
@@ -300,16 +239,8 @@ internal fun FirebaseChatsScreen() {
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    enabled = selectedChat != null && !sending,
-                    onClick = {
-                        mediaPicker.launch(arrayOf(
-                            "image/jpeg", "image/png", "image/webp",
-                            "audio/mpeg", "audio/mp4", "audio/aac", "audio/ogg", "audio/wav", "audio/webm",
-                            "video/mp4", "video/webm"
-                        ))
-                    }
-                ) { Icon(Icons.Filled.AttachFile, "إرفاق صورة أو صوت أو فيديو", tint = CloudBlue) }
+                Text("إرسال النصوص فقط — الوسائط قيد التجهيز", color = CloudMuted, fontSize = 9.sp)
+                Spacer(Modifier.width(6.dp))
                 OutlinedTextField(
                     value = draft,
                     onValueChange = { draft = it.take(1000) },

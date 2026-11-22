@@ -111,6 +111,7 @@ and `mergeCurriculumNode`.
 
 Additional guards in this prototype:
 - Admin custom claim is required for all four actions.
+- A Firestore transaction rate limit mirrors the HTTP Academy admin policy: 20 requests per actor per minute.
 - Node parent types must follow level → track → subject → unit; a level is a root.
 - Import batches reject duplicate IDs, cycles, invalid parent type chains, and missing external parents.
 - Merge rejects incompatible child types and stops if more than 450 children would be written in one transaction.
@@ -135,5 +136,8 @@ would still not make Cloud Functions deployable under the Spark-only constraint.
 
 ## Scope
 
-This is an inventory only. It makes no source-code, Firebase, deployment, PR, or
-Firestore Rules changes.
+The original parity inventory records the HTTP/callable comparison. The isolated prototype
+adds source code and unit-test scaffolding on `feature/curriculum-admin-callables` only.
+It has not changed Firebase project configuration, Firestore data/rules, deployment state,
+or the web foundation PR. Draft PR #3 targets only the diagnostic branch and must not be
+merged until builds, tests, and emulator verification pass.

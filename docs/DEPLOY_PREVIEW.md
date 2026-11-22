@@ -37,7 +37,7 @@
 1. Add New Project واختر مستودع `walid1239/Imi-android`.
 2. Root Directory: `web`.
 3. Framework Preset: **Next.js**.
-4. اختر الفرع `feature/imi-web-foundation` بعد أن يراجع المالك تغييرات الكود ويوافق عليها.
+4. لمعاينة التغييرات الموجودة في PR #4 اختر الفرع `feature/imi-teacher-admin-preview` بعد موافقة المالك على إنشاء Preview. لا تستخدم `feature/imi-web-foundation` لهذه التغييرات إلا بعد دمجها هناك بموافقة منفصلة؛ لا تدمج PR #4 تلقائياً.
 5. تحقق من إعداد **Include source files outside of the Root Directory** (أو ما يعادله في واجهة Vercel) حتى يستطيع البناء تتبّع ملفات `functions/src` المستوردة من خارج `web`.
 6. أضف المتغيرات المذكورة في الخطوتين 2 و3 إلى **Preview Environment** فقط. لا تضفها إلى Production.
 7. لا تفعّل أي متغير من القائمة المحظورة في الخطوة 10.

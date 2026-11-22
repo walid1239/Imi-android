@@ -4,7 +4,7 @@ const { createRequire } = require('node:module');
 const requireFunctions = createRequire(require.resolve('../functions/package.json'));
 const { initializeApp, getApps } = requireFunctions('firebase-admin/app');
 const { getAuth } = requireFunctions('firebase-admin/auth');
-const { getFirestore, Timestamp } = requireFunctions('firebase-admin/firestore');
+const { getFirestore, Timestamp, FieldValue } = requireFunctions('firebase-admin/firestore');
 const { getStorage } = requireFunctions('firebase-admin/storage');
 
 const projectId = process.env.GCLOUD_PROJECT || 'demo-imi-teacher';
@@ -93,13 +93,6 @@ async function main() {
     id: 'subject-math', parentId: 'track-primary', type: 'subject', nameAr: 'رياضيات اختبار',
     nameFr: 'Mathématiques test', language: 'ar', order: 1, needsReview: false, status: 'published',
   });
-  const evidencePath = 'teacher-verification/' + applicantUid + '/identity.pdf';
-  await bucket.file(evidencePath).save(Buffer.from('%PDF-1.4 emulator-only evidence'), {
-    metadata: { contentType: 'application/pdf' },
-  });
-  const [uploadedEvidence] = await bucket.file(evidencePath).getMetadata();
-  assert.equal(uploadedEvidence.contentType, 'application/pdf');
-  assert.ok(Number(uploadedEvidence.size) > 0);
 
   await db.doc('curriculumNodes/unreviewed-unit').set({
     id: 'unreviewed-unit', parentId: 'subject-math', type: 'unit', nameAr: 'وحدة تنتظر المراجعة',
@@ -118,16 +111,17 @@ async function main() {
   assert.equal((await db.collection('moderationAudit').doc(curriculumReview.operationId).get()).get('action'), 'curriculum_node_approved');
 
   await assert.rejects(call('submitTeacherApplication', {}, null), error => error.code === 'UNAUTHENTICATED');
-  const submitted = await call('submitTeacherApplication', {
-    fullName: 'أستاذ اختبار',
-    levelIds: ['level-primary'],
-    subjectIds: ['subject-math'],
-    evidencePath,
-  }, applicantToken);
-  assert.equal(submitted.status, 'pending');
-
+  // The web API owns application submission now; this legacy Functions-only integration
+  // seeds the same URL-based record to exercise the existing review/claims outbox path.
+  await db.doc('teacherApplications/' + applicantUid).set({
+    uid: applicantUid, fullName: 'أستاذ اختبار',
+    levelIds: ['level-primary'], subjectIds: ['subject-math'],
+    proofUrl: 'https://drive.google.com/file/d/emulator-proof/view',
+    status: 'pending', submittedAt: FieldValue.serverTimestamp(),
+  });
   await db.doc('teacherApplications/' + applicantUid).get().then(snapshot => {
     assert.equal(snapshot.get('status'), 'pending');
+    assert.equal(snapshot.get('proofUrl'), 'https://drive.google.com/file/d/emulator-proof/view');
     assert.ok(snapshot.get('submittedAt') instanceof Timestamp);
   });
 

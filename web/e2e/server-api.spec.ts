@@ -345,6 +345,30 @@ test('teacher applications use HTTPS proof links, published curriculum and admin
   expect(fields.status.stringValue).toBe('approved');
   expect(fields.proofUrl.stringValue).toBe(payload.proofUrl);
   expect(fields.evidencePath).toBeUndefined();
+
+  const rejectedUid = `imi-e2e-rejected-${suffix}`;
+  const rejectedEmail = `e2e-rejected-${suffix}@imi.test`;
+  await adminAuth.createUser({ uid: rejectedUid, email: rejectedEmail, password, emailVerified: true });
+  const rejectedApplicantToken = await idToken(rejectedEmail);
+  const rejectedSubmission = await post('/api/v1/teachers/applications', {
+    ...payload, fullName: 'طلب أستاذ مرفوض',
+  }, rejectedApplicantToken);
+  expect(rejectedSubmission.status).toBe(200);
+
+  const rejected = await post('/api/v1/admin/teachers/review', {
+    uid: rejectedUid, approved: false, note: 'لم يستوفِ متطلبات التوثيق',
+  }, adminToken);
+  expect(rejected.status).toBe(200);
+  expect((await rejected.json()).data.status).toBe('rejected');
+
+  const rejectedToken = await idToken(rejectedEmail);
+  const rejectedClaims = JSON.parse(Buffer.from(rejectedToken.split('.')[1], 'base64url').toString('utf8')) as {
+    teacher?: boolean; teacherVerified?: boolean;
+  };
+  expect(rejectedClaims.teacher).not.toBe(true);
+  expect(rejectedClaims.teacherVerified).not.toBe(true);
+  const rejectedStored = await emulatorDocument('teacherApplications/' + rejectedUid);
+  expect((rejectedStored?.fields as Record<string, { stringValue?: string }>).status.stringValue).toBe('rejected');
 });
 
 

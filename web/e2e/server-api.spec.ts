@@ -1,8 +1,15 @@
 import { expect, test } from '@playwright/test';
+import { initializeApp, getApps } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
 
 const authEmulator = 'http://127.0.0.1:9099';
 const apiBase = 'http://127.0.0.1:3000';
 const password = 'IMI-Emulator-Password-2026!';
+const adminSdkApp = getApps().find(app => app.name === 'imi-web-e2e-admin')
+  ?? initializeApp({ projectId: 'demo-imi-playwright' }, 'imi-web-e2e-admin');
+const adminAuth = getAuth(adminSdkApp);
+const adminDb = getFirestore(adminSdkApp);
 
 function fixtureSuffix(project: string, retry: number): string {
   const base = project.includes('mobile') ? 'mobile' : 'desktop';
@@ -335,4 +342,46 @@ test('teacher applications use HTTPS proof links, published curriculum and admin
   expect(fields.status.stringValue).toBe('approved');
   expect(fields.proofUrl.stringValue).toBe(payload.proofUrl);
   expect(fields.evidencePath).toBeUndefined();
+});
+
+
+test('teacher approval remains approved after Auth sync failure and same-decision retry applies claims', async () => {
+  const suffix = fixtureSuffix(test.info().project.name, test.info().retry);
+  const adminToken = await idToken(`e2e-admin-${suffix}@imi.test`);
+  const targetUid = `imi-e2e-claim-retry-${suffix}`;
+  const email = `e2e-claim-retry-${suffix}@imi.test`;
+  await adminDb.doc(`teacherApplications/${targetUid}`).set({
+    uid: targetUid,
+    fullName: 'أستاذ اختبار إعادة مزامنة الصلاحيات',
+    proofUrl: 'https://drive.google.com/file/d/retry-proof/view',
+    subjectIds: ['e2e-primary-math'],
+    levelIds: ['e2e-primary'],
+    status: 'pending',
+    submittedAt: new Date(),
+  });
+
+  // Missing Auth user forces the post-transaction claim synchronization to fail.
+  const firstAttempt = await post('/api/v1/admin/teachers/review', {
+    uid: targetUid, approved: true,
+  }, adminToken);
+  expect(firstAttempt.status).toBe(503);
+  expect((await adminDb.doc(`teacherApplications/${targetUid}`).get()).get('status')).toBe('approved');
+  expect((await adminDb.doc(`teacherClaimsOutbox/teacher-application-${targetUid}-approved`).get()).get('status')).toBe('pending');
+
+  await adminAuth.createUser({
+    uid: targetUid, email, password, emailVerified: true,
+  });
+  const retry = await post('/api/v1/admin/teachers/review', {
+    uid: targetUid, approved: true,
+  }, adminToken);
+  expect(retry.status).toBe(200);
+  expect((await retry.json()).data).toMatchObject({ status: 'approved', claimsSync: 'applied' });
+  expect((await adminDb.doc(`teacherClaimsOutbox/teacher-application-${targetUid}-approved`).get()).get('status')).toBe('applied');
+
+  const refreshed = await idToken(email);
+  const claims = JSON.parse(Buffer.from(refreshed.split('.')[1], 'base64url').toString('utf8')) as {
+    teacher?: boolean; teacherVerified?: boolean;
+  };
+  expect(claims.teacher).toBe(true);
+  expect(claims.teacherVerified).toBe(true);
 });

@@ -375,7 +375,7 @@ test('teacher approval remains approved after Auth sync failure and same-decisio
   expect(firstAttempt.status).toBe(503);
   expect((await adminDb.doc(`teacherApplications/${targetUid}`).get()).get('status')).toBe('approved');
   expect((await adminDb.doc(`teacherClaimsOutbox/teacher-application-${targetUid}-approved`).get()).get('status')).toBe('pending');
-  expect((await adminAuth.getUser(targetUid)).customClaims.teacherVerified).toBeUndefined();
+  expect((await adminAuth.getUser(targetUid)).customClaims?.teacherVerified).toBeUndefined();
 
   // Remove the oversized unrelated claim, then retry the same decision.
   await adminAuth.setCustomUserClaims(targetUid, {});

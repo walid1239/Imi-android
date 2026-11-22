@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:health": "node scripts/health-smoke.mjs",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "test:cloudflare-token": "node --test scripts/cloudflare-token-verifier.test.mjs"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.0",

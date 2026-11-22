@@ -11,7 +11,8 @@
     "test:health": "node scripts/health-smoke.mjs",
     "test:prove-admin": "node scripts/prove-admin.mjs",
     "test:rate-limit": "node --test scripts/rate-limit.test.mjs",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "prebuild": "node scripts/check-env.mjs"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.0",

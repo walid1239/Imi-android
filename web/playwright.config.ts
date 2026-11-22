@@ -30,6 +30,7 @@ export default defineConfig({
       NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? '1:000000000000:web:0000000000000000000000',
       NEXT_PUBLIC_FIREBASE_EMULATORS: process.env.NEXT_PUBLIC_FIREBASE_EMULATORS ?? 'true',
       IMI_USE_FIREBASE_EMULATORS: 'true',
+      IMI_ADMIN_HEALTH: 'true',
     },
   },
 });

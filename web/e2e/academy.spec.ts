@@ -10,7 +10,7 @@ async function login(page: Page, address: string) {
   await page.getByLabel('كلمة المرور').fill(password);
   await page.getByRole('button', { name: 'تسجيل الدخول' }).click();
   try {
-    await expect(page).toHaveURL(/\/app$/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\\/app$/, { timeout: 15000 });
   } catch {
     const messages = await page.locator('[role="status"], [role="alert"]').allTextContents();
     throw new Error(`Login did not reach /app. Visible Firebase/auth messages: ${messages.join(' | ') || 'none'}`);
@@ -126,7 +126,6 @@ test('admin claim exposes the protected Academy administration panel', async ({ 
 });
 
 
-
 test('verified teachers cannot start private student chats or mixed private groups', async ({ page }) => {
   await login(page, email('c', test.info().project.name));
   await page.goto('/app');
@@ -157,8 +156,9 @@ test('teacher application and studio routes explain verification gate', async ({
   await login(page, email('b', test.info().project.name));
   await page.goto('/teacher/apply');
   await expect(page.getByRole('heading', { name: 'طلب الانضمام كأستاذ' })).toBeVisible();
-  await expect(page.getByLabel('الاسم الكامل')).toBeVisible();
-  await page.goto('/teacher/studio');
+  await expect(page.getByRole('status')).toContainText('التقديم متوقف مؤقتاً');
+  await expect(page.getByText(/لا نطلب منك إدخال بيانات شخصية أو رفع شهادة/)).toBeVisible();
+  await await page.goto('/teacher/studio');
   await expect(page.getByText('حسابك غير موثّق كأستاذ')).toBeVisible();
   await expect(page.getByRole('link', { name: 'طلب توثيق' })).toBeVisible();
 });
@@ -166,7 +166,7 @@ test('teacher application and studio routes explain verification gate', async ({
 test('guest sessions can be linked to a permanent email account without changing UID', async ({ page }) => {
   await page.goto('/login');
   await page.getByRole('button', { name: /الدخول السريع كضيف/ }).click();
-  await expect(page).toHaveURL(/\/app$/);
+  await expect(page).toHaveURL(/\\/app$/);
   await page.getByRole('button', { name: /ملفي/ }).first().click();
   await expect(page.getByText('تحويل حساب الضيف إلى حساب دائم')).toBeVisible();
   await expect(page.getByRole('button', { name: 'ربط البريد بالحساب الحالي' })).toBeVisible();

@@ -127,8 +127,15 @@ test('admin claim exposes the protected Academy administration panel', async ({ 
   await expect(proofLink).toHaveAttribute('href', /^https:\/\//);
   await expect(proofLink).toHaveAttribute('target', '_blank');
   await expect(proofLink).toHaveAttribute('rel', 'noopener noreferrer');
+  const reviewResponsePromise = page.waitForResponse(response =>
+    response.url().endsWith('/api/v1/admin/teachers/review') && response.request().method() === 'POST',
+  );
   await applicationCard.getByRole('button', { name: 'اعتماد التوثيق' }).click();
-  await expect(page.getByText('تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق.')).toBeVisible();
+  const reviewResponse = await reviewResponsePromise;
+  const reviewBody = await reviewResponse.json().catch(() => ({})) as { ok?: boolean; error?: string };
+  expect(reviewResponse.status(), JSON.stringify(reviewBody)).toBe(200);
+  expect(reviewBody.ok, JSON.stringify(reviewBody)).toBe(true);
+  await expect(page.getByRole('status')).toContainText('تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق.');
   await expect(page.getByText('UID: ' + teacherUid, { exact: true })).toHaveCount(0);
   await expect(page.getByText(/إدارة محتوى الأساتذة والدورات والبلاغات ما زالت معطلة/)).toBeVisible();
 });

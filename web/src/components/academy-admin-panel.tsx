@@ -3,14 +3,13 @@
 import { useEffect, useState } from 'react';
 import { User, getIdTokenResult } from 'firebase/auth';
 import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
-import { getDownloadURL, ref as storageRef } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase/client';
+import { auth, db } from '@/lib/firebase/client';
 import CurriculumAdminPanel from '@/components/curriculum-admin-panel';
 
 type Course = { id: string; title: string; description: string; category: string; published: boolean };
 type Lesson = { id: string; title: string; content: string; videoUrl?: string; order: number; published: boolean; sourceType?: string; sourceName?: string; reviewStatus?: string };
 type ContentReport = { id: string; reporterUid: string; courseId: string; lessonId: string; reason: string; details: string; status: string };
-type TeacherApplication = { uid: string; fullName: string; subjectIds: string[]; levelIds: string[]; status: string; evidencePath: string };
+type TeacherApplication = { uid: string; fullName: string; subjectIds: string[]; levelIds: string[]; status: string; proofUrl?: string };
 type TeacherContent = { id: string; title: string; ownerUid: string; kind: string; subjectId: string; sourceName: string; license: string; status: string };
 
 export default function AcademyAdminPanel({ user }: { user: User }) {
@@ -20,7 +19,6 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [reports, setReports] = useState<ContentReport[]>([]);
   const [teacherApplications, setTeacherApplications] = useState<TeacherApplication[]>([]);
-  const [evidenceUrls, setEvidenceUrls] = useState<Record<string, string>>({});
   const [teacherContent, setTeacherContent] = useState<TeacherContent[]>([]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -80,7 +78,7 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
         uid: item.id, fullName: item.get('fullName') || '',
         subjectIds: Array.isArray(item.get('subjectIds')) ? item.get('subjectIds') : [],
         levelIds: Array.isArray(item.get('levelIds')) ? item.get('levelIds') : [],
-        status: item.get('status') || 'pending', evidencePath: item.get('evidencePath') || '',
+        status: item.get('status') || 'pending', proofUrl: typeof item.get('proofUrl') === 'string' ? item.get('proofUrl') : undefined,
       })));
     }, reason => setError(reason.message));
   }, [authorized]);
@@ -117,14 +115,22 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
     setNotice('');
   }
 
-  async function loadTeacherEvidence(uid: string, path: string) {
-    setError('');
+  async function reviewTeacher(uid: string, approved: boolean) {
+    setBusy(true); setError(''); setNotice('');
     try {
-      const url = await getDownloadURL(storageRef(storage, path));
-      setEvidenceUrls(current => ({ ...current, [uid]: url }));
-    } catch {
-      setError('تعذر فتح وثيقة الإثبات. تحقق من صلاحية المشرف وقواعد Storage.');
-    }
+      const token = await auth.currentUser?.getIdToken(true);
+      if (!token) throw new Error('سجّل الدخول أولاً.');
+      const response = await fetch('/api/v1/admin/teachers/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ uid, approved, note: approved ? '' : 'لم يستوفِ متطلبات التوثيق' }),
+      });
+      const json = await response.json().catch(() => ({})) as { ok?: boolean; error?: string };
+      if (!response.ok || !json.ok) throw new Error(json.error || 'تعذرت المراجعة. أعد المحاولة بالقرار نفسه.');
+      setNotice(approved ? 'تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق.' : 'تم رفض طلب التوثيق.');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'تعذرت المراجعة.');
+    } finally { setBusy(false); }
   }
 
   async function createCourse(event: React.FormEvent<HTMLFormElement>) {
@@ -177,13 +183,10 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
         <p className="mt-1 text-xs text-slate-400">UID: {application.uid}</p>
         <p className="mt-1 text-xs text-slate-400">المستويات: {application.levelIds.join('، ')}</p>
         <p className="mt-1 text-xs text-slate-400">المواد: {application.subjectIds.join('، ')}</p>
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-          <button type="button" onClick={() => loadTeacherEvidence(application.uid, application.evidencePath)} className="rounded-lg border border-blue-400/25 px-3 py-2 text-blue-200">تحميل رابط الوثيقة الخاصة</button>
-          {evidenceUrls[application.uid] && <a href={evidenceUrls[application.uid]} target="_blank" rel="noreferrer" className="rounded-lg border border-white/10 px-3 py-2 text-slate-200">فتح الوثيقة</a>}
-        </div>
+        {application.proofUrl && <a href={application.proofUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-200">فتح رابط الإثبات</a>}
         <div className="mt-3 flex gap-2">
-          <button disabled={busy || legacyActionsDisabled} onClick={() => call('reviewTeacherApplication', { uid: application.uid, approved: true, note: '' }, 'تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق.')} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold disabled:opacity-50">اعتماد التوثيق</button>
-          <button disabled={busy || legacyActionsDisabled} onClick={() => call('reviewTeacherApplication', { uid: application.uid, approved: false, note: 'لم يستوفِ متطلبات التوثيق' }, 'تم رفض طلب التوثيق.')} className="rounded-lg border border-red-400/30 px-3 py-2 text-xs text-red-200 disabled:opacity-50">رفض الطلب</button>
+          <button disabled={busy} onClick={() => void reviewTeacher(application.uid, true)} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold disabled:opacity-50">اعتماد التوثيق</button>
+          <button disabled={busy} onClick={() => void reviewTeacher(application.uid, false)} className="rounded-lg border border-red-400/30 px-3 py-2 text-xs text-red-200 disabled:opacity-50">رفض الطلب</button>
         </div>
       </article>)}
     </section>

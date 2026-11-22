@@ -105,13 +105,13 @@ Binding constraints: Firebase Spark only; do not invoke Cloud Functions; Next.js
 
 | البند | SHA | الأمر / Run ID | النتيجة الفعلية | ما لم يُختبر |
 |---|---|---|---|---|
-| 1. لوحة مراجعة الأستاذ | `ecc6b545...` | Playwright ضمن Run `45059083847` | `46 passed`؛ اعتماد المشرف ورسالة النجاح ورابط الإثبات مع `rel=noopener noreferrer` | Firebase Auth/Firestore الحقيقي والنطاق الفعلي |
-| 2. نموذج تقديم الأستاذ | `ecc6b545...` | Playwright ضمن Run `45059083847` | `46 passed`؛ الحقول والاختيارات المنشورة ورابط HTTPS؛ لا `input[type=file]` | تقديم فعلي على Firebase الحقيقي ورفع أي ملف |
-| 3. تتبّع الملفات خارج `web` | `ecc6b545...` | `npm run build` ضمن Run `45059083847` | `success` بعد إضافة `outputFileTracingRoot` | إعداد Root Directory وخيار include خارج الجذر في مشروع Vercel فعلي |
-| 4. فحص البيئة | `ecc6b545...` | `npm run test:env` ضمن Run `45059083847` | `3 passed, 0 failed`؛ و`npm run build` success | اختبار متغيرات Vercel الحقيقية/سر Admin في بيئة Preview |
-| 5. دليل المعاينة | `ecc6b545...` | `docs/DEPLOY_PREVIEW.md` | 11 خطوة موثقة؛ لم ينفّذ أي نشر | تنفيذ المالك للخطوات، النطاق، OAuth وFirestore الحقيقي |
-| 6. نقل `saveTeacherProfile` | `ecc6b545...` | Playwright ضمن Run `45059083847` | `46 passed`؛ `POST /api/v1/teachers/profile`، `photoPath=""`، الموافقات والتحقق من claim | حفظ الملف على Firebase الحقيقي؛ لا رفع صورة |
-| 7. توثيق الحالة | `ecc6b545...` | `docs/HANDOFF.md` | SHA وRuns والنتائج والحدود موثقة هنا | لا يحل محل تحقق المالك من Firebase/Vercel الحقيقيين |
+| 1. لوحة مراجعة الأستاذ | `ecc6b5452258697784058e8bb15544b80aa91dd6` | Playwright ضمن Run `45059083847` | `46 passed`؛ اعتماد المشرف ورسالة النجاح ورابط الإثبات مع `rel=noopener noreferrer` | Firebase Auth/Firestore الحقيقي والنطاق الفعلي |
+| 2. نموذج تقديم الأستاذ | `ecc6b5452258697784058e8bb15544b80aa91dd6` | Playwright ضمن Run `45059083847` | `46 passed`؛ الحقول والاختيارات المنشورة ورابط HTTPS؛ لا `input[type=file]` | تقديم فعلي على Firebase الحقيقي ورفع أي ملف |
+| 3. تتبّع الملفات خارج `web` | `ecc6b5452258697784058e8bb15544b80aa91dd6` | `npm run build` ضمن Run `45059083847` | `success` بعد إضافة `outputFileTracingRoot` | إعداد Root Directory وخيار include خارج الجذر في مشروع Vercel فعلي |
+| 4. فحص البيئة | `ecc6b5452258697784058e8bb15544b80aa91dd6` | `npm run test:env` ضمن Run `45059083847` | `3 passed, 0 failed`؛ و`npm run build` success | اختبار متغيرات Vercel الحقيقية/سر Admin في بيئة Preview |
+| 5. دليل المعاينة | `ecc6b5452258697784058e8bb15544b80aa91dd6` | `docs/DEPLOY_PREVIEW.md` | 11 خطوة موثقة؛ لم ينفّذ أي نشر | تنفيذ المالك للخطوات، النطاق، OAuth وFirestore الحقيقي |
+| 6. نقل `saveTeacherProfile` | `ecc6b5452258697784058e8bb15544b80aa91dd6` | Playwright ضمن Run `45059083847` | `46 passed`؛ `POST /api/v1/teachers/profile`، `photoPath=""`، الموافقات والتحقق من claim | حفظ الملف على Firebase الحقيقي؛ لا رفع صورة |
+| 7. توثيق الحالة | `ecc6b5452258697784058e8bb15544b80aa91dd6` | `docs/HANDOFF.md` | SHA وRuns والنتائج والحدود موثقة هنا | لا يحل محل تحقق المالك من Firebase/Vercel الحقيقيين |
 
 ### عناصر Functions القديمة التي لم تُنقل بعد
 

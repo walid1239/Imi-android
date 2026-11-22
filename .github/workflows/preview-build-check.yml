@@ -47,12 +47,16 @@ jobs:
         run: |
           npx next start -p 3100 &
           server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
           for i in $(seq 1 40); do curl -fs -o /dev/null http://127.0.0.1:3100/api/health && break; sleep 1; done
           check() { code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3100$1"); echo "$1 -> $code"; test "$code" = "$2"; }
           fail=0
           check /api/health 200 || fail=1
           check /login 200 || fail=1
           check /academy 200 || fail=1
+          test -z "${IMI_ADMIN_HEALTH:-}" && echo "IMI_ADMIN_HEALTH unset" || { echo "IMI_ADMIN_HEALTH unexpectedly set"; fail=1; }
+          body=$(curl -s http://127.0.0.1:3100/api/v1/health/admin)
+          echo "$body"
+          echo "$body" | grep -q '"error":"Not found."' || fail=1
           check /api/v1/health/admin 404 || fail=1
-          kill "$server" || true
           exit "$fail"

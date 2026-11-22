@@ -120,8 +120,8 @@ test('admin reviews teacher applications through the UI and syncs Auth claims', 
   const project = test.info().project.name;
   const fixture = test.info().retry > 0 ? `${suffix(project)}-retry${test.info().retry}` : suffix(project);
   const approvedUid = 'imi-e2e-a-' + fixture;
-  const rejectedUid = 'imi-e2e-b-' + fixture;
-  const rejectedEmail = `e2e-b-${fixture}@imi.test`;
+  const rejectedUid = 'imi-e2e-review-reject-' + fixture;
+  const rejectedEmail = `e2e-review-reject-${fixture}@imi.test`;
   const proofUrl = 'https://drive.google.com/file/d/imi-e2e-fixture/view';
 
   await adminDb.doc('teacherApplications/' + rejectedUid).set({
@@ -130,6 +130,13 @@ test('admin reviews teacher applications through the UI and syncs Auth claims', 
     proofUrl, status: 'pending', submittedAt: new Date(),
   });
   await adminAuth.setCustomUserClaims(approvedUid, {});
+  try {
+    await adminAuth.getUser(rejectedUid);
+  } catch {
+    await adminAuth.createUser({
+      uid: rejectedUid, email: rejectedEmail, password, emailVerified: true,
+    });
+  }
   await adminAuth.setCustomUserClaims(rejectedUid, {});
 
   await login(page, `e2e-admin-${fixture}@imi.test`);
@@ -147,7 +154,14 @@ test('admin reviews teacher applications through the UI and syncs Auth claims', 
   const approvedProof = approvedCard.getByRole('link', { name: 'فتح رابط الإثبات' });
   await expect(approvedProof).toHaveAttribute('href', proofUrl);
   await expect(approvedProof).toHaveAttribute('rel', /noopener/);
+  const approvalResponsePromise = page.waitForResponse(response =>
+    response.url().includes('/api/v1/admin/teachers/review')
+    && response.request().method() === 'POST',
+  );
   await approvedCard.getByRole('button', { name: 'اعتماد التوثيق' }).click();
+  const approvalResponse = await approvalResponsePromise;
+  const approvalBody = await approvalResponse.json().catch(() => ({}));
+  expect(approvalResponse.status(), JSON.stringify(approvalBody)).toBe(200);
   await expect(page.getByRole('status')).toContainText('تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق.');
   expect((await adminDb.doc('teacherApplications/' + approvedUid).get()).get('status')).toBe('approved');
   const approvedUser = await adminAuth.getUser(approvedUid);
@@ -155,7 +169,14 @@ test('admin reviews teacher applications through the UI and syncs Auth claims', 
 
   const rejectedCard = page.locator('article').filter({ has: page.getByText('UID: ' + rejectedUid, { exact: true }) });
   await expect(rejectedCard.getByRole('button', { name: 'رفض الطلب' })).toBeEnabled();
+  const rejectionResponsePromise = page.waitForResponse(response =>
+    response.url().includes('/api/v1/admin/teachers/review')
+    && response.request().method() === 'POST',
+  );
   await rejectedCard.getByRole('button', { name: 'رفض الطلب' }).click();
+  const rejectionResponse = await rejectionResponsePromise;
+  const rejectionBody = await rejectionResponse.json().catch(() => ({}));
+  expect(rejectionResponse.status(), JSON.stringify(rejectionBody)).toBe(200);
   await expect(page.getByRole('status')).toContainText('تم رفض طلب التوثيق.');
   expect((await adminDb.doc('teacherApplications/' + rejectedUid).get()).get('status')).toBe('rejected');
   const rejectedUser = await adminAuth.getUser(rejectedUid);

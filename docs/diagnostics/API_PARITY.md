@@ -97,6 +97,35 @@ credentials to the repository, CI logs, or chat.
 6. Re-run emulator tests and Worker smoke tests after any source change. Never mark
    production approved based on local or emulator-only evidence.
 
+
+## Additional source-level risks in the four missing curriculum actions
+
+A second read of the HTTP implementation found validation and consistency gaps that must be
+covered before porting these operations into Functions:
+
+- `createCurriculumNode` validates that a supplied parent exists, but does not validate
+  that the parent type is the immediate allowed predecessor of the new node. It also does
+  not reject a parent that is hidden or still needs review.
+- `importCurriculumNodes` detects duplicate IDs within the batch, checks external parents
+  exist, and detects cycles formed by parent links within the batch. It does not validate
+  the parent/child type hierarchy, nor does it check that external parents are published
+  and approved.
+- `reorderCurriculumNode` increments or decrements one node's integer `order` in a
+  transaction, but does not swap/resequence sibling nodes. It can therefore produce
+  duplicate order values among siblings. Concurrent calls also need an explicit invariant
+  and emulator race tests.
+- `mergeCurriculumNode` checks source/target existence and matching types, requires the
+  target to be published and approved, guards against moving into a descendant, moves
+  direct children, and hides the source. It does not check the source's review/publication
+  state or whether the target's parent/type placement remains valid after children move.
+  Query phantoms and concurrent tree edits need emulator tests; transaction atomicity alone
+  does not prove the tree invariants.
+
+These are findings about the current HTTP code, not claims that a particular production
+corruption has occurred. A safe implementation should define the curriculum type hierarchy
+and sibling-order policy centrally, then validate both in transactions and test concurrent
+create/import/reorder/merge scenarios against the Firestore Emulator.
+
 ## Scope
 
 This is an inventory only. It makes no source-code, Firebase, deployment, PR, or

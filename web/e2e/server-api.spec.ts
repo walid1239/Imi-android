@@ -247,3 +247,69 @@ test('Reels API validates submissions and keeps moderation admin-only', async ()
   });
   expect(missingAuth.status).toBe(401);
 });
+
+
+test('teacher applications use HTTPS proof links, published curriculum and admin-only idempotent review', async () => {
+  const suffix = fixtureSuffix(test.info().project.name, test.info().retry);
+  const applicantUid = `imi-e2e-b-${suffix}`;
+  const applicantToken = await idToken(`e2e-b-${suffix}@imi.test`);
+  const adminToken = await idToken(`e2e-admin-${suffix}@imi.test`);
+  const payload = {
+    fullName: 'أستاذة اختبار واجهة الخادم',
+    proofUrl: 'https://drive.google.com/file/d/imi-e2e-proof/view',
+    subjectIds: ['e2e-primary-math'],
+    levelIds: ['e2e-primary'],
+  };
+
+  const httpLink = await post('/api/v1/teachers/applications', {
+    ...payload, proofUrl: 'http://example.com/proof',
+  }, applicantToken);
+  expect(httpLink.status).toBe(400);
+
+  const credentialLink = await post('/api/v1/teachers/applications', {
+    ...payload, proofUrl: 'https://user:password@example.com/proof',
+  }, applicantToken);
+  expect(credentialLink.status).toBe(400);
+
+  const unpublished = await post('/api/v1/teachers/applications', {
+    ...payload, subjectIds: ['e2e-unpublished-subject'],
+  }, applicantToken);
+  expect(unpublished.status).toBe(409);
+
+  const submitted = await post('/api/v1/teachers/applications', payload, applicantToken);
+  expect(submitted.status).toBe(200);
+  expect((await submitted.json()).data.status).toBe('pending');
+
+  const duplicate = await post('/api/v1/teachers/applications', payload, applicantToken);
+  expect(duplicate.status).toBe(409);
+
+  const denied = await post('/api/v1/admin/teachers/review', {
+    uid: applicantUid, approved: true,
+  }, applicantToken);
+  expect(denied.status).toBe(403);
+
+  const approved = await post('/api/v1/admin/teachers/review', {
+    uid: applicantUid, approved: true, note: 'تم التحقق من الرابط يدوياً في اختبار المحاكي',
+  }, adminToken);
+  expect(approved.status).toBe(200);
+  expect((await approved.json()).data).toMatchObject({ status: 'approved', claimsSync: 'applied' });
+
+  const repeated = await post('/api/v1/admin/teachers/review', {
+    uid: applicantUid, approved: true,
+  }, adminToken);
+  expect(repeated.status).toBe(200);
+  expect((await repeated.json()).data.status).toBe('approved');
+
+  const refreshedToken = await idToken(`e2e-b-${suffix}@imi.test`);
+  const claims = JSON.parse(Buffer.from(refreshedToken.split('.')[1], 'base64url').toString('utf8')) as {
+    teacher?: boolean; teacherVerified?: boolean;
+  };
+  expect(claims.teacher).toBe(true);
+  expect(claims.teacherVerified).toBe(true);
+
+  const stored = await emulatorDocument('teacherApplications/' + applicantUid);
+  const fields = stored?.fields as Record<string, { stringValue?: string }>;
+  expect(fields.status.stringValue).toBe('approved');
+  expect(fields.proofUrl.stringValue).toBe(payload.proofUrl);
+  expect(fields.evidencePath).toBeUndefined();
+});

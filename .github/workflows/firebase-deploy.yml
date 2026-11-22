@@ -106,20 +106,40 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Detect optional Google OIDC credentials
+        id: oidc
+        env:
+          WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOY_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
+        run: |
+          if [ -n "$WORKLOAD_IDENTITY_PROVIDER" ] && [ -n "$DEPLOY_SERVICE_ACCOUNT" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "Optional OIDC credentials are configured."
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::OIDC credentials are not configured. GitHub deployment is skipped; use the owner-run Firebase CLI instructions in docs/FIRST_DEPLOY.md after approval."
+          fi
+
       - name: Authenticate to Google Cloud using GitHub OIDC
+        if: steps.oidc.outputs.configured == 'true'
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Deploy Firestore rules and indexes only
+        if: steps.oidc.outputs.configured == 'true'
         env:
           PROJECT_ID: ${{ inputs.project_id }}
         run: npx --yes firebase-tools@15.37.0 deploy --project "$PROJECT_ID" --only firestore:rules,firestore:indexes
 
       - name: Report deployed target
-        if: success()
+        if: success() && steps.oidc.outputs.configured == 'true'
         env:
           PROJECT_ID: ${{ inputs.project_id }}
         run: |
           echo "Firestore rules and indexes deployed for explicitly approved project: $PROJECT_ID"
+
+      - name: Confirm deployment was skipped without optional OIDC
+        if: success() && steps.oidc.outputs.configured != 'true'
+        run: echo "No deployment occurred because optional Google OIDC credentials are not configured."

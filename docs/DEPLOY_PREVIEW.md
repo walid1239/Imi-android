@@ -51,7 +51,7 @@ FIREBASE_SERVICE_ACCOUNT_JSON
 - يجب أن تشير المتغيرات العامة الستة إلى تطبيق الويب الصحيح في المشروع `imi-indroid`.
 - يجب أن تكون `FIREBASE_PROJECT_ID` مساوية تماماً لـ `imi-indroid`.
 - يجب أن يكون `FIREBASE_SERVICE_ACCOUNT_JSON` محتوى JSON صالحاً لحساب خدمة تابع للمشروع نفسه، مع الحقول اللازمة لـ Firebase Admin SDK.
-- ضع JSON الخاص بحساب الخدمة في إعدادات الخادم على منصة الاستضافة فقط. لا تضعه في `web/.env.local` أو ملفات Git أو المتصفح أو السجلات أو المحادثات.
+- ضع JSON الخاص بحساب الخدمة في إعدادات الخادم على منصة الاستضافة فقط، والصقه كسطر واحد في قيمة `FIREBASE_SERVICE_ACCOUNT_JSON`. لا تضعه في `web/.env.local` أو ملفات Git أو المتصفح أو السجلات أو المحادثات.
 - لا تستخدم بادئة `NEXT_PUBLIC_` مع أي سر.
 - لا تضبط متغيرات المحاكيات في المعاينة: `NEXT_PUBLIC_FIREBASE_EMULATORS` و`IMI_USE_FIREBASE_EMULATORS` و`FIREBASE_AUTH_EMULATOR_HOST` و`FIRESTORE_EMULATOR_HOST` و`FIREBASE_STORAGE_EMULATOR_HOST` و`FIREBASE_DATABASE_EMULATOR_HOST`. اتركها غير موجودة أو معطّلة.
 - لا تضبط `IMI_ACCOUNT_DELETION_ENABLED`؛ يجب أن تبقى ميزة حذف الحساب معطّلة.

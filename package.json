@@ -3,7 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:rules": "node --test tests/firestore.rules.test.mjs"
+    "test:rules": "node --test tests/firestore.rules.test.mjs",
+    "emulators:test": "npx --yes firebase-tools@15.37.0 emulators:exec --only auth,firestore,storage --project demo-imi-security \"npm run test:rules && FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 npm test --prefix functions\"",
+    "seed:curriculum": "node scripts/seed-curriculum.cjs",
+    "seed:general-skills": "node scripts/seed-general-skills.cjs",
+    "verify:academy-seed": "node scripts/verify-academy-seed.cjs"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^4.0.1",

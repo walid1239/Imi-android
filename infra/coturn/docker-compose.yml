@@ -1,0 +1,42 @@
+services:
+  coturn:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: imi-coturn
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TURN_MIN_PORT: ${TURN_MIN_PORT:-49160}
+      TURN_MAX_PORT: ${TURN_MAX_PORT:-49200}
+    ports:
+      - "${TURN_PORT:-3478}:3478/udp"
+      - "${TURN_PORT:-3478}:3478/tcp"
+      - "${TURN_MIN_PORT:-49160}-${TURN_MAX_PORT:-49200}:${TURN_MIN_PORT:-49160}-${TURN_MAX_PORT:-49200}/udp"
+    healthcheck:
+      test: ["CMD-SHELL", "turnutils_stunclient -p 3478 127.0.0.1 >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /run:rw,noexec,nosuid,size=8m
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      imi-turn:
+        ipv4_address: 172.30.250.10
+
+networks:
+  imi-turn:
+    ipam:
+      config:
+        - subnet: 172.30.250.0/24

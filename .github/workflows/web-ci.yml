@@ -1,0 +1,184 @@
+name: IMI Web CI
+# Feature branches are validated by pull_request; push runs are reserved for main/master to avoid duplicate CI on PR commits.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'functions/**'
+      - 'firestore.rules'
+      - 'storage.rules'
+      - 'firebase.json'
+      - 'tests/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/web-ci.yml'
+      - '.github/workflows/android-build.yml'
+      - 'infra/coturn/**'
+      - 'data/curriculum.json'
+      - 'scripts/seed-curriculum.cjs'
+      - 'scripts/verify-academy-seed.cjs'
+      - 'scripts/test-teacher-emulator.cjs'
+      - 'docs/turn-windows.md'
+      - 'docs/call-test-plan.md'
+  push:
+    branches: [main, master]
+    paths:
+      - 'web/**'
+      - 'functions/**'
+      - 'firestore.rules'
+      - 'storage.rules'
+      - 'firebase.json'
+      - 'tests/**'
+      - 'scripts/test-teacher-emulator.cjs'
+      - 'scripts/seed-curriculum.cjs'
+      - 'scripts/verify-academy-seed.cjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/web-ci.yml'
+      - '.github/workflows/android-build.yml'
+      - 'infra/coturn/**'
+      - 'docs/turn-windows.md'
+      - 'docs/call-test-plan.md'
+
+permissions:
+  contents: read
+
+# Push and pull_request events for the same feature branch share one slot.
+# New commits supersede stale queued/in-progress CI instead of building a backlog.
+concurrency:
+  group: imi-web-ci-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund
+      - name: Audit web dependencies (high and critical block CI)
+        run: npm audit --audit-level=high
+      - run: npm run typecheck
+      - run: npm run test:rate-limit
+      - run: npm run build
+      - run: npm run test:health
+
+  # Firebase CLI 15.37.0 Emulator Suite requires JDK 21+.
+  functions:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund
+      - name: Audit Cloud Functions dependencies (high and critical block CI)
+        run: npm audit --audit-level=high
+      - run: npm test
+      - name: Run teacher application, review, claims, agreements and mock-live Emulator integration
+        working-directory: .
+        run: >-
+          npx --yes firebase-tools@15.37.0 emulators:exec
+          --only auth,firestore,storage,functions
+          --project demo-imi-teacher
+          "cd functions && FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 npm test && cd .. && FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIREBASE_STORAGE_EMULATOR_HOST=127.0.0.1:9199 node scripts/test-teacher-emulator.cjs && FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIREBASE_STORAGE_EMULATOR_HOST=127.0.0.1:9199 node scripts/test-account-deletion-emulator.cjs"
+
+  turn-infra:
+    name: Validate Coturn Compose configuration (no server start)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create disposable CI-only environment file
+        run: |
+          cat > infra/coturn/.env <<'EOF'
+          TURN_SECRET=CI_DUMMY_SECRET_NOT_FOR_USE
+          TURN_HOST=turn.example.test
+          TURN_PORT=3478
+          TURN_REALM=turn.example.test
+          TURN_MIN_PORT=49160
+          TURN_MAX_PORT=49200
+          TURN_EXTERNAL_IP=203.0.113.10/172.30.250.10
+          EOF
+      - name: Validate Compose syntax and local secret ignore rule
+        run: |
+          docker compose -f infra/coturn/docker-compose.yml config --quiet
+          git check-ignore infra/coturn/.env
+
+  rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci --no-audit --no-fund
+      - name: Install Functions Admin SDK dependencies for Emulator-only seed scripts
+        run: npm ci --prefix functions --no-audit --no-fund
+      - run: npm run emulators:test
+      - name: Verify curriculum and legacy lesson seeds in a disposable Firestore Emulator
+        run: >-
+          npx --yes firebase-tools@15.37.0 emulators:exec
+          --only firestore --project demo-imi-academy
+          "node scripts/seed-curriculum.cjs --emulator --project=demo-imi-academy &&
+          node scripts/verify-academy-seed.cjs"
+
+
+  playwright-e2e:
+    name: Playwright browser tests against Firebase Emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: web
+    env:
+      NEXT_PUBLIC_FIREBASE_API_KEY: fake-api-key
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: localhost
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: demo-imi-playwright
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: demo-imi-playwright.firebasestorage.app
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
+      NEXT_PUBLIC_FIREBASE_APP_ID: 1:000000000000:web:0000000000000000000000
+      NEXT_PUBLIC_FIREBASE_EMULATORS: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install and compile Functions for the emulator
+        working-directory: .
+        run: |
+          npm ci --prefix functions --no-audit --no-fund
+          npm run build --prefix functions
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Build production web app for browser tests
+        run: npm run build
+      - name: Run browser E2E against disposable Auth, Firestore and Functions emulators
+        working-directory: .
+        run: >-
+          npx --yes firebase-tools@15.37.0 emulators:exec
+          --only auth,firestore,functions,storage
+          --project demo-imi-playwright
+          "cd functions && node scripts/seed-e2e.cjs &&
+          cd ../web && npm run test:prove-admin && npm run e2e"

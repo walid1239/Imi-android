@@ -1,31 +1,88 @@
-name: IMI Firebase Cloud Deployment
+name: IMI Firebase Rules and Indexes Deployment
 
 on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'firestore.rules'
+      - 'firestore.indexes.json'
+      - 'storage.rules'
+      - 'firebase.json'
+      - '.github/workflows/firebase-deploy.yml'
+  pull_request:
+    branches: [main, master, 'feature/**']
+    paths:
+      - 'firestore.rules'
+      - 'firestore.indexes.json'
+      - 'storage.rules'
+      - 'firebase.json'
+      - '.github/workflows/firebase-deploy.yml'
   workflow_dispatch:
     inputs:
       project_id:
-        description: "Exact Firebase project ID (must match the protected environment allowlist)"
+        description: "Exact Firebase project ID from the protected environment allowlist"
         required: true
         type: string
       confirm_deploy:
-        description: "Type DEPLOY to authorize deploying Functions and Firebase rules"
+        description: "Type DEPLOY only after owner approval; any other value validates only"
         required: true
         type: string
 
 permissions:
   contents: read
-  id-token: write
-
-concurrency:
-  group: imi-firebase-production-deploy
-  cancel-in-progress: false
 
 jobs:
+  validate:
+    name: Validate workflow and Firebase rules configuration
+    runs-on: ubuntu-latest
+    concurrency:
+      group: imi-firebase-rules-validation-${{ github.event.pull_request.head.ref || github.ref_name }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go for actionlint
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Lint GitHub Actions workflow
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@latest .github/workflows/firebase-deploy.yml
+
+      - name: Validate Firestore indexes JSON
+        run: |
+          node -e 'const x = JSON.parse(require("node:fs").readFileSync("firestore.indexes.json", "utf8")); if (!Array.isArray(x.indexes)) process.exit(1); console.log("Firestore indexes JSON: valid")'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Java for Firebase Emulator Suite
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install security test dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run Firestore and Storage rules Emulator tests
+        run: npx --yes firebase-tools@15.37.0 emulators:exec --only firestore,storage --project demo-imi-security "npm run test:rules"
+
   deploy:
-    name: Validate, test, and deploy Firebase backend
+    name: Deploy Firestore rules and indexes only
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_deploy == 'DEPLOY' }}
+    needs: validate
     runs-on: ubuntu-latest
     environment: firebase-production
+    concurrency:
+      group: imi-firebase-rules-production-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,42 +104,42 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
-      - name: Set up Java for Firebase Emulator Suite
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Install security test dependencies
-        run: npm install --no-audit --no-fund
-
-      - name: Build trusted Functions
+      - name: Detect optional Google OIDC credentials
+        id: oidc
+        env:
+          WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOY_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
         run: |
-          npm install --prefix functions --no-audit --no-fund
-          npm run build --prefix functions
-
-      - name: Run Firestore and Storage rules tests before deployment
-        run: npx --yes firebase-tools@13.29.2 emulators:exec --only firestore,storage --project demo-imi-security "npm run test:rules"
+          if [ -n "$WORKLOAD_IDENTITY_PROVIDER" ] && [ -n "$DEPLOY_SERVICE_ACCOUNT" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "Optional OIDC credentials are configured."
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::OIDC credentials are not configured. GitHub deployment is skipped; use the owner-run Firebase CLI instructions in docs/FIRST_DEPLOY.md after approval."
+          fi
 
       - name: Authenticate to Google Cloud using GitHub OIDC
+        if: steps.oidc.outputs.configured == 'true'
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
 
-      - name: Install Firebase CLI
-        run: npm install --global firebase-tools@13.29.2
+      - name: Deploy Firestore rules and indexes only
+        if: steps.oidc.outputs.configured == 'true'
+        env:
+          PROJECT_ID: ${{ inputs.project_id }}
+        run: npx --yes firebase-tools@15.37.0 deploy --project "$PROJECT_ID" --only firestore:rules,firestore:indexes
 
-      - name: Deploy Functions and security rules
+      - name: Report deployed target
+        if: success() && steps.oidc.outputs.configured == 'true'
         env:
           PROJECT_ID: ${{ inputs.project_id }}
         run: |
-          firebase deploy --project "$PROJECT_ID" --only functions,firestore:rules,storage
+          echo "Firestore rules and indexes deployed for explicitly approved project: $PROJECT_ID"
 
-      - name: Report deployed target
-        if: success()
-        env:
-          PROJECT_ID: ${{ inputs.project_id }}
-        run: echo "Firebase deployment completed for explicitly selected project: $PROJECT_ID"
+      - name: Confirm deployment was skipped without optional OIDC
+        if: success() && steps.oidc.outputs.configured != 'true'
+        run: echo "No deployment occurred because optional Google OIDC credentials are not configured."

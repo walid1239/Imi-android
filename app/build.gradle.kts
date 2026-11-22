@@ -15,7 +15,50 @@ android {
     namespace = "com.walid.chat"
     compileSdk = 35
 
+    val releaseStoreFile = providers.environmentVariable("IMI_KEYSTORE_PATH").orNull
+    val releaseStorePassword = providers.environmentVariable("IMI_KEYSTORE_PASSWORD").orNull
+    val releaseKeyAlias = providers.environmentVariable("IMI_KEY_ALIAS").orNull
+    val releaseKeyPassword = providers.environmentVariable("IMI_KEY_PASSWORD").orNull
+    val hasAnyReleaseSigningValue = listOf(releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword)
+        .any { !it.isNullOrBlank() }
+    val hasCompleteReleaseSigning = listOf(releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword)
+        .all { !it.isNullOrBlank() }
+    check(!hasAnyReleaseSigningValue || hasCompleteReleaseSigning) {
+        "Set all IMI_KEYSTORE_PATH, IMI_KEYSTORE_PASSWORD, IMI_KEY_ALIAS and IMI_KEY_PASSWORD values together."
+    }
+
+    val imiApiBaseUrl = providers.gradleProperty("IMI_API_BASE_URL")
+        .orElse(providers.environmentVariable("IMI_API_BASE_URL"))
+        .orElse("")
+        .get()
+
+    signingConfigs {
+        if (hasCompleteReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            if (hasCompleteReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+    }
+
     defaultConfig {
+        buildConfigField("String", "IMI_API_BASE_URL", "\"${imiApiBaseUrl}\"")
         applicationId = "com.walid.chat"
         minSdk = 26
         targetSdk = 35
@@ -33,7 +76,10 @@ android {
         jvmTarget = "17"
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 }
 
 dependencies {
@@ -50,7 +96,9 @@ dependencies {
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-storage")
-    implementation("com.google.firebase:firebase-functions")
+    // OkHttp powers authenticated requests to the same-origin IMI API.
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.google.code.gson:gson:2.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
     implementation("androidx.media3:media3-exoplayer:1.5.1")
     implementation("androidx.media3:media3-ui:1.5.1")

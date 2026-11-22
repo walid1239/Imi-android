@@ -78,7 +78,7 @@ jobs:
         run: |
           set -euo pipefail
           LOG="$RUNNER_TEMP/imi-cloudflare-preview.log"
-          timeout 180s npm run cf:preview -- --port 8787 --ip 127.0.0.1 >"$LOG" 2>&1 &
+          timeout 180s npm run cf:preview -- --log-level debug --port 8787 --ip 127.0.0.1 >"$LOG" 2>&1 &
           PREVIEW_PID=$!
           cleanup() {
             kill "$PREVIEW_PID" 2>/dev/null || true

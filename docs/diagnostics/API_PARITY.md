@@ -2,7 +2,7 @@
 
 Audit date: 2026-11-22
 Audited ref: `feature/cloudflare-import-diagnostics`
-Audited commit: `747950263022437985e439e7488a3a0bcc1f29e0`
+Audited source commit: `747950263022437985e439e7488a3a0bcc1f29e0`
 
 This inventory compares the Next.js HTTP handlers backed by `web/src/lib/server/imi-api.ts`
 with callable exports in `functions/src/index.ts` and shared operations in
@@ -37,6 +37,9 @@ with callable exports in `functions/src/index.ts` and shared operations in
 | academyAdmin.reorderCurriculumNode | HTTP-local | no | Missing callable |
 | academyAdmin.mergeCurriculumNode | HTTP-local | no | Missing callable |
 | academyAdmin.reviewTeacherApplication | HTTP-local | no | Missing callable; also mutates Firebase Auth custom claims |
+
+**Gap count: 10 operations total** — 4 shared-core operations without callable wrappers and
+**6 Academy admin actions** without callable exports.
 
 ## Important non-equivalences
 
@@ -75,8 +78,8 @@ credentials to the repository, CI logs, or chat.
 1. Keep this audit branch isolated; do not merge it wholesale into the web foundation PR.
 2. Add tests for the four missing core callables (block, unblock, group create, group add)
    only if a Functions-based deployment path is approved.
-3. For Academy, implement and test the five missing admin actions, including Auth claims
-   outbox/idempotency for teacher-application review.
+3. For Academy, implement and test the **six** missing admin actions, including
+   Auth claims outbox/idempotency for teacher-application review.
 4. Align rate limits, token revocation semantics, request validation, and error mapping.
 5. Only then migrate the web client to callable APIs. This still does not make the
    functions deployable on Spark.

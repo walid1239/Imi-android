@@ -101,7 +101,7 @@ credentials to the repository, CI logs, or chat.
 ## Isolated callable implementation prototype
 
 Branch: `feature/curriculum-admin-callables`
-Latest implementation commit at this audit: `b4d87d1c381cadff293b32d86f492c1f1faa30ba`
+Latest branch head at this audit: `c344673bf2c804e99dfd45da05cb1a51690d72ed`
 
 A new callable, `academyCurriculumAdminAction`, was added in
 `functions/src/curriculumAdmin.ts` and exported from `functions/src/index.ts`.

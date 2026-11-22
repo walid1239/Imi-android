@@ -365,7 +365,7 @@ test('teacher applications use HTTPS proof links, published curriculum and admin
     contentAgreement: true,
     childSafetyAgreement: false,
   }, refreshedToken);
-  expect(missingConsent.status).toBe(412);
+  expect(missingConsent.status).toBe(409);
 
   const stored = await emulatorDocument('teacherApplications/' + applicantUid);
   const fields = stored?.fields as Record<string, { stringValue?: string }>;

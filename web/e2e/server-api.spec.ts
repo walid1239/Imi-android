@@ -363,7 +363,12 @@ test('teacher approval remains approved after Auth sync failure and same-decisio
     submittedAt: new Date(),
   });
 
-  // Missing Auth user forces the post-transaction claim synchronization to fail.
+  await adminAuth.createUser({
+    uid: targetUid, email, password, emailVerified: true,
+  });
+  // Existing claims are valid alone, but adding teacher roles exceeds Firebase's
+  // 1000-byte custom-claims limit and forces setCustomUserClaims to fail after approval.
+  await adminAuth.setCustomUserClaims(targetUid, { padding: 'x'.repeat(950) });
   const firstAttempt = await post('/api/v1/admin/teachers/review', {
     uid: targetUid, approved: true,
   }, adminToken);
@@ -371,9 +376,8 @@ test('teacher approval remains approved after Auth sync failure and same-decisio
   expect((await adminDb.doc(`teacherApplications/${targetUid}`).get()).get('status')).toBe('approved');
   expect((await adminDb.doc(`teacherClaimsOutbox/teacher-application-${targetUid}-approved`).get()).get('status')).toBe('pending');
 
-  await adminAuth.createUser({
-    uid: targetUid, email, password, emailVerified: true,
-  });
+  // Remove the oversized unrelated claim, then retry the same decision.
+  await adminAuth.setCustomUserClaims(targetUid, {});
   const retry = await post('/api/v1/admin/teachers/review', {
     uid: targetUid, approved: true,
   }, adminToken);

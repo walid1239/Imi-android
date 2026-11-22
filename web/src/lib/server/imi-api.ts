@@ -5,6 +5,7 @@ import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import { reserveRateLimitWindows } from "./rate-limit-core.mjs";
 import { applyTeacherClaimsOutboxOperation } from "../../../../functions/src/teacherClaimsOutbox";
+import { createTeacherAgreementAcceptances } from "../../../../functions/src/teacherAgreements";
 import { cleanupAccountData } from "../../../../functions/src/shared/accountDeletion";
 import { directConversationId } from "../../../../functions/src/conversationLogic";
 import { NextResponse } from "next/server";
@@ -16,10 +17,11 @@ import {
 } from "../../../../functions/src/shared/serverCore";
 import { authenticateBearer, publicErrorMessage } from "../../../../functions/src/shared/serverAuth";
 
-type Operation = "submitTeacherApplication" | "reviewTeacherApplication" | "publishCurriculum" | "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend" | "blockUser" | "unblockUser" | "createGroupConversation" | "addGroupParticipants" | "prepareReel" | "submitReel" | "reviewReel" | "deleteMyAccount";
+type Operation = "submitTeacherApplication" | "reviewTeacherApplication" | "saveTeacherProfile" | "publishCurriculum" | "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend" | "blockUser" | "unblockUser" | "createGroupConversation" | "addGroupParticipants" | "prepareReel" | "submitReel" | "reviewReel" | "deleteMyAccount";
 const limits: Record<Operation, { count: number; windowMs: number }> = {
   submitTeacherApplication: { count: 3, windowMs: 24 * 60 * 60_000 },
   reviewTeacherApplication: { count: 60, windowMs: 60_000 },
+  saveTeacherProfile: { count: 5, windowMs: 60_000 },
   createStatus: { count: 2, windowMs: 60_000 },
   sendFriendRequest: { count: 10, windowMs: 60 * 60_000 },
   createOrGetDirectConversation: { count: 20, windowMs: 60_000 },
@@ -447,6 +449,43 @@ export async function handleImiPost(request: Request, operation: Operation): Pro
           });
         });
         return { status: "pending" };
+      },
+      saveTeacherProfile: async () => {
+        const account = await getAuth(app).getUser(uid);
+        if (account.customClaims?.teacherVerified !== true) {
+          throw new CoreError("permission-denied", "يجب توثيق حساب الأستاذ أولاً.");
+        }
+        const bio = typeof body.bio === "string" ? body.bio.trim() : "";
+        if (bio.length < 30 || bio.length > 1200) {
+          throw new CoreError("invalid-argument", "النبذة مطلوبة ويجب أن تتراوح بين 30 و1200 حرف.");
+        }
+        const photoPath = typeof body.photoPath === "string" ? body.photoPath.trim() : "";
+        if (photoPath !== "") {
+          throw new CoreError("failed-precondition", "رفع صورة الأستاذ غير متاح حالياً؛ أرسل photoPath فارغاً.");
+        }
+        if (body.contentAgreement !== true || body.childSafetyAgreement !== true) {
+          throw new CoreError("failed-precondition", "يجب قبول اتفاقية المحتوى والحقوق وقواعد حماية القاصرين.");
+        }
+        const [subjectIds, levelIds] = await Promise.all([
+          publishedNodeIds(app, body.subjectIds, "subject"),
+          publishedNodeIds(app, body.levelIds, "level"),
+        ]);
+        const db = getFirestore(app);
+        const application = await db.collection("teacherApplications").doc(uid).get();
+        if (!application.exists || application.get("status") !== "approved") {
+          throw new CoreError("failed-precondition", "يجب اعتماد طلب توثيق الأستاذ قبل إنشاء الملف المهني.");
+        }
+        const displayName = typeof application.get("fullName") === "string"
+          ? application.get("fullName") as string : "أستاذ IMI";
+        const timestamp = FieldValue.serverTimestamp();
+        await db.collection("teacherProfiles").doc(uid).set({
+          uid, displayName, bio, photoPath: "", subjectIds, levelIds,
+          verified: true, badge: "أستاذ موثّق",
+          contentAgreement: true, childSafetyAgreement: true,
+          agreementAcceptances: createTeacherAgreementAcceptances(uid, timestamp),
+          profileComplete: true, published: true, updatedAt: timestamp,
+        }, { merge: true });
+        return { profileComplete: true, photoPath: "" };
       },
       reviewTeacherApplication: async () => {
         const actor = await getAuth(app).getUser(uid);

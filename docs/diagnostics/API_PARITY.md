@@ -97,6 +97,42 @@ credentials to the repository, CI logs, or chat.
 6. Re-run emulator tests and Worker smoke tests after any source change. Never mark
    production approved based on local or emulator-only evidence.
 
+
+## Isolated callable implementation prototype
+
+Branch: `feature/curriculum-admin-callables`
+Latest implementation commit at this audit: `b4d87d1c381cadff293b32d86f492c1f1faa30ba`
+
+A new callable, `academyCurriculumAdminAction`, was added in
+`functions/src/curriculumAdmin.ts` and exported from `functions/src/index.ts`.
+It accepts the existing HTTP action names for the four missing operations:
+`createCurriculumNode`, `importCurriculumNodes`, `reorderCurriculumNode`,
+and `mergeCurriculumNode`.
+
+Additional guards in this prototype:
+- Admin custom claim is required for all four actions.
+- Node parent types must follow level → track → subject → unit; a level is a root.
+- Import batches reject duplicate IDs, cycles, invalid parent type chains, and missing external parents.
+- Merge rejects incompatible child types and stops if more than 450 children would be written in one transaction.
+
+A unit-test file was added at `functions/test/curriculumAdmin.test.cjs` for pure
+hierarchy and input-validation helpers. **These tests have not yet been executed.**
+The GitHub commit has no associated workflow runs or commit statuses at the time of
+this check. No successful TypeScript build, test run, or emulator execution is claimed.
+
+Known behavior still matching the HTTP route rather than improving it:
+- `reorderCurriculumNode` applies a +1/-1 numeric delta; it does not swap sibling order values.
+  Duplicate order values remain possible and require a separate product/behavior decision.
+- This callable is a new Functions endpoint; the web client still calls the HTTP route.
+  No client migration, deployment, Firebase mutation, or production release occurred.
+- The implementation is on an isolated branch and has not been merged into the diagnostic
+  branch or the web foundation PR.
+
+Before considering this prototype usable, run `npm ci && npm test` in `functions/`,
+then Firebase Emulator integration tests covering authorization, parent validation,
+batch imports, merge limits, and concurrent mutations. A successful local/emulator test
+would still not make Cloud Functions deployable under the Spark-only constraint.
+
 ## Scope
 
 This is an inventory only. It makes no source-code, Firebase, deployment, PR, or

@@ -62,3 +62,14 @@ Binding constraints: Firebase Spark only; do not invoke Cloud Functions; Next.js
 - Keep account deletion disabled until full cleanup verification.
 - Never run a Firebase-configured Android APK in CI against the real Auth project; the app currently creates anonymous Auth users at launch.
 - A green subset of jobs is not a green workflow; require Web E2E and Android build/unit tests on the same application-code SHA. Physical-device runtime verification remains separate.
+
+
+## Latest verified CI baseline — 2026-11-22 09:40 UTC
+
+- Exact application-code head: `24f6ef494c9777a73743e5b9860469dbbcd70354`.
+- Web CI Run [45008354038](https://github.com/walid1239/Imi-android/actions/runs/45008354038): **success**. Web typecheck/build/health checks, Functions integration tests, Firestore/Storage Emulator tests, Coturn Compose validation, and Playwright browser E2E all completed successfully.
+- Android CI Run [45008354067](https://github.com/walid1239/Imi-android/actions/runs/45008354067): **success**. JDK 17/Android SDK setup, Gradle verification, unit tests, and debug APK assembly/upload completed successfully. The live-Firebase smoke test was deliberately skipped; Android emulator launch was skipped to avoid creating an anonymous Auth user against the real Firebase project.
+- APK artifact: `IMI-debug-apk-firebase-configured`, 23,571,478 bytes, SHA-256 `2aebf6a8d81ed47d0ae204d7c156adb663deeebee0d5be78c4759292fe7be37c`. Artifact ID `14748324562`; attached to Android Run 45008354067; expires 2026-12-06 09:40 UTC.
+- Firebase workflow Run [45008353988](https://github.com/walid1239/Imi-android/actions/runs/45008353988): validation succeeded; protected Firestore rules/index deployment job was **skipped**. No real Firebase deployment occurred.
+- PR #2 remains open and unmerged. No production deployment, Firebase mutation, paid-plan upgrade, or secret change was performed.
+- This is a green CI/debug-artifact baseline, **not production acceptance**. Physical-device installation, signed Release APK acceptance, live Firebase Auth/domain verification, approved hosting/runtime proof, and the documented feature/security/legal gates remain outstanding.

@@ -110,6 +110,10 @@ jobs:
           curl --silent --show-error --fail http://127.0.0.1:8787/api/v1/health --output "$RUNNER_TEMP/imi-worker-v1-health.json"
           node -e "const x=require(process.argv[1]); if(x.status!=='ok'||x.service!=='imi-web') process.exit(1)" "$RUNNER_TEMP/imi-worker-v1-health.json"
 
+          # Diagnose module evaluation separately from Firebase operations.
+          curl --silent --show-error --fail http://127.0.0.1:8787/api/diagnostics/imports --output "$RUNNER_TEMP/imi-worker-import-diagnostics.json"
+          node -e "const x=require(process.argv[1]); if(x.diagnostic!=='module-load-only'||!Array.isArray(x.results)||!x.results.length) process.exit(1); console.log(JSON.stringify(x,null,2))" "$RUNNER_TEMP/imi-worker-import-diagnostics.json"
+
           # Exercise a Node-runtime API route module without invoking POST,
           # initializing Firebase Admin, or touching Firestore.
           API_STATUS=$(curl --silent --show-error --output "$RUNNER_TEMP/imi-worker-api-route.txt" --write-out '%{http_code}' http://127.0.0.1:8787/api/v1/conversations/direct)

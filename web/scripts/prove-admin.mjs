@@ -5,7 +5,7 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
 process.env.FIREBASE_AUTH_EMULATOR_HOST ||= "127.0.0.1:9099";
 process.env.FIRESTORE_EMULATOR_HOST ||= "127.0.0.1:8080";
-const projectId = process.env.GCLOUD_PROJECT || "demo-imi-admin-health";
+const projectId = process.env.GCLOUD_PROJECT || "demo-imi-playwright";
 if (!projectId.startsWith("demo-")) {
   throw new Error("Refusing admin proof outside a demo-* Firebase project.");
 }

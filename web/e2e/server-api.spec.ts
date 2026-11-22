@@ -283,6 +283,9 @@ test('teacher applications use HTTPS proof links, published curriculum and admin
   const suffix = fixtureSuffix(test.info().project.name, test.info().retry);
   const applicantUid = `imi-e2e-b-${suffix}`;
   const applicantToken = await idToken(`e2e-b-${suffix}@imi.test`);
+  const httpAttemptToken = await idToken(`e2e-d-${suffix}@imi.test`);
+  const credentialAttemptToken = await idToken(`e2e-e-${suffix}@imi.test`);
+  const unpublishedAttemptToken = await idToken(`e2e-f-${suffix}@imi.test`);
   const adminToken = await idToken(`e2e-admin-${suffix}@imi.test`);
   const payload = {
     fullName: 'أستاذة اختبار واجهة الخادم',
@@ -293,17 +296,17 @@ test('teacher applications use HTTPS proof links, published curriculum and admin
 
   const httpLink = await post('/api/v1/teachers/applications', {
     ...payload, proofUrl: 'http://example.com/proof',
-  }, applicantToken);
+  }, httpAttemptToken);
   expect(httpLink.status).toBe(400);
 
   const credentialLink = await post('/api/v1/teachers/applications', {
     ...payload, proofUrl: 'https://user:password@example.com/proof',
-  }, applicantToken);
+  }, credentialAttemptToken);
   expect(credentialLink.status).toBe(400);
 
   const unpublished = await post('/api/v1/teachers/applications', {
     ...payload, subjectIds: ['e2e-unpublished-subject'],
-  }, applicantToken);
+  }, unpublishedAttemptToken);
   expect(unpublished.status).toBe(409);
 
   const submitted = await post('/api/v1/teachers/applications', payload, applicantToken);

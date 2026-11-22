@@ -1,4 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
+import { initializeApp, getApps } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
+
+const adminSdkApp = getApps().find(app => app.name === 'imi-academy-ui-e2e')
+  ?? initializeApp({ projectId: 'demo-imi-playwright' }, 'imi-academy-ui-e2e');
+const adminAuth = getAuth(adminSdkApp);
+const adminDb = getFirestore(adminSdkApp);
 
 const password = 'IMI-Emulator-Password-2026!';
 const suffix = (project: string) => project.includes('mobile') ? 'mobile' : 'desktop';
@@ -108,23 +116,53 @@ test('signed-in learner sees the same empty curriculum without legacy course les
   await expect(page.getByText('لا دروس بعد. سيضيفها أساتذتنا قريباً')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'مهارة التعلم الذاتي' })).toHaveCount(0);
 });
-test('admin claim exposes the protected Academy administration panel', async ({ page }) => {
+test('admin reviews teacher applications through the UI and syncs Auth claims', async ({ page }) => {
   const project = test.info().project.name;
   const fixture = test.info().retry > 0 ? `${suffix(project)}-retry${test.info().retry}` : suffix(project);
+  const approvedUid = 'imi-e2e-a-' + fixture;
+  const rejectedUid = 'imi-e2e-b-' + fixture;
+  const rejectedEmail = `e2e-b-${fixture}@imi.test`;
+  const proofUrl = 'https://drive.google.com/file/d/imi-e2e-fixture/view';
+
+  await adminDb.doc('teacherApplications/' + rejectedUid).set({
+    uid: rejectedUid, fullName: 'طلب أستاذ مرفوض ' + fixture,
+    subjectIds: ['e2e-primary-math'], levelIds: ['e2e-primary'],
+    proofUrl, status: 'pending', submittedAt: new Date(),
+  });
+  await adminAuth.setCustomUserClaims(approvedUid, {});
+  await adminAuth.setCustomUserClaims(rejectedUid, {});
+
   await login(page, `e2e-admin-${fixture}@imi.test`);
   await expect(page.getByRole('button', { name: /إدارة الأكاديمية/ }).first()).toBeVisible();
   await page.getByRole('button', { name: /إدارة الأكاديمية/ }).first().click();
   await expect(page.getByRole('heading', { name: 'إدارة الأكاديمية' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'إدارة شجرة المنهاج' })).toBeVisible();
-  const teacherUid = 'imi-e2e-a-' + fixture;
+
   const contentTitle = 'درس أستاذ اختبار منشور ' + fixture;
   await expect(page.getByText(contentTitle, { exact: true })).toBeVisible();
   const draftCard = page.locator('article').filter({ has: page.getByText(contentTitle, { exact: true }) });
   await expect(draftCard.getByRole('button', { name: 'اعتماد ونشر' })).toBeDisabled();
-  const applicationCard = page.locator('article').filter({ has: page.getByText('UID: ' + teacherUid, { exact: true }) });
-  await expect(applicationCard.getByRole('button', { name: 'اعتماد التوثيق' })).toBeEnabled();
-  await expect(applicationCard.getByRole('button', { name: 'رفض الطلب' })).toBeEnabled();
-  await expect(page.getByText('فتح رابط الإثبات')).toHaveCount(0);
+
+  const approvedCard = page.locator('article').filter({ has: page.getByText('UID: ' + approvedUid, { exact: true }) });
+  const approvedProof = approvedCard.getByRole('link', { name: 'فتح رابط الإثبات' });
+  await expect(approvedProof).toHaveAttribute('href', proofUrl);
+  await expect(approvedProof).toHaveAttribute('rel', /noopener/);
+  await approvedCard.getByRole('button', { name: 'اعتماد التوثيق' }).click();
+  await expect(page.getByRole('status')).toContainText('تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق.');
+  expect((await adminDb.doc('teacherApplications/' + approvedUid).get()).get('status')).toBe('approved');
+  const approvedUser = await adminAuth.getUser(approvedUid);
+  expect(approvedUser.customClaims).toMatchObject({ teacher: true, teacherVerified: true });
+
+  const rejectedCard = page.locator('article').filter({ has: page.getByText('UID: ' + rejectedUid, { exact: true }) });
+  await expect(rejectedCard.getByRole('button', { name: 'رفض الطلب' })).toBeEnabled();
+  await rejectedCard.getByRole('button', { name: 'رفض الطلب' }).click();
+  await expect(page.getByRole('status')).toContainText('تم رفض طلب التوثيق.');
+  expect((await adminDb.doc('teacherApplications/' + rejectedUid).get()).get('status')).toBe('rejected');
+  const rejectedUser = await adminAuth.getUser(rejectedUid);
+  expect(rejectedUser.customClaims?.teacher).not.toBe(true);
+  expect(rejectedUser.customClaims?.teacherVerified).not.toBe(true);
+  const audit = await adminDb.collection('moderationAudit').get();
+  expect(audit.docs.some(doc => JSON.stringify(doc.data()).includes(rejectedUid))).toBe(true);
   await expect(page.getByText(/مراجعة محتوى الأساتذة وتوثيقهم وإدارة الدورات متوقفة مؤقتاً/)).toBeVisible();
 });
 

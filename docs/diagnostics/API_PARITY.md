@@ -126,6 +126,32 @@ corruption has occurred. A safe implementation should define the curriculum type
 and sibling-order policy centrally, then validate both in transactions and test concurrent
 create/import/reorder/merge scenarios against the Firestore Emulator.
 
+
+## Functions test coverage finding
+
+The currently inspected Functions test file,
+`functions/test/serverCore.test.cjs`, contains 13 Node tests and imports
+`functions/lib/shared/serverCore.js` directly. Those tests exercise the pure shared-core
+implementation with an in-memory store; they do **not** invoke the Firebase callable exports
+in `socialSafety.ts` or `teacher.ts`, nor do they exercise Firestore Emulator transaction
+semantics for those callable implementations. The package test command is
+`npm run build && node --test test/*.test.cjs`.
+
+Consequently, passing the shared-core tests cannot be used as evidence that the separately
+implemented callable paths have the same authorization, race behavior, query/index behavior,
+or side effects. Before a Functions migration, add callable-level tests using the Firebase
+Emulator (or isolated dependency-injected handlers) for at least:
+
+- simultaneous block and call creation; block/unblock with reverse blocks;
+- simultaneous group-member additions, group removal/deletion races, and admin revocation;
+- friendship/block changes between preflight checks and group transaction commit;
+- teacher-application review idempotency, claims-outbox retry/reconciliation, and concurrent
+  opposing review decisions;
+- the four curriculum operations, including malformed hierarchy, duplicate sibling order,
+  cycles, and concurrent tree edits.
+
+No test was run or added as part of this documentation-only audit.
+
 ## Scope
 
 This is an inventory only. It makes no source-code, Firebase, deployment, PR, or

@@ -67,6 +67,7 @@ jobs:
         run: npm audit --audit-level=high
       - run: npm run typecheck
       - run: npm run test:rate-limit
+      - run: npm run test:env
       - run: npm run build
       - run: npm run test:health
 

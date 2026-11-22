@@ -628,6 +628,7 @@ test('teacher applications and profiles are private and client writes cannot gra
   await assertFails(getDoc(doc(mallory, 'teacherApplications/alice')));
   await assertSucceeds(getDoc(doc(admin, 'teacherApplications/alice')));
   await assertFails(setDoc(doc(alice, 'teacherApplications/alice'), { uid: 'alice', status: 'approved' }));
+  await assertFails(setDoc(doc(admin, 'teacherApplications/alice'), { uid: 'alice', status: 'approved' }));
   const newApplicant = env.authenticatedContext('charlie').firestore();
   await assertFails(setDoc(doc(newApplicant, 'teacherApplications/charlie'), {
     uid: 'charlie', fullName: 'أستاذ اختبار',
@@ -651,6 +652,8 @@ test('teacher applications and profiles are private and client writes cannot gra
   await assertFails(getDoc(doc(guest, 'teacherLiveSessions/mock-room')));
   await assertSucceeds(getDoc(doc(alice, 'teacherLiveSessions/mock-room')));
   await assertFails(getDoc(doc(admin, 'moderationAudit/audit-1')));
+  await assertFails(setDoc(doc(alice, 'moderationAudit/client-forged'), { actorUid: 'alice' }));
+  await assertFails(setDoc(doc(admin, 'moderationAudit/admin-forged'), { actorUid: 'admin' }));
   await assertFails(getDoc(doc(alice, 'moderationAudit/audit-1')));
 });
 

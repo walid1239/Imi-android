@@ -74,3 +74,26 @@ a small server-only Firestore REST adapter while retaining the existing
   explicit owner approval.
 - Do not claim Cloudflare support until the route returns the expected 405
   under local Worker preview and the complete test suite passes.
+
+## Additional security constraint confirmed by source review
+
+The existing Firestore rules deliberately deny client writes for server-owned workflows:
+friend requests, statuses, friend relationships, course/lesson administration, learner
+enrollments, reports, report-rate limits, and moderation logs. They also reserve
+curriculum writes for users with the admin custom claim. Therefore, simply replacing
+Admin SDK calls with Firestore REST requests authenticated by an ordinary Firebase
+user ID token is not a compatible migration: most existing operations would be
+rejected by Security Rules.
+
+A Worker-side REST adapter that preserves the current server-authoritative behavior
+would need privileged Google credentials at runtime (for example, a service-account
+JWT exchange) and careful handling of Firebase Auth custom claims. Such credentials
+must be configured as runtime secrets, never committed to Git or printed in logs.
+No evidence in these CI runs establishes that the Cloudflare environment has those
+credentials configured.
+
+Consequently, the REST approach is conditional, not yet an approved or ready
+implementation. If the owner will not configure a runtime secret, keep privileged
+operations on an already trusted Node.js backend; do not weaken Firestore rules to
+make the Worker pass. Do not create Cloud Functions or change the Firebase plan.
+

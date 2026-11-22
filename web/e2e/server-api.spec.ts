@@ -249,6 +249,29 @@ test('Reels API validates submissions and keeps moderation admin-only', async ()
 });
 
 
+
+test('admin health probe is opt-in, requires a verified admin and reads the seeded Firestore document', async () => {
+  const suffix = fixtureSuffix(test.info().project.name, test.info().retry);
+  const adminToken = await idToken(`e2e-admin-${suffix}@imi.test`);
+  const userToken = await idToken(`e2e-b-${suffix}@imi.test`);
+
+  const denied = await fetch(`${apiBase}/api/v1/health/admin`, {
+    headers: { authorization: `Bearer ${userToken}` },
+  });
+  expect(denied.status).toBe(403);
+
+  const missing = await fetch(`${apiBase}/api/v1/health/admin`);
+  expect(missing.status).toBe(401);
+
+  const success = await fetch(`${apiBase}/api/v1/health/admin`, {
+    headers: { authorization: `Bearer ${adminToken}` },
+  });
+  expect(success.status).toBe(200);
+  expect(await success.json()).toMatchObject({
+    status: 'ok', service: 'imi-admin-api', firestoreRead: true,
+  });
+});
+
 test('teacher applications use HTTPS proof links, published curriculum and admin-only idempotent review', async () => {
   const suffix = fixtureSuffix(test.info().project.name, test.info().retry);
   const applicantUid = `imi-e2e-b-${suffix}`;

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { headers } from 'next/headers';
 import { PwaRegister } from '@/components/pwa-register';
 import './globals.css';
 
@@ -20,7 +21,11 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // Reading request headers opts the production App Router render into the
+  // request context from which Next.js extracts the CSP nonce for its scripts.
+  await headers();
+
   return (
     <html lang="ar" dir="rtl">
       <body>

@@ -1136,6 +1136,18 @@ test('users root document allows only profile fields and rejects self-escalation
     languages: ['ar', 'fr'],
     updatedAt: serverTimestamp()
   }));
+  await assertSucceeds((await import('firebase/firestore')).updateDoc(doc(aliceDb, 'users/alice'), {
+    displayName: 'Alice Avatar',
+    city: 'Casablanca',
+    photoPath: 'users/alice/avatars/avatar.webp',
+    updatedAt: serverTimestamp()
+  }));
+  await assertFails((await import('firebase/firestore')).updateDoc(doc(aliceDb, 'users/alice'), {
+    displayName: 'Alice Avatar',
+    city: 'Casablanca',
+    photoPath: 'users/bob/avatars/avatar.webp',
+    updatedAt: serverTimestamp()
+  }));
   await assertFails((await import('firebase/firestore')).updateDoc(doc(aliceDb, 'users/alice'), {
     bio: 'x'.repeat(301), updatedAt: serverTimestamp()
   }));

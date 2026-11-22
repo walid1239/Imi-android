@@ -118,10 +118,11 @@ test('admin claim exposes the protected Academy administration panel', async ({ 
   const teacherUid = 'imi-e2e-a-' + fixture;
   const contentTitle = 'درس أستاذ اختبار منشور ' + fixture;
   await expect(page.getByText(contentTitle, { exact: true })).toBeVisible();
-  await page.locator('article').filter({ has: page.getByText(contentTitle, { exact: true }) }).getByRole('button', { name: 'اعتماد ونشر' }).click();
-  await expect(page.getByRole('status')).toContainText('تم نشر المحتوى بعد المراجعة');
-  await page.locator('article').filter({ has: page.getByText('UID: ' + teacherUid, { exact: true }) }).getByRole('button', { name: 'اعتماد التوثيق' }).click();
-  await expect(page.getByRole('status')).toContainText('تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق');
+  const draftCard = page.locator('article').filter({ has: page.getByText(contentTitle, { exact: true }) });
+  await expect(draftCard.getByRole('button', { name: 'اعتماد ونشر' })).toBeDisabled();
+  const applicationCard = page.locator('article').filter({ has: page.getByText('UID: ' + teacherUid, { exact: true }) });
+  await expect(applicationCard.getByRole('button', { name: 'اعتماد التوثيق' })).toBeDisabled();
+  await expect(page.getByText(/مراجعة محتوى الأساتذة وتوثيقهم وإدارة الدورات متوقفة مؤقتاً/)).toBeVisible();
 });
 
 
@@ -143,14 +144,13 @@ test('verified teachers cannot start private student chats or mixed private grou
   await expect(page.locator('p[role="alert"]')).toContainText('المجموعات الخاصة بين الأساتذة والتلاميذ غير متاحة');
 });
 
-test('approved teacher content appears under its curriculum subject', async ({ page }) => {
+test('unreviewed teacher drafts remain hidden from the learner curriculum', async ({ page }) => {
   await page.goto('/academy');
   await page.getByLabel('المستوى').selectOption('e2e-primary');
   await page.getByLabel('الشعبة أو المسلك').selectOption('e2e-primary-track');
   await page.getByRole('button', { name: /الرياضيات - اختبار/ }).click();
   const contentTitle = 'درس أستاذ اختبار منشور ' + suffix(test.info().project.name);
-  await expect(page.getByText(contentTitle, { exact: true })).toBeVisible();
-  await expect(page.locator('article').filter({ has: page.getByText(contentTitle, { exact: true }) }).getByText(/هذا نص تجريبي طويل بما يكفي/, { exact: false })).toBeVisible();
+  await expect(page.getByText(contentTitle, { exact: true })).toHaveCount(0);
 });
 
 test('teacher application and studio routes explain verification gate', async ({ page }) => {

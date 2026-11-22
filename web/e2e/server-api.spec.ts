@@ -175,7 +175,7 @@ test('admin can preview and publish a large curriculum level without publishing 
   const userToken = await idToken(`e2e-b-${suffix}@imi.test`);
   const scopeId = `e2e-publish-level-${suffix}`;
   const nestedLevelId = `e2e-publish-nested-level-${suffix}`;
-  const namelessId = scopeId + '-track-subject-nameless';
+  const namelessId = scopeId + '-subject-nameless';
   const lessonCountBefore = await emulatorCollectionCount('courses/e2e-general-skills/lessons');
 
   const denied = await post('/api/v1/admin/curriculum/publish', {
@@ -212,6 +212,7 @@ test('admin can preview and publish a large curriculum level without publishing 
   const rootAfter = await emulatorDocument('curriculumNodes/' + scopeId);
   expect((rootAfter?.fields as Record<string, { stringValue?: string }>).status.stringValue).toBe('published');
   const nameless = await emulatorDocument('curriculumNodes/' + namelessId);
+  expect(nameless).not.toBeNull();
   expect((nameless?.fields as Record<string, { stringValue?: string }>).status.stringValue).toBe('hidden');
 
   const secondPreview = await post('/api/v1/admin/curriculum/publish', {

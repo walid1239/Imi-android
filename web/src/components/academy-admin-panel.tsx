@@ -37,6 +37,8 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  // Legacy moderation handlers intentionally stay disabled until their IMI API routes exist.
+  const legacyActionsDisabled = true;
 
   useEffect(() => {
     let active = true;
@@ -150,6 +152,7 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
       <p className="text-xs font-semibold text-violet-300">IMI ACADEMY · ADMIN</p>
       <h2 className="mt-2 text-2xl font-black">إدارة الأكاديمية</h2>
       <p className="mt-2 text-sm text-slate-400">أنشئ محتوى حقيقياً كمسودات ثم انشره بعد مراجعته. صلاحية المشرف يتحقق منها Firebase.</p>
+      <p className="mt-2 text-xs text-amber-300">مراجعة محتوى الأساتذة وتوثيقهم وإدارة الدورات متوقفة مؤقتاً حتى نقلها إلى IMI API؛ لا تُرسل هذه الأزرار طلبات إلى Cloud Functions.</p>
     </header>
 
     <section className="space-y-3 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
@@ -159,8 +162,8 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
         <p className="mt-1 text-xs text-slate-400">الأستاذ: {item.ownerUid} · النوع: {item.kind} · المادة: {item.subjectId}</p>
         <p className="mt-1 text-xs text-slate-500">المصدر: {item.sourceName} · الرخصة: {item.license}</p>
         <div className="mt-3 flex gap-2">
-          <button disabled={busy} onClick={()=>call('reviewTeacherContent',{contentId:item.id,approved:true,note:''},'تم نشر المحتوى بعد المراجعة.')} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold disabled:opacity-50">اعتماد ونشر</button>
-          <button disabled={busy} onClick={()=>call('reviewTeacherContent',{contentId:item.id,approved:false,note:'يحتاج إلى تعديل قبل النشر'},'تم رفض المسودة وإعادتها للمراجعة.')} className="rounded-lg border border-red-400/30 px-3 py-2 text-xs text-red-200 disabled:opacity-50">رفض</button>
+          <button disabled={busy || legacyActionsDisabled} onClick={()=>call('reviewTeacherContent',{contentId:item.id,approved:true,note:''},'تم نشر المحتوى بعد المراجعة.')} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold disabled:opacity-50">اعتماد ونشر</button>
+          <button disabled={busy || legacyActionsDisabled} onClick={()=>call('reviewTeacherContent',{contentId:item.id,approved:false,note:'يحتاج إلى تعديل قبل النشر'},'تم رفض المسودة وإعادتها للمراجعة.')} className="rounded-lg border border-red-400/30 px-3 py-2 text-xs text-red-200 disabled:opacity-50">رفض</button>
         </div>
       </article>)}
     </section>
@@ -179,8 +182,8 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
           {evidenceUrls[application.uid] && <a href={evidenceUrls[application.uid]} target="_blank" rel="noreferrer" className="rounded-lg border border-white/10 px-3 py-2 text-slate-200">فتح الوثيقة</a>}
         </div>
         <div className="mt-3 flex gap-2">
-          <button disabled={busy} onClick={() => call('reviewTeacherApplication', { uid: application.uid, approved: true, note: '' }, 'تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق.')} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold disabled:opacity-50">اعتماد التوثيق</button>
-          <button disabled={busy} onClick={() => call('reviewTeacherApplication', { uid: application.uid, approved: false, note: 'لم يستوفِ متطلبات التوثيق' }, 'تم رفض طلب التوثيق.')} className="rounded-lg border border-red-400/30 px-3 py-2 text-xs text-red-200 disabled:opacity-50">رفض الطلب</button>
+          <button disabled={busy || legacyActionsDisabled} onClick={() => call('reviewTeacherApplication', { uid: application.uid, approved: true, note: '' }, 'تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق.')} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold disabled:opacity-50">اعتماد التوثيق</button>
+          <button disabled={busy || legacyActionsDisabled} onClick={() => call('reviewTeacherApplication', { uid: application.uid, approved: false, note: 'لم يستوفِ متطلبات التوثيق' }, 'تم رفض طلب التوثيق.')} className="rounded-lg border border-red-400/30 px-3 py-2 text-xs text-red-200 disabled:opacity-50">رفض الطلب</button>
         </div>
       </article>)}
     </section>
@@ -192,8 +195,8 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
         <p className="mt-2 text-xs text-slate-400">الدورة: {report.courseId} · الدرس: {report.lessonId}</p>
         {report.details && <p className="mt-2 text-sm leading-6 text-slate-300">{report.details}</p>}
         {report.status === 'open' && <div className="mt-3 flex gap-2">
-          <button disabled={busy} onClick={() => call('reviewContentReport', { reportId: report.id, status: 'resolved', note: 'تمت المراجعة' }, 'تم إغلاق البلاغ وتسجيل الإجراء.')} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold disabled:opacity-40">إغلاق البلاغ</button>
-          <button disabled={busy} onClick={() => call('reviewContentReport', { reportId: report.id, status: 'dismissed', note: 'لم يثبت وجود مخالفة' }, 'تم رفض البلاغ وتسجيل الإجراء.')} className="rounded-lg border border-white/15 px-3 py-2 text-xs disabled:opacity-40">رفض البلاغ</button>
+          <button disabled={busy || legacyActionsDisabled} onClick={() => call('reviewContentReport', { reportId: report.id, status: 'resolved', note: 'تمت المراجعة' }, 'تم إغلاق البلاغ وتسجيل الإجراء.')} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold disabled:opacity-40">إغلاق البلاغ</button>
+          <button disabled={busy || legacyActionsDisabled} onClick={() => call('reviewContentReport', { reportId: report.id, status: 'dismissed', note: 'لم يثبت وجود مخالفة' }, 'تم رفض البلاغ وتسجيل الإجراء.')} className="rounded-lg border border-white/15 px-3 py-2 text-xs disabled:opacity-40">رفض البلاغ</button>
         </div>}
       </article>)}
     </section>
@@ -203,7 +206,7 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
       <input required maxLength={120} value={title} onChange={e => setTitle(e.target.value)} placeholder="عنوان الدورة" className="rounded-xl border border-white/10 bg-slate-900 px-3 py-3 text-sm outline-none focus:border-blue-500" />
       <input required maxLength={60} value={category} onChange={e => setCategory(e.target.value)} placeholder="التصنيف" className="rounded-xl border border-white/10 bg-slate-900 px-3 py-3 text-sm outline-none focus:border-blue-500" />
       <textarea maxLength={4000} value={description} onChange={e => setDescription(e.target.value)} placeholder="وصف الدورة" rows={3} className="rounded-xl border border-white/10 bg-slate-900 px-3 py-3 text-sm outline-none focus:border-blue-500" />
-      <button disabled={busy} className="rounded-xl bg-violet-600 px-4 py-3 text-sm font-bold disabled:opacity-40">إنشاء كمسودة</button>
+      <button disabled={busy || legacyActionsDisabled} className="rounded-xl bg-violet-600 px-4 py-3 text-sm font-bold disabled:opacity-40">إنشاء كمسودة</button>
     </form>
 
     <div className="grid gap-4 lg:grid-cols-[minmax(0,.8fr)_minmax(0,1.2fr)]">
@@ -219,12 +222,12 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
       {selected && <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div><h3 className="font-bold">{selected.title}</h3><p className="mt-1 text-xs text-slate-500">{lessons.length} درس</p></div>
-          <button disabled={busy || (!selected.published && lessons.length === 0)} onClick={() => call('publishCourse', { courseId: selected.id, published: !selected.published }, selected.published ? 'تم إلغاء نشر الدورة.' : 'تم نشر الدورة.')} className="rounded-lg border border-white/15 px-3 py-2 text-xs disabled:opacity-40">{selected.published ? 'إلغاء النشر' : 'نشر الدورة'}</button>
+          <button disabled={legacyActionsDisabled || busy || (!selected.published && lessons.length === 0)} onClick={() => call('publishCourse', { courseId: selected.id, published: !selected.published }, selected.published ? 'تم إلغاء نشر الدورة.' : 'تم نشر الدورة.')} className="rounded-lg border border-white/15 px-3 py-2 text-xs disabled:opacity-40">{selected.published ? 'إلغاء النشر' : 'نشر الدورة'}</button>
         </div>
 
         {lessons.map(lesson => <div key={lesson.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 p-3">
           <div className="min-w-0"><p className="truncate text-sm font-semibold">{lesson.title}</p><p className="mt-1 text-[10px] text-slate-500">الترتيب {lesson.order} · {lesson.published ? 'منشور' : 'مسودة'} · {lesson.sourceName || 'مصدر غير محدد'} · {lesson.reviewStatus || 'بانتظار المراجعة'}</p></div>
-          <button disabled={busy || (!selected.published && !lesson.published)} onClick={() => call('publishCourseLesson', { courseId: selected.id, lessonId: lesson.id, published: !lesson.published }, lesson.published ? 'تم إخفاء الدرس.' : 'تم نشر الدرس.')} className="shrink-0 rounded-lg border border-white/15 px-3 py-2 text-xs disabled:opacity-40">{lesson.published ? 'إخفاء' : 'نشر'}</button>
+          <button disabled={legacyActionsDisabled || busy || (!selected.published && !lesson.published)} onClick={() => call('publishCourseLesson', { courseId: selected.id, lessonId: lesson.id, published: !lesson.published }, lesson.published ? 'تم إخفاء الدرس.' : 'تم نشر الدرس.')} className="shrink-0 rounded-lg border border-white/15 px-3 py-2 text-xs disabled:opacity-40">{lesson.published ? 'إخفاء' : 'نشر'}</button>
         </div>)}
 
         {!selected.published && <form onSubmit={createLesson} className="space-y-3 rounded-xl border border-dashed border-white/15 p-3">
@@ -243,7 +246,7 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
           <input required maxLength={160} value={license} onChange={e => setLicense(e.target.value)} placeholder="الترخيص أو أساس الإذن" className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" />
           <textarea required maxLength={1000} rows={2} value={permissionNote} onChange={e => setPermissionNote(e.target.value)} placeholder="ملاحظة الإذن والمراجعة البشرية أو الاتفاق" className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" />
           <p className="text-[11px] leading-5 text-amber-300">لا يُنشر أي درس دون مصدر وترخيص/إذن موثق ومراجع معتمد. المحتوى الأصلي يحتاج مراجعة بشرية، ومحتوى الأستاذ يحتاج اتفاقاً موثقاً.</p>
-          <button disabled={busy} className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-bold disabled:opacity-40">إضافة الدرس كمسودة</button>
+          <button disabled={busy || legacyActionsDisabled} className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-bold disabled:opacity-40">إضافة الدرس كمسودة</button>
         </form>}
         {selected.published && <p className="text-xs leading-6 text-slate-500">لإضافة دروس جديدة، ألغِ نشر الدورة أولاً. بعد الإضافة أعد نشر الدروس والدورة.</p>}
       </div>}

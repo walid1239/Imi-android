@@ -73,6 +73,44 @@ jobs:
         run: |
           npm install --no-save --package-lock=false @opennextjs/cloudflare@latest wrangler@latest
           npm run cf:build
+      - name: Smoke-test Worker in local Cloudflare runtime (no deployment)
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG="$RUNNER_TEMP/imi-cloudflare-preview.log"
+          timeout 180s npm run cf:preview -- --port 8787 --ip 127.0.0.1 >"$LOG" 2>&1 &
+          PREVIEW_PID=$!
+          cleanup() {
+            kill "$PREVIEW_PID" 2>/dev/null || true
+            wait "$PREVIEW_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          READY=0
+          for attempt in $(seq 1 60); do
+            if ! kill -0 "$PREVIEW_PID" 2>/dev/null; then
+              cat "$LOG"
+              echo "Cloudflare local preview exited before becoming ready."
+              exit 1
+            fi
+            if curl --silent --show-error --fail http://127.0.0.1:8787/api/health --output "$RUNNER_TEMP/imi-worker-health.json" 2>/dev/null; then
+              READY=1
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$READY" -ne 1 ]; then
+            cat "$LOG"
+            echo "Cloudflare local Worker did not answer /api/health within 120 seconds."
+            exit 1
+          fi
+
+          node -e "const x=require(process.argv[1]); if(x.status!=='ok'||x.service!=='imi-web') process.exit(1)" "$RUNNER_TEMP/imi-worker-health.json"
+          curl --silent --show-error --fail http://127.0.0.1:8787/api/v1/health --output "$RUNNER_TEMP/imi-worker-v1-health.json"
+          node -e "const x=require(process.argv[1]); if(x.status!=='ok'||x.service!=='imi-web') process.exit(1)" "$RUNNER_TEMP/imi-worker-v1-health.json"
+          echo "PASS: Cloudflare Worker runtime served both health routes locally. No deployment was performed."
+          cat "$LOG"
       - run: npm run test:health
 
   # Firebase CLI 15.37.0 Emulator Suite requires JDK 21+.
@@ -144,7 +182,6 @@ jobs:
           --only firestore --project demo-imi-academy
           "node scripts/seed-curriculum.cjs --emulator --project=demo-imi-academy &&
           node scripts/verify-academy-seed.cjs"
-
 
   playwright-e2e:
     name: Playwright browser tests against Firebase Emulator

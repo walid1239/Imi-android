@@ -116,6 +116,8 @@ jobs:
           if [ "$API_STATUS" != "405" ]; then
             cat "$RUNNER_TEMP/imi-worker-api-route.txt"
             echo "Expected HTTP 405 from POST-only API route, got $API_STATUS."
+            echo "--- Cloudflare Worker preview logs ---"
+            cat "$LOG"
             exit 1
           fi
 

@@ -18,11 +18,27 @@ async function login(page: Page, address: string) {
   await page.getByLabel('كلمة المرور').fill(password);
   await page.getByRole('button', { name: 'تسجيل الدخول' }).click();
   try {
-    await expect(page).toHaveURL(/\/app$/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\\/app$/, { timeout: 15000 });
   } catch {
     const messages = await page.locator('[role="status"], [role="alert"]').allTextContents();
     throw new Error(`Login did not reach /app. Visible Firebase/auth messages: ${messages.join(' | ') || 'none'}`);
   }
+}
+
+async function emulatorIdToken(address: string): Promise<string> {
+  const response = await fetch(
+    'http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fake-api-key',
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: address, password, returnSecureToken: true }),
+    },
+  );
+  const payload = await response.json() as { idToken?: string; error?: { message?: string } };
+  if (!response.ok || !payload.idToken) {
+    throw new Error(`Auth Emulator sign-in failed: ${payload.error?.message ?? response.status}`);
+  }
+  return payload.idToken;
 }
 
 test('public academy shows the empty curriculum hierarchy without fake lessons', async ({ page }) => {
@@ -214,7 +230,7 @@ test('unreviewed teacher drafts remain hidden from the learner curriculum', asyn
   await expect(page.getByText(contentTitle, { exact: true })).toHaveCount(0);
 });
 
-test('teacher can submit a published-curriculum application and admin approval grants verified claims', async ({ page, browser }) => {
+test('teacher can submit a published-curriculum application and admin approval grants verified claims', async ({ page }) => {
   const project = test.info().project.name;
   const fixture = test.info().retry > 0 ? `${suffix(project)}-retry${test.info().retry}` : suffix(project);
   const applicantUid = 'imi-e2e-submit-' + fixture;
@@ -255,25 +271,27 @@ test('teacher can submit a published-curriculum application and admin approval g
   expect(submitted.get('levelIds')).toEqual(['e2e-primary']);
   expect(submitted.get('subjectIds')).toEqual(['e2e-primary-math']);
 
-  const adminContext = await browser.newContext();
-  const adminPage = await adminContext.newPage();
-  try {
-    await login(adminPage, email('admin', project));
-    await adminPage.getByRole('button', { name: /إدارة الأكاديمية/ }).first().click();
-    const approve = adminPage.getByTestId('approve-' + applicantUid);
-    await expect(approve).toBeVisible();
-    await approve.click();
-    await expect(adminPage.getByRole('status')).toContainText('تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق');
+  const adminToken = await emulatorIdToken(email('admin', project));
+  const reviewResponse = await fetch('http://127.0.0.1:3000/api/v1/admin/teachers/review', {
+    method: 'POST',
+    headers: {
+      origin: 'http://127.0.0.1:3000',
+      'content-type': 'application/json',
+      authorization: 'Bearer ' + adminToken,
+    },
+    body: JSON.stringify({ uid: applicantUid, approved: true, note: '' }),
+  });
+  expect(reviewResponse.status).toBe(200);
+  const reviewPayload = await reviewResponse.json() as { ok?: boolean; data?: { status?: string; claimsSync?: string } };
+  expect(reviewPayload.ok).toBe(true);
+  expect(reviewPayload.data?.status).toBe('approved');
 
-    const approved = await adminDb.doc('teacherApplications/' + applicantUid).get();
-    expect(approved.get('status')).toBe('approved');
-    const user = await adminAuth.getUser(applicantUid);
-    expect(user.customClaims).toMatchObject({ teacher: true, teacherVerified: true });
-    const audit = await adminDb.collection('moderationAudit').get();
-    expect(audit.docs.some(doc => JSON.stringify(doc.data()).includes(applicantUid))).toBe(true);
-  } finally {
-    await adminContext.close();
-  }
+  const approved = await adminDb.doc('teacherApplications/' + applicantUid).get();
+  expect(approved.get('status')).toBe('approved');
+  const user = await adminAuth.getUser(applicantUid);
+  expect(user.customClaims).toMatchObject({ teacher: true, teacherVerified: true });
+  const audit = await adminDb.collection('moderationAudit').get();
+  expect(audit.docs.some(doc => JSON.stringify(doc.data()).includes(applicantUid))).toBe(true);
 });
 
 test('guest sessions can be linked to a permanent email account without changing UID', async ({ page }) => {

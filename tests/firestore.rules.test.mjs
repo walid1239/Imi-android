@@ -612,7 +612,7 @@ test('block records are owner-readable, server-managed, and block direct convers
 test('teacher applications and profiles are private and client writes cannot grant roles', async () => {
   await env.withSecurityRulesDisabled(async context => {
     const db = context.firestore();
-    await setDoc(doc(db, 'teacherApplications/alice'), { uid: 'alice', status: 'pending', evidencePath: 'teacher-verification/alice/id.pdf' });
+    await setDoc(doc(db, 'teacherApplications/alice'), { uid: 'alice', fullName: 'أستاذة اختبار', proofUrl: 'https://drive.google.com/file/d/test/view', status: 'pending' });
     await setDoc(doc(db, 'teacherProfiles/alice'), { uid: 'alice', published: true, profileComplete: true });
     await setDoc(doc(db, 'teacherProfiles/bob'), { uid: 'bob', published: false, profileComplete: false });
     await setDoc(doc(db, 'teacherProfiles/carol'), { uid: 'carol', profileComplete: true });
@@ -629,17 +629,15 @@ test('teacher applications and profiles are private and client writes cannot gra
   await assertSucceeds(getDoc(doc(admin, 'teacherApplications/alice')));
   await assertFails(setDoc(doc(alice, 'teacherApplications/alice'), { uid: 'alice', status: 'approved' }));
   const newApplicant = env.authenticatedContext('charlie').firestore();
-  await assertSucceeds(setDoc(doc(newApplicant, 'teacherApplications/charlie'), {
-    uid: 'charlie',
-    evidencePath: 'teacher-verification/charlie/identity.pdf',
-    status: 'uploading',
-    createdAt: serverTimestamp()
+  await assertFails(setDoc(doc(newApplicant, 'teacherApplications/charlie'), {
+    uid: 'charlie', fullName: 'أستاذ اختبار',
+    proofUrl: 'https://drive.google.com/file/d/test/view',
+    subjectIds: ['math'], levelIds: ['primary'], status: 'pending'
   }));
   await assertFails(setDoc(doc(newApplicant, 'teacherApplications/forged'), {
-    uid: 'forged',
-    evidencePath: 'teacher-verification/forged/identity.pdf',
-    status: 'uploading',
-    createdAt: serverTimestamp()
+    uid: 'forged', fullName: 'أستاذ مزيف',
+    proofUrl: 'https://drive.google.com/file/d/test/view',
+    subjectIds: ['math'], levelIds: ['primary'], status: 'pending'
   }));
   await assertFails(getDoc(doc(guest, 'teacherProfiles/alice')));
   await assertSucceeds(getDoc(doc(mallory, 'teacherProfiles/alice')));
@@ -652,7 +650,7 @@ test('teacher applications and profiles are private and client writes cannot gra
   await assertSucceeds(getDoc(doc(mallory, 'teacherLiveSessions/real-room')));
   await assertFails(getDoc(doc(guest, 'teacherLiveSessions/mock-room')));
   await assertSucceeds(getDoc(doc(alice, 'teacherLiveSessions/mock-room')));
-  await assertSucceeds(getDoc(doc(admin, 'moderationAudit/audit-1')));
+  await assertFails(getDoc(doc(admin, 'moderationAudit/audit-1')));
   await assertFails(getDoc(doc(alice, 'moderationAudit/audit-1')));
 });
 

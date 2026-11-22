@@ -847,3 +847,5 @@ export { submitTeacherApplication, reviewTeacherApplication, saveTeacherProfile,
 export { blockUser, unblockUser, createGroupConversation, addGroupParticipants } from "./socialSafety";
 
 export { deleteMyAccount } from "./account";
+
+export { academyCurriculumAdminAction } from "./curriculumAdmin";

@@ -129,7 +129,9 @@ jobs:
 
           echo "PASS: Cloudflare Worker served both health routes and loaded a Node-runtime API route (405 for GET). No Firebase operation or deployment was performed."
           cat "$LOG"
-      - run: npm run test:health
+      - name: Test health routes even when the Cloudflare smoke test fails
+        if: always()
+        run: npm run test:health
 
   # Firebase CLI 15.37.0 Emulator Suite requires JDK 21+.
   functions:

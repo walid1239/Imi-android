@@ -18,10 +18,10 @@ with callable exports in `functions/src/index.ts` and shared operations in
 | acceptFriendRequest | yes | yes | Logic exists in Functions |
 | rejectFriendRequest | yes | yes | Logic exists in Functions |
 | removeFriend | yes | yes | Logic exists in Functions |
-| blockUser | yes | no | Callable wrapper missing |
-| unblockUser | yes | no | Callable wrapper missing |
-| createGroupConversation | yes | no | Callable wrapper missing |
-| addGroupParticipants | yes | no | Callable wrapper missing |
+| blockUser | yes | yes (socialSafety.ts) | Callable exists; implementation differs from shared core |
+| unblockUser | yes | yes (socialSafety.ts) | Callable exists; implementation differs from shared core |
+| createGroupConversation | yes | yes (socialSafety.ts) | Callable exists; implementation differs from shared core |
+| addGroupParticipants | yes | yes (socialSafety.ts) | Callable exists; implementation differs from shared core |
 | enrollInCourse | HTTP-local | yes | Similar operation exists in Functions |
 | completeCourseLesson | HTTP-local | yes | Similar operation exists in Functions |
 | reportAcademyLesson | HTTP-local | yes | Callable exists |
@@ -31,37 +31,47 @@ with callable exports in `functions/src/index.ts` and shared operations in
 | academyAdmin.publishCourseLesson | HTTP-local | yes | Callable exists |
 | academyAdmin.reviewContentReport | HTTP-local | yes | Callable exists |
 | academyAdmin.reviewCurriculumNode | HTTP-local | yes | Callable exists |
-| academyAdmin.reviewTeacherContent | HTTP-local | no | Missing callable |
+| academyAdmin.reviewTeacherContent | HTTP-local | yes (teacher.ts) | Callable exists; compare review/audit semantics |
 | academyAdmin.createCurriculumNode | HTTP-local | no | Missing callable |
 | academyAdmin.importCurriculumNodes | HTTP-local | no | Missing callable |
 | academyAdmin.reorderCurriculumNode | HTTP-local | no | Missing callable |
 | academyAdmin.mergeCurriculumNode | HTTP-local | no | Missing callable |
-| academyAdmin.reviewTeacherApplication | HTTP-local | no | Missing callable; also mutates Firebase Auth custom claims |
+| academyAdmin.reviewTeacherApplication | HTTP-local | yes (teacher.ts) | Callable exists; uses claims outbox; compare HTTP semantics |
 
-**Gap count: 10 operations total** — 4 shared-core operations without callable wrappers and
-**6 Academy admin actions** without callable exports.
+**Missing callable gap count: 4 operations total** — the four missing Academy curriculum
+admin actions listed below. The four social-safety callables and both teacher-review callables
+are exported from separate modules and re-exported by `functions/src/index.ts`.
 
 ## Important non-equivalences
 
 The presence of a callable with a matching name does **not** make it a safe drop-in
-replacement for the HTTP route:
+replacement for the HTTP route. In particular, the HTTP route and callable implementations
+for social safety are separate code paths and require behavioral parity tests:
 
 1. The HTTP handler verifies bearer tokens with revocation checking, checks request
    origin, limits JSON body size, and applies per-operation Firestore transaction-based
    rate limits. The callable wrappers must be checked for equivalent abuse controls
    before the web client is switched.
-2. HTTP and callable request/response envelopes differ. Client call sites and error
+2. The social-safety callable implementations are in `functions/src/socialSafety.ts`
+   (re-exported by `functions/src/index.ts`), not wrappers around `serverCore.ts`. They
+   differ in transaction boundaries and concurrency protections; for example, the shared
+   core blocks calls after committing the block and then re-queries active calls, while the
+   callable queries active calls inside the initial transaction. Group creation and adding
+   members also perform some relationship/profile checks outside the final write transaction.
+   These paths need emulator tests for races and invariants before considering them equivalent.
+3. HTTP and callable request/response envelopes differ. Client call sites and error
    mapping require deliberate adaptation and tests.
-3. `createCourseLesson` differs: the HTTP implementation rejects every non-empty
+4. `createCourseLesson` differs: the HTTP implementation rejects every non-empty
    `videoUrl` in the free-first-stage path; the callable implementation accepts HTTPS
    URLs after validation. Do not silently change this policy.
-4. `reviewTeacherApplication` updates Auth custom claims as well as Firestore state.
-   A Firestore-only REST adapter cannot reproduce this operation.
-5. The Cloudflare Worker smoke test currently fails while evaluating
+5. Both teacher-review callables are exported from `functions/src/teacher.ts`.
+   `reviewTeacherApplication` queues custom-claim synchronization through the claims outbox;
+   a Firestore-only REST adapter cannot reproduce this operation.
+6. The Cloudflare Worker smoke test currently fails while evaluating
    `firebase-admin/firestore` because protobufjs attempts dynamic code generation
    blocked by the Worker runtime. This is a module/runtime compatibility failure, not
    merely an endpoint response bug.
-6. Replacing Admin SDK writes with ordinary Firebase client REST requests is not
+7. Replacing Admin SDK writes with ordinary Firebase client REST requests is not
    authorized by the current Firestore Rules for server-owned collections. Do not
    loosen those rules to make the adapter pass.
 
@@ -76,10 +86,11 @@ credentials to the repository, CI logs, or chat.
 ## Safe implementation order
 
 1. Keep this audit branch isolated; do not merge it wholesale into the web foundation PR.
-2. Add tests for the four missing core callables (block, unblock, group create, group add)
-   only if a Functions-based deployment path is approved.
-3. For Academy, implement and test the **six** missing admin actions, including
-   Auth claims outbox/idempotency for teacher-application review.
+2. Implement and test the **four** missing Academy curriculum actions
+   (`createCurriculumNode`, `importCurriculumNodes`, `reorderCurriculumNode`, and
+   `mergeCurriculumNode`) only if a Functions-based deployment path is approved.
+3. Add emulator tests proving social-safety callable concurrency and transaction invariants;
+   compare the teacher-review callables against the HTTP outbox/audit semantics.
 4. Align rate limits, token revocation semantics, request validation, and error mapping.
 5. Only then migrate the web client to callable APIs. This still does not make the
    functions deployable on Spark.

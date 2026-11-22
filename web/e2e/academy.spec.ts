@@ -98,6 +98,7 @@ test('two learners can befriend each other, exchange a message and publish a sta
 
 test('signed-in learner sees the same empty curriculum without legacy course lessons', async ({ page }) => {
   await login(page, email('a', test.info().project.name));
+  await expect(page.getByRole('button', { name: /إدارة الأكاديمية/ })).toHaveCount(0);
   await page.getByRole('button', { name: /الأكاديمية/ }).first().click();
   await expect(page.getByRole('heading', { name: 'ابدأ من مستواك، وتقدّم خطوة بخطوة' })).toBeVisible();
   await page.getByLabel('المستوى').selectOption('e2e-primary');
@@ -121,7 +122,9 @@ test('admin claim exposes the protected Academy administration panel', async ({ 
   const draftCard = page.locator('article').filter({ has: page.getByText(contentTitle, { exact: true }) });
   await expect(draftCard.getByRole('button', { name: 'اعتماد ونشر' })).toBeDisabled();
   const applicationCard = page.locator('article').filter({ has: page.getByText('UID: ' + teacherUid, { exact: true }) });
-  await expect(applicationCard.getByRole('button', { name: 'اعتماد التوثيق' })).toBeDisabled();
+  await expect(applicationCard.getByRole('button', { name: 'اعتماد التوثيق' })).toBeEnabled();
+  await expect(applicationCard.getByRole('button', { name: 'رفض الطلب' })).toBeEnabled();
+  await expect(page.getByText('فتح رابط الإثبات')).toHaveCount(0);
   await expect(page.getByText(/مراجعة محتوى الأساتذة وتوثيقهم وإدارة الدورات متوقفة مؤقتاً/)).toBeVisible();
 });
 

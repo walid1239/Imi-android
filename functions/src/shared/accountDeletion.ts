@@ -41,7 +41,7 @@ const RATE_LIMIT_OPERATIONS = [
   "createStatus", "sendFriendRequest", "createOrGetDirectConversation",
   "acceptFriendRequest", "rejectFriendRequest", "removeFriend", "blockUser",
   "unblockUser", "createGroupConversation", "addGroupParticipants",
-  "prepareReel", "submitReel", "reviewReel", "deleteMyAccount",
+  "prepareReel", "submitReel", "reviewReel", "submitTeacherApplication", "reviewTeacherApplication", "deleteMyAccount",
 ] as const;
 
 function addStoragePath(paths: Set<string>, value: unknown, uid: string): void {

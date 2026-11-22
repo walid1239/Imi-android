@@ -158,7 +158,7 @@ test('teacher application and studio routes explain verification gate', async ({
   await expect(page.getByRole('heading', { name: 'طلب الانضمام كأستاذ' })).toBeVisible();
   await expect(page.getByRole('status')).toContainText('التقديم متوقف مؤقتاً');
   await expect(page.getByText(/لا نطلب منك إدخال بيانات شخصية أو رفع شهادة/)).toBeVisible();
-  await await page.goto('/teacher/studio');
+  await page.goto('/teacher/studio');
   await expect(page.getByText('حسابك غير موثّق كأستاذ')).toBeVisible();
   await expect(page.getByRole('link', { name: 'طلب توثيق' })).toBeVisible();
 });

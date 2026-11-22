@@ -15,7 +15,7 @@ import {
 } from "../../../../functions/src/shared/serverCore";
 import { authenticateBearer, publicErrorMessage } from "../../../../functions/src/shared/serverAuth";
 
-type Operation = "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend" | "blockUser" | "unblockUser" | "createGroupConversation" | "addGroupParticipants" | "prepareReel" | "submitReel" | "reviewReel" | "deleteMyAccount";
+type Operation = "publishCurriculum" | "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend" | "blockUser" | "unblockUser" | "createGroupConversation" | "addGroupParticipants" | "prepareReel" | "submitReel" | "reviewReel" | "deleteMyAccount";
 const limits: Record<Operation, { count: number; windowMs: number }> = {
   createStatus: { count: 2, windowMs: 60_000 },
   sendFriendRequest: { count: 10, windowMs: 60 * 60_000 },
@@ -31,6 +31,7 @@ const limits: Record<Operation, { count: number; windowMs: number }> = {
   submitReel: { count: 3, windowMs: 60 * 60_000 },
   reviewReel: { count: 60, windowMs: 60_000 },
   deleteMyAccount: { count: 1, windowMs: 24 * 60 * 60_000 },
+  publishCurriculum: { count: 5, windowMs: 60_000 },
 };
 
 function adminApp(): App {
@@ -229,6 +230,91 @@ export async function handleImiPost(request: Request, operation: Operation): Pro
       unblockUser: () => unblockUser(store, uid, body),
       createGroupConversation: () => createGroupConversation(store, uid, body),
       addGroupParticipants: () => addGroupParticipants(store, uid, body),
+      publishCurriculum: async () => {
+        const admin = await getAuth(app).getUser(uid);
+        if (admin.customClaims?.admin !== true) {
+          throw new CoreError("permission-denied", "هذه العملية للمشرفين فقط.");
+        }
+        const scopeId = typeof body.scopeId === "string" ? body.scopeId.trim() : "";
+        if (!/^[a-z0-9][a-z0-9_-]{1,100}$/.test(scopeId)) {
+          throw new CoreError("invalid-argument", "معرّف النطاق غير صالح.");
+        }
+        const dryRun = body.dryRun !== false;
+        if (!dryRun && body.confirmation !== "PUBLISH") {
+          throw new CoreError("invalid-argument", "اكتب PUBLISH للتأكيد.");
+        }
+        const db = getFirestore(app);
+        const all = await db.collection("curriculumNodes").get();
+        const nodes = new Map<string, { parentId: string | null; type: string; status: string; needsReview: boolean; nameAr: string }>();
+        for (const document of all.docs) {
+          const value = document.data();
+          nodes.set(document.id, {
+            parentId: typeof value.parentId === "string" ? value.parentId : null,
+            type: String(value.type ?? ""),
+            status: String(value.status ?? ""),
+            needsReview: value.needsReview === true,
+            nameAr: typeof value.nameAr === "string" ? value.nameAr : "",
+          });
+        }
+        const scope = nodes.get(scopeId);
+        if (!scope || scope.type !== "level") {
+          throw new CoreError("invalid-argument", "نطاق النشر يجب أن يكون مستوى دراسياً موجوداً.");
+        }
+        if (scope.parentId) {
+          const parent = nodes.get(scope.parentId);
+          if (!parent || parent.status !== "published" || parent.needsReview) {
+            throw new CoreError("invalid-argument", "انشر العقدة الأب أولاً.");
+          }
+        }
+        const children = new Map<string, string[]>();
+        for (const [id, node] of nodes) {
+          if (node.parentId) children.set(node.parentId, [...(children.get(node.parentId) ?? []), id]);
+        }
+        const targets: string[] = [];
+        const seen = new Set<string>();
+        const queue = [scopeId];
+        while (queue.length) {
+          const id = queue.shift() as string;
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const node = nodes.get(id);
+          if (!node) continue;
+          if (node.status === "hidden" && node.needsReview
+            && ["level", "track", "subject", "unit"].includes(node.type)
+            && node.nameAr.trim()) targets.push(id);
+          queue.push(...(children.get(id) ?? []));
+        }
+        if (targets.length > 5000) {
+          throw new CoreError("resource-exhausted", "نطاق النشر أكبر من الحد الآمن؛ قسّمه إلى مستويات أصغر.");
+        }
+        const byType: Record<string, number> = {};
+        for (const id of targets) {
+          const type = nodes.get(id)?.type ?? "unknown";
+          byType[type] = (byType[type] ?? 0) + 1;
+        }
+        if (!dryRun) {
+          for (let offset = 0; offset < targets.length; offset += 400) {
+            const batch = db.batch();
+            for (const id of targets.slice(offset, offset + 400)) {
+              batch.update(db.collection("curriculumNodes").doc(id), {
+                status: "published",
+                needsReview: false,
+                updatedAt: FieldValue.serverTimestamp(),
+              });
+            }
+            await batch.commit();
+          }
+          await db.collection("adminAuditLogs").add({
+            action: "publishCurriculum",
+            actorUid: uid,
+            scopeId,
+            count: targets.length,
+            byType,
+            createdAt: FieldValue.serverTimestamp(),
+          });
+        }
+        return { dryRun, scopeId, count: targets.length, byType };
+      },
       prepareReel: async () => {
         const reelId = typeof body.reelId === "string" ? body.reelId.trim() : "";
         const caption = typeof body.caption === "string" ? body.caption.trim() : "";

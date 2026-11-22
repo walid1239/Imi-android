@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {collection,onSnapshot,query,serverTimestamp,updateDoc,writeBatch,doc,setDoc} from 'firebase/firestore';
-import {db} from '@/lib/firebase/client';
+import {auth,db} from '@/lib/firebase/client';
 type N={id:string;parentId:string|null;type:'level'|'track'|'subject'|'unit';nameAr:string;nameFr:string;language:string;order:number;semester:string|null;officialSource:string|null;needsReview:boolean;status:'hidden'|'published';mergedInto?:string};
 export default function CurriculumAdminPanel(){
  const [nodes,setNodes]=useState<N[]>([]),[id,setId]=useState(''),[parentId,setParentId]=useState(''),[type,setType]=useState<N['type']>('level'),[nameAr,setNameAr]=useState(''),[nameFr,setNameFr]=useState(''),[language,setLanguage]=useState('ar'),[order,setOrder]=useState('1'),[mergeTarget,setMergeTarget]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
@@ -9,6 +9,31 @@ export default function CurriculumAdminPanel(){
  useEffect(()=>onSnapshot(query(collection(db,'curriculumNodes')),s=>setNodes(s.docs.map(d=>({id:d.id,parentId:d.get('parentId')??null,type:d.get('type'),nameAr:d.get('nameAr')||'',nameFr:d.get('nameFr')||'',language:d.get('language')||'unknown',order:d.get('order')||0,semester:d.get('semester')??null,officialSource:d.get('officialSource')??null,needsReview:d.get('needsReview')===true,status:d.get('status')||'hidden',mergedInto:d.get('mergedInto')})).sort((a,b)=>a.order-b.order)),e=>setError(e.message)),[]);
  const active=useMemo(()=>nodes.filter(n=>n.status==='published'),[nodes]);
  async function add(e:React.FormEvent){e.preventDefault();setBusy(true);setError('');setNotice('');try{if(!/^[a-z0-9][a-z0-9_-]{1,100}$/.test(id)||nodes.some(n=>n.id===id))throw new Error('المعرّف غير صالح أو مستخدم.');if(parentId&&!nodes.some(n=>n.id===parentId))throw new Error('العقدة الأب غير موجودة.');await setDoc(doc(db,'curriculumNodes',id),{id,parentId:parentId||null,type,nameAr:nameAr.trim(),nameFr:nameFr.trim(),language,order:Number(order),semester:null,officialSource:null,needsReview:true,status:'hidden',createdAt:serverTimestamp(),updatedAt:serverTimestamp()});setNotice('أُضيفت العقدة مخفية وتنتظر اعتماد المشرف.');setId('');setNameAr('');setNameFr('');}catch(e){setError(e instanceof Error?e.message:'تعذر إضافة العقدة.');}finally{setBusy(false);}}
+ async function publishScope(scopeId:string,dryRun:boolean){
+  const token=await auth.currentUser?.getIdToken(true);
+  if(!token)throw new Error('سجّل الدخول أولاً.');
+  const res=await fetch('/api/v1/admin/curriculum/publish',{
+   method:'POST',
+   headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+   body:JSON.stringify({scopeId,dryRun,confirmation:dryRun?undefined:'PUBLISH'}),
+  });
+  const json=await res.json() as {ok?:boolean;data?:{count:number;byType:Record<string,number>};error?:string};
+  if(!res.ok||!json.ok||!json.data)throw new Error(json.error||'تعذر النشر.');
+  return json.data;
+ }
+ async function previewPublish(node:N){
+  setBusy(true);setError('');setNotice('');
+  try{const result=await publishScope(node.id,true);const detail=Object.entries(result.byType).map(([key,value])=>key+': '+value).join('، ');setNotice('معاينة '+node.nameAr+': '+result.count+' عقدة ('+(detail||'لا توجد عقد جديدة')+'). لم يتم تعديل البيانات.');}
+  catch(e){setError(e instanceof Error?e.message:'تعذرت معاينة النشر.');}
+  finally{setBusy(false);}
+ }
+ async function publishLevel(node:N){
+  if(!window.confirm('سيتم نشر الهيكل المخفي التابع للمستوى «'+node.nameAr+'». هل تريد المتابعة؟'))return;
+  setBusy(true);setError('');setNotice('');
+  try{const result=await publishScope(node.id,false);setNotice('نُشر هيكل '+node.nameAr+': '+result.count+' عقدة.');}
+  catch(e){setError(e instanceof Error?e.message:'تعذر نشر الهيكل.');}
+  finally{setBusy(false);}
+ }
  async function review(_node:N,_approved:boolean){setError('اعتماد عناصر المنهج متوقف مؤقتاً حتى نقل المراجعة إلى IMI API؛ لم يُرسل أي طلب إلى Cloud Functions.');setNotice('');}
  async function reorder(node:N,delta:number){try{await updateDoc(doc(db,'curriculumNodes',node.id),{order:Math.max(1,node.order+delta),updatedAt:serverTimestamp()});setNotice('تم تحديث الترتيب.');}catch(e){setError(e instanceof Error?e.message:'تعذر تغيير الترتيب.');}}
  async function hide(node:N){await review(node,false);}
@@ -28,7 +53,7 @@ export default function CurriculumAdminPanel(){
  <p className="text-xs text-amber-200">كل عنصر جديد يُحفظ مخفياً، ولا يظهر للمتعلمين حتى يعتمد المشرف نشره يدوياً.</p>
  <button disabled={busy} className="rounded-xl bg-violet-600 p-3 text-sm font-bold disabled:opacity-50">إضافة عقدة مخفية للمراجعة</button>
  </form>
- <div className="max-h-96 space-y-2 overflow-y-auto">{nodes.map(n=><article key={n.id} className="rounded-xl border border-white/10 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><strong className="text-sm">{n.nameAr}</strong><p className="text-[10px] text-slate-500">{n.id} · {n.type} · {n.status} {n.needsReview?'· needsReview':''}</p></div><div className="flex gap-1"><button type="button" onClick={()=>void reorder(n,-1)} className="rounded border border-white/10 px-2 py-1 text-xs">↑</button><button type="button" onClick={()=>void reorder(n,1)} className="rounded border border-white/10 px-2 py-1 text-xs">↓</button><button type="button" onClick={()=>void hide(n)} disabled={n.status==='hidden'} className="rounded border border-amber-400/20 px-2 py-1 text-xs text-amber-200">إخفاء</button></div></div>{n.needsReview&&<div className="mt-2 flex gap-2"><button type="button" disabled={busy} onClick={()=>void review(n,true)} className="rounded border border-emerald-400/30 px-3 py-2 text-xs text-emerald-200">اعتماد ونشر</button><button type="button" disabled={busy} onClick={()=>void review(n,false)} className="rounded border border-amber-400/30 px-3 py-2 text-xs text-amber-200">رفض وإخفاء</button></div>}{n.status==='published'&&<div className="mt-2 flex gap-2"><select value={mergeTarget} onChange={e=>setMergeTarget(e.target.value)} className="min-w-0 flex-1 rounded bg-slate-900 p-2 text-xs"><option value="">دمج مع…</option>{nodes.filter(x=>x.type===n.type&&x.id!==n.id&&x.status==='published').map(x=><option key={x.id} value={x.id}>{x.nameAr}</option>)}</select><button type="button" disabled={busy||!mergeTarget} onClick={()=>void merge(n)} className="rounded border border-red-400/20 px-3 py-2 text-xs text-red-200">دمج</button></div>}</article>)}</div>
+ <div className="max-h-96 space-y-2 overflow-y-auto">{nodes.map(n=><article key={n.id} className="rounded-xl border border-white/10 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><strong className="text-sm">{n.nameAr}</strong><p className="text-[10px] text-slate-500">{n.id} · {n.type} · {n.status} {n.needsReview?'· needsReview':''}</p></div><div className="flex gap-1"><button type="button" onClick={()=>void reorder(n,-1)} className="rounded border border-white/10 px-2 py-1 text-xs">↑</button><button type="button" onClick={()=>void reorder(n,1)} className="rounded border border-white/10 px-2 py-1 text-xs">↓</button><button type="button" onClick={()=>void hide(n)} disabled={n.status==='hidden'} className="rounded border border-amber-400/20 px-2 py-1 text-xs text-amber-200">إخفاء</button></div></div>{n.type==='level'&&<div className="mt-2 flex flex-wrap gap-2"><button type="button" disabled={busy} onClick={()=>void previewPublish(n)} className="rounded border border-sky-400/30 px-3 py-2 text-xs text-sky-200">معاينة النشر</button><button type="button" disabled={busy} onClick={()=>void publishLevel(n)} className="rounded border border-emerald-400/30 px-3 py-2 text-xs text-emerald-200">نشر الهيكل</button></div>}{n.needsReview&&<div className="mt-2 flex gap-2"><button type="button" disabled={busy} onClick={()=>void review(n,true)} className="rounded border border-emerald-400/30 px-3 py-2 text-xs text-emerald-200">اعتماد ونشر</button><button type="button" disabled={busy} onClick={()=>void review(n,false)} className="rounded border border-amber-400/30 px-3 py-2 text-xs text-amber-200">رفض وإخفاء</button></div>}{n.status==='published'&&<div className="mt-2 flex gap-2"><select value={mergeTarget} onChange={e=>setMergeTarget(e.target.value)} className="min-w-0 flex-1 rounded bg-slate-900 p-2 text-xs"><option value="">دمج مع…</option>{nodes.filter(x=>x.type===n.type&&x.id!==n.id&&x.status==='published').map(x=><option key={x.id} value={x.id}>{x.nameAr}</option>)}</select><button type="button" disabled={busy||!mergeTarget} onClick={()=>void merge(n)} className="rounded border border-red-400/20 px-3 py-2 text-xs text-red-200">دمج</button></div>}</article>)}</div>
  {error&&<p role="alert" className="text-sm text-red-300">{error}</p>}{notice&&<p role="status" className="text-sm text-emerald-300">{notice}</p>}
  </section>;
 }

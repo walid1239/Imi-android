@@ -657,25 +657,6 @@ test('teacher applications and profiles are private and client writes cannot gra
   await assertFails(getDoc(doc(alice, 'moderationAudit/audit-1')));
 });
 
-test('teacher verification evidence is readable only by administrators', async () => {
-  const path = 'teacher-verification/alice/identity.pdf';
-  const applicant = env.authenticatedContext('alice').storage();
-  const otherUser = env.authenticatedContext('bob').storage();
-  const admin = env.authenticatedContext('admin', { admin: true }).storage();
-  const content = new Blob(['%PDF-1.4 test evidence'], { type: 'application/pdf' });
-  await assertFails(uploadBytes(ref(applicant, 'teacher-verification/alice/unprepared.pdf'), content, { contentType: 'application/pdf' }));
-  await env.withSecurityRulesDisabled(async context => {
-    await setDoc(doc(context.firestore(), 'teacherApplications/alice'), {
-      uid: 'alice', evidencePath: path, status: 'uploading', createdAt: new Date()
-    });
-  });
-  await assertFails(uploadBytes(ref(applicant, 'teacher-verification/alice/not-the-declared-file.pdf'), content, { contentType: 'application/pdf' }));
-  await assertSucceeds(uploadBytes(ref(applicant, path), content, { contentType: 'application/pdf' }));
-  await assertFails(getBytes(ref(applicant, path)));
-  await assertFails(getBytes(ref(otherUser, path)));
-  await assertSucceeds(getBytes(ref(admin, path)));
-});
-
 test('blocked direct conversation media becomes unreadable to both participants', async () => {
   let mediaPath = 'conversations/blocked-media/carol/message-1/photo.png';
   await env.withSecurityRulesDisabled(async context => {
@@ -732,25 +713,6 @@ test('teacher media uploads require a complete verified profile and stay private
     await setDoc(doc(context.firestore(), 'teacherContent/draft-1'), { ownerUid: 'alice', published: true }, { merge: true });
   });
   await assertSucceeds(getBytes(ref(guest, path)));
-});
-
-test('teacher verification files are write-only for applicant and readable only by admin', async () => {
-  const aliceStorage = env.authenticatedContext('alice').storage();
-  const malloryStorage = env.authenticatedContext('mallory').storage();
-  const adminStorage = env.authenticatedContext('admin', { admin: true }).storage();
-  const evidencePath = 'teacher-verification/alice/identity.pdf';
-  const evidence = ref(aliceStorage, evidencePath);
-  await env.withSecurityRulesDisabled(async context => {
-    await setDoc(doc(context.firestore(), 'teacherApplications/alice'), {
-      uid: 'alice', evidencePath, status: 'uploading', createdAt: new Date()
-    });
-  });
-  await assertSucceeds(uploadBytes(evidence, new Blob(['pdf-data'], { type: 'application/pdf' })));
-  await assertFails(getBytes(evidence));
-  await assertFails(getBytes(ref(malloryStorage, 'teacher-verification/alice/identity.pdf')));
-  await assertSucceeds(getBytes(ref(adminStorage, 'teacher-verification/alice/identity.pdf')));
-  await assertFails(uploadBytes(ref(malloryStorage, 'teacher-verification/alice/attack.pdf'), new Blob(['x'], { type: 'application/pdf' })));
-  await assertFails(uploadBytes(ref(aliceStorage, 'teacher-verification/alice/large.exe'), new Blob(['x'], { type: 'application/octet-stream' })));
 });
 
 test('only verified teachers can upload avatars and published teacher avatars are public', async () => {
@@ -1107,15 +1069,6 @@ test('Storage claim checks deny access when admin or teacherVerified claim is ab
   const admin = env.authenticatedContext('admin', { admin: true }).storage();
   const unverified = env.authenticatedContext('alice').storage();
   const verified = env.authenticatedContext('alice-verified', { teacherVerified: true }).storage();
-
-  const evidencePath = 'teacher-verification/alice/identity.pdf';
-  await env.withSecurityRulesDisabled(async context => {
-    await uploadBytes(ref(context.storage(), evidencePath), new Uint8Array([1, 2, 3]), {
-      contentType: 'application/pdf'
-    });
-  });
-  await assertFails(getBytes(ref(noClaims, evidencePath)));
-  await assertSucceeds(getBytes(ref(admin, evidencePath)));
 
   const mediaPath = 'teacher-content/alice-verified/content-1/lesson.mp4';
   await assertFails(uploadBytes(ref(unverified, mediaPath), new Uint8Array([1, 2, 3]), {

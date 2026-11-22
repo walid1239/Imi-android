@@ -10,7 +10,7 @@ async function login(page: Page, address: string) {
   await page.getByLabel('كلمة المرور').fill(password);
   await page.getByRole('button', { name: 'تسجيل الدخول' }).click();
   try {
-    await expect(page).toHaveURL(/\\/app$/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/app$/, { timeout: 15000 });
   } catch {
     const messages = await page.locator('[role="status"], [role="alert"]').allTextContents();
     throw new Error(`Login did not reach /app. Visible Firebase/auth messages: ${messages.join(' | ') || 'none'}`);
@@ -166,7 +166,7 @@ test('teacher application and studio routes explain verification gate', async ({
 test('guest sessions can be linked to a permanent email account without changing UID', async ({ page }) => {
   await page.goto('/login');
   await page.getByRole('button', { name: /الدخول السريع كضيف/ }).click();
-  await expect(page).toHaveURL(/\\/app$/);
+  await expect(page).toHaveURL(/\/app$/);
   await page.getByRole('button', { name: /ملفي/ }).first().click();
   await expect(page.getByText('تحويل حساب الضيف إلى حساب دائم')).toBeVisible();
   await expect(page.getByRole('button', { name: 'ربط البريد بالحساب الحالي' })).toBeVisible();

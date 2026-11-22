@@ -59,13 +59,12 @@ async function main() {
   await db.doc('reportRateLimits/' + uid).set({ count: 10 });
   const rateLimitKey = createHash('sha256').update('createStatus:' + uid).digest('hex');
   await db.doc('apiRateLimits/' + rateLimitKey).set({ operation: 'createStatus', uidHash: rateLimitKey, count: 1 });
-  await db.doc('teacherApplications/' + uid).set({ uid, evidencePath: 'teacher-verification/' + uid + '/identity.pdf' });
+  await db.doc('teacherApplications/' + uid).set({ uid, proofUrl: 'https://drive.google.com/file/d/account-delete-proof/view' });
   await db.doc('teacherProfiles/' + uid).set({ uid, photoPath: 'teachers/' + uid + '/avatar/profile.png' });
   await db.doc('publicProfiles/' + uid).set({ uid, photoPath: 'users/' + uid + '/avatar/profile.png' });
 
   const paths = [
     'users/' + uid + '/avatar/profile.png',
-    'teacher-verification/' + uid + '/identity.pdf',
     'teachers/' + uid + '/avatar/profile.png',
     'teacher-content/' + uid + '/content-1/file.pdf',
     'reels/' + uid + '/reel-1/video.mp4',
@@ -120,7 +119,47 @@ async function main() {
   };
   await assert.rejects(cleanupAccountData(db, failingBucket, protectedUid), /storage-delete-failed/);
   assert.equal((await db.doc('users/' + protectedUid).get()).exists, true);
-  process.stdout.write('Account deletion emulator cleanup and Storage failure tests passed.\n');
+
+  // A Firestore batch failure after Storage deletion must be safely retryable.
+  const retryUid = 'account-delete-retry-midway';
+  await db.doc('users/' + retryUid).set({ displayName: 'Retry cleanup' });
+  await db.doc('conversations/group-retry').set({
+    type: 'group', participants: [retryUid, other], ownerUid: retryUid,
+    admins: [retryUid], updatedAt: new Date(),
+  });
+  await putFile('users/' + retryUid + '/avatar.png');
+  let failFirstBatch = true;
+  const flakyDb = new Proxy(db, {
+    get(target, property) {
+      if (property === 'batch') return () => {
+        const batch = target.batch();
+        return {
+          delete: ref => batch.delete(ref),
+          update: (ref, data) => batch.update(ref, data),
+          commit: async () => {
+            if (failFirstBatch) {
+              failFirstBatch = false;
+              throw new Error('simulated-mid-cleanup-firestore-failure');
+            }
+            return batch.commit();
+          },
+        };
+      };
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  await assert.rejects(
+    cleanupAccountData(flakyDb, bucket, retryUid),
+    /simulated-mid-cleanup-firestore-failure/,
+  );
+  assert.equal(await fileExists('users/' + retryUid + '/avatar.png'), false);
+  assert.equal((await db.doc('users/' + retryUid).get()).exists, true);
+  await cleanupAccountData(db, bucket, retryUid);
+  await cleanupAccountData(db, bucket, retryUid);
+  assert.equal((await db.doc('users/' + retryUid).get()).exists, false);
+  assert.deepEqual((await db.doc('conversations/group-retry').get()).get('participants'), [other]);
+  process.stdout.write('Account deletion emulator cleanup, Storage failure, and mid-cleanup retry tests passed.\n');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; });

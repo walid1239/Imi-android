@@ -46,7 +46,7 @@ Teacher application submission and review are implemented through authenticated 
 - Current audit working branch: `work/imi-web-foundation-audit-fixes` (PR #5 Draft, open and unmerged).
 - PR #5 base branch: `feature/imi-web-foundation` at `106d656c044769828065b5bf5d76998820d27880`.
 - PR #2 (`feature/imi-web-foundation` → `feature/server-authoritative-status`) remains open and unmerged.
-- Latest PR #5 head: `68fc6154d53860c73541c7afbe5b3453365fc775` (documentation-only handoff refresh on top of the source SHA `d685d28c64545e7bb32446b624a3c3fdf0767846`, which is the exact SHA tested by the recorded Web and Android CI runs).
+- The latest tested application-source SHA is `d685d28c64545e7bb32446b624a3c3fdf0767846`; subsequent commits on this branch only refresh this handoff document and do not change application source. The recorded Web and Android CI runs both target that exact application-source SHA.
 - This handoff refresh is documentation-only; it does not change application source or runtime configuration.
 - No Production deployment, PR merge, Firebase Console mutation, Firebase rules/index deployment, Blaze upgrade, payment card, paid service, or secret publication was performed.
 

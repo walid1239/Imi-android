@@ -15,8 +15,10 @@ import {
 } from "../../../../functions/src/shared/serverCore";
 import { authenticateBearer, publicErrorMessage } from "../../../../functions/src/shared/serverAuth";
 
-type Operation = "publishCurriculum" | "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend" | "blockUser" | "unblockUser" | "createGroupConversation" | "addGroupParticipants" | "prepareReel" | "submitReel" | "reviewReel" | "deleteMyAccount";
+type Operation = "submitTeacherApplication" | "reviewTeacherApplication" | "publishCurriculum" | "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend" | "blockUser" | "unblockUser" | "createGroupConversation" | "addGroupParticipants" | "prepareReel" | "submitReel" | "reviewReel" | "deleteMyAccount";
 const limits: Record<Operation, { count: number; windowMs: number }> = {
+  submitTeacherApplication: { count: 3, windowMs: 24 * 60 * 60_000 },
+  reviewTeacherApplication: { count: 60, windowMs: 60_000 },
   createStatus: { count: 2, windowMs: 60_000 },
   sendFriendRequest: { count: 10, windowMs: 60 * 60_000 },
   createOrGetDirectConversation: { count: 20, windowMs: 60_000 },
@@ -191,6 +193,21 @@ export async function handleDeleteAccount(request: Request): Promise<Response> {
       { status }
     );
   }
+}
+
+async function publishedNodeIds(app: App, value: unknown, type: "level" | "subject"): Promise<string[]> {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 12
+    || value.some(id => typeof id !== "string" || !/^[a-z0-9][a-z0-9_-]{1,100}$/.test(id))) {
+    throw new CoreError("invalid-argument", "اختيارات المستوى أو المواد غير صالحة.");
+  }
+  const ids = [...new Set(value as string[])];
+  const db = getFirestore(app);
+  const docs = await Promise.all(ids.map(id => db.collection("curriculumNodes").doc(id).get()));
+  if (docs.some(d => !d.exists || d.get("status") !== "published"
+    || d.get("needsReview") === true || d.get("type") !== type)) {
+    throw new CoreError("failed-precondition", "تتضمن الاختيارات عقدة غير منشورة أو من نوع غير صحيح.");
+  }
+  return ids;
 }
 
 export async function handleImiPost(request: Request, operation: Operation): Promise<Response> {
@@ -394,6 +411,103 @@ export async function handleImiPost(request: Request, operation: Operation): Pro
           });
         });
         return { reelId, status: validDecision };
+      },
+      submitTeacherApplication: async () => {
+        const record = await getAuth(app).getUser(uid);
+        if (record.customClaims?.teacherVerified === true) {
+          throw new CoreError("already-exists", "هذا الحساب موثق كأستاذ بالفعل.");
+        }
+        const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
+        if (fullName.length < 3 || fullName.length > 80) {
+          throw new CoreError("invalid-argument", "الاسم الكامل مطلوب (3-80 حرفاً).");
+        }
+        const proofUrl = typeof body.proofUrl === "string" ? body.proofUrl.trim() : "";
+        let parsed: URL;
+        try { parsed = new URL(proofUrl); }
+        catch { throw new CoreError("invalid-argument", "رابط الإثبات غير صالح."); }
+        if (parsed.protocol !== "https:" || !parsed.hostname || proofUrl.length > 500
+          || parsed.username || parsed.password) {
+          throw new CoreError("invalid-argument", "يجب أن يكون رابط الإثبات https صالحاً.");
+        }
+        const [subjectIds, levelIds] = await Promise.all([
+          publishedNodeIds(app, body.subjectIds, "subject"),
+          publishedNodeIds(app, body.levelIds, "level"),
+        ]);
+        const db = getFirestore(app);
+        const ref = db.collection("teacherApplications").doc(uid);
+        await db.runTransaction(async tx => {
+          const old = await tx.get(ref);
+          if (old.exists && old.get("status") === "pending") {
+            throw new CoreError("already-exists", "لديك طلب توثيق قيد المراجعة بالفعل.");
+          }
+          tx.set(ref, {
+            uid, fullName, subjectIds, levelIds, proofUrl, status: "pending",
+            submittedAt: FieldValue.serverTimestamp(), reviewedAt: null, reviewedBy: null,
+          });
+        });
+        return { status: "pending" };
+      },
+      reviewTeacherApplication: async () => {
+        const actor = await getAuth(app).getUser(uid);
+        if (actor.customClaims?.admin !== true) {
+          throw new CoreError("permission-denied", "المشرف الموثق فقط يمكنه المراجعة.");
+        }
+        const targetUid = typeof body.uid === "string" ? body.uid : "";
+        if (!/^[A-Za-z0-9_-]{2,128}$/.test(targetUid)) {
+          throw new CoreError("invalid-argument", "معرّف الحساب غير صالح.");
+        }
+        if (typeof body.approved !== "boolean") {
+          throw new CoreError("invalid-argument", "قرار المراجعة غير صالح.");
+        }
+        const approved = body.approved;
+        const note = typeof body.note === "string" ? body.note.trim().slice(0, 500) : "";
+        const db = getFirestore(app);
+        const ref = db.collection("teacherApplications").doc(targetUid);
+        const status = approved ? "approved" : "rejected";
+        await db.runTransaction(async tx => {
+          const snap = await tx.get(ref);
+          if (!snap.exists) throw new CoreError("not-found", "طلب الأستاذ غير موجود.");
+          if (snap.get("status") === status) return;
+          if (snap.get("status") !== "pending") {
+            throw new CoreError("failed-precondition", "لم يعد الطلب قيد الانتظار.");
+          }
+          tx.update(ref, {
+            status, reviewedBy: uid, reviewedAt: FieldValue.serverTimestamp(), reviewNote: note,
+          });
+          tx.create(db.collection("moderationAudit").doc(), {
+            actorUid: uid, targetUid,
+            action: approved ? "teacher_application_approved" : "teacher_application_rejected",
+            note, createdAt: FieldValue.serverTimestamp(),
+          });
+        });
+        // Keep the reviewed decision durable and synchronize Auth claims synchronously.
+        // Repeating the same review safely retries claim synchronization after a transient failure.
+        const operationId = `teacher-application-${targetUid}-${status}`;
+        const outboxRef = db.collection("teacherClaimsOutbox").doc(operationId);
+        await applyTeacherClaimsOutboxOperation({
+          targetUid, desiredTeacher: approved,
+        }, {
+          getUser: async userId => {
+            const user = await getAuth(app).getUser(userId);
+            return { customClaims: user.customClaims ?? {} };
+          },
+          setCustomClaims: async (userId, claims) => getAuth(app).setCustomUserClaims(userId, claims),
+          markApplied: async () => {
+            await outboxRef.set({
+              targetUid, desiredTeacher: approved, status: "applied",
+              updatedAt: FieldValue.serverTimestamp(), appliedAt: FieldValue.serverTimestamp(),
+            }, { merge: true });
+          },
+          markPending: async error => {
+            await outboxRef.set({
+              targetUid, desiredTeacher: approved, status: "pending",
+              updatedAt: FieldValue.serverTimestamp(),
+              lastError: error instanceof Error ? error.message.slice(0, 500) : "Unknown Auth claim synchronization error",
+              attempts: FieldValue.increment(1),
+            }, { merge: true });
+          },
+        });
+        return { status, claimsSync: "applied" };
       },
       deleteMyAccount: async () => {
         throw new CoreError("failed-precondition", "Use the dedicated account deletion route.");

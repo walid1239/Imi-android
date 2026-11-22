@@ -214,15 +214,66 @@ test('unreviewed teacher drafts remain hidden from the learner curriculum', asyn
   await expect(page.getByText(contentTitle, { exact: true })).toHaveCount(0);
 });
 
-test('teacher application and studio routes explain verification gate', async ({ page }) => {
-  await login(page, email('b', test.info().project.name));
+test('teacher can submit a published-curriculum application and admin approval grants verified claims', async ({ page, browser }) => {
+  const project = test.info().project.name;
+  const fixture = test.info().retry > 0 ? `${suffix(project)}-retry${test.info().retry}` : suffix(project);
+  const applicantUid = 'imi-e2e-submit-' + fixture;
+  const applicantEmail = `e2e-submit-${fixture}@imi.test`;
+  const fullName = 'أستاذ متقدم لاختبار ' + fixture;
+  const proofUrl = 'https://example.com/imi-teacher-proof-' + fixture;
+
+  try {
+    await adminAuth.getUser(applicantUid);
+  } catch {
+    await adminAuth.createUser({
+      uid: applicantUid, email: applicantEmail, password, emailVerified: true,
+    });
+  }
+  await adminAuth.setCustomUserClaims(applicantUid, {});
+
+  await login(page, applicantEmail);
   await page.goto('/teacher/apply');
   await expect(page.getByRole('heading', { name: 'طلب الانضمام كأستاذ' })).toBeVisible();
-  await expect(page.getByRole('status')).toContainText('التقديم متوقف مؤقتاً');
-  await expect(page.getByText(/لا نطلب منك إدخال بيانات شخصية أو رفع شهادة/)).toBeVisible();
-  await page.goto('/teacher/studio');
-  await expect(page.getByText('حسابك غير موثّق كأستاذ')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'طلب توثيق' })).toBeVisible();
+  await expect(page.getByLabel('المستوى الدراسي المنشور')).toBeEnabled();
+  await page.getByLabel('الاسم الكامل').fill(fullName);
+  await page.getByLabel('رابط إثبات الخبرة (HTTPS)').fill('http://example.com/not-secure');
+  await page.getByRole('button', { name: 'إرسال طلب الانضمام' }).click();
+  await expect(page.getByRole('alert')).toContainText('يبدأ بـ https://');
+  await expect(adminDb.doc('teacherApplications/' + applicantUid).get()).resolves.toMatchObject({ exists: false });
+
+  await page.getByLabel('رابط إثبات الخبرة (HTTPS)').fill(proofUrl);
+  await page.getByLabel('المستوى الدراسي المنشور').selectOption('e2e-primary');
+  await page.getByLabel('الرياضيات - اختبار').check();
+  await page.getByRole('button', { name: 'إرسال طلب الانضمام' }).click();
+  await expect(page.getByRole('status')).toContainText('تم إرسال طلبك بنجاح');
+
+  const submitted = await adminDb.doc('teacherApplications/' + applicantUid).get();
+  expect(submitted.exists).toBe(true);
+  expect(submitted.get('status')).toBe('pending');
+  expect(submitted.get('fullName')).toBe(fullName);
+  expect(submitted.get('proofUrl')).toBe(proofUrl);
+  expect(submitted.get('levelIds')).toEqual(['e2e-primary']);
+  expect(submitted.get('subjectIds')).toEqual(['e2e-primary-math']);
+
+  const adminContext = await browser.newContext();
+  const adminPage = await adminContext.newPage();
+  try {
+    await login(adminPage, email('admin', project));
+    await adminPage.getByRole('button', { name: /إدارة الأكاديمية/ }).first().click();
+    const approve = adminPage.getByTestId('approve-' + applicantUid);
+    await expect(approve).toBeVisible();
+    await approve.click();
+    await expect(adminPage.getByRole('status')).toContainText('تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق');
+
+    const approved = await adminDb.doc('teacherApplications/' + applicantUid).get();
+    expect(approved.get('status')).toBe('approved');
+    const user = await adminAuth.getUser(applicantUid);
+    expect(user.customClaims).toMatchObject({ teacher: true, teacherVerified: true });
+    const audit = await adminDb.collection('moderationAudit').get();
+    expect(audit.docs.some(doc => JSON.stringify(doc.data()).includes(applicantUid))).toBe(true);
+  } finally {
+    await adminContext.close();
+  }
 });
 
 test('guest sessions can be linked to a permanent email account without changing UID', async ({ page }) => {

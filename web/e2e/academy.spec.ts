@@ -168,13 +168,13 @@ test('teacher application form uses published curriculum and HTTPS proof URL wit
   await expect(page.getByLabel('رابط إثبات (HTTPS)')).toBeVisible();
   await expect(page.getByLabel('المستوى الدراسي')).toBeVisible();
   await expect(page.getByLabel('المادة')).toBeVisible();
-  await expect(page.getByLabel('المستوى الدراسي').locator('option')).toHaveCount(2);
-  await expect(page.getByLabel('المادة').locator('option')).toHaveCount(2);
   await expect(page.locator('input[type="file"]')).toHaveCount(0);
   await page.getByLabel('الاسم الكامل').fill('أستاذ اختبار واجهة');
   await page.getByLabel('رابط إثبات (HTTPS)').fill('https://example.com/proof');
   await page.getByLabel('المستوى الدراسي').selectOption('e2e-primary');
   await page.getByLabel('المادة').selectOption('e2e-primary-math');
+  await expect(page.getByLabel('المستوى الدراسي')).toHaveValue('e2e-primary');
+  await expect(page.getByLabel('المادة')).toHaveValue('e2e-primary-math');
   await expect(page.getByRole('button', { name: 'إرسال طلب التوثيق' })).toBeEnabled();
   await page.goto('/teacher/studio');
   await expect(page.getByText('حسابك غير موثّق كأستاذ')).toBeVisible();

@@ -132,7 +132,14 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      # MainActivity creates an anonymous Firebase Auth user on launch.
+      # Never launch a Firebase-configured APK against the production project in CI.
+      - name: Skip live-Firebase Android smoke test
+        if: steps.firebase_config.outputs.configured == 'true'
+        run: echo "Skipped device launch to prevent anonymous Auth writes to the real Firebase project."
+
       - name: Run IMI on Android emulator
+        if: steps.firebase_config.outputs.configured != 'true'
         uses: reactivecircus/android-emulator-runner@v2
         env:
           ANDROID_I_WANT_MY_TCG: 'yes'

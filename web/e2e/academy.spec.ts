@@ -240,7 +240,7 @@ test('teacher can submit a published-curriculum application and admin approval g
   await page.getByLabel('الاسم الكامل').fill(fullName);
   await page.getByLabel('رابط إثبات الخبرة (HTTPS)').fill('http://example.com/not-secure');
   await page.getByRole('button', { name: 'إرسال طلب الانضمام' }).click();
-  await expect(page.getByRole('alert')).toContainText('يبدأ بـ https://');
+  await expect(page.locator('p[role="alert"]')).toContainText('يبدأ بـ https://');
   await expect(adminDb.doc('teacherApplications/' + applicantUid).get()).resolves.toMatchObject({ exists: false });
 
   await page.getByLabel('رابط إثبات الخبرة (HTTPS)').fill(proofUrl);

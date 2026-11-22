@@ -50,7 +50,7 @@ function requireAdmin(request: { auth?: { uid: string; token: Record<string, unk
   if (request.auth.token.admin !== true) throw new HttpsError("permission-denied", "المشرف الموثق فقط يمكنه إدارة المنهاج.");
   return request.auth.uid;
 }
-function assertParentType(childType: NodeType, parentType: NodeType | null): void {
+export function assertParentType(childType: NodeType, parentType: NodeType | null): void {
   const expected = childType === "level" ? null : NODE_TYPES[NODE_TYPES.indexOf(childType) - 1];
   if (parentType !== expected) {
     throw new HttpsError("failed-precondition", childType === "level"
@@ -58,7 +58,7 @@ function assertParentType(childType: NodeType, parentType: NodeType | null): voi
       : "نوع العنصر الأب لا يتوافق مع التسلسل الهرمي للمنهاج.");
   }
 }
-function normalizedNode(value: unknown, index?: number) {
+export function normalizedNode(value: unknown, index?: number) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new HttpsError("invalid-argument", `بيانات العنصر رقم ${(index ?? 0) + 1} غير صالحة.`);
   }

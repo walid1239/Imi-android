@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('CSP uses the matching non-empty nonce and allows Firebase and Google authentication origins', async ({ page }) => {
+test('CSP nonce matches inline scripts and styles while allowing the Google SDK origin', async ({ page }) => {
   const browserErrors: string[] = [];
   page.on('console', message => {
     if (message.type() === 'error') browserErrors.push('console: ' + message.text());
@@ -13,7 +13,12 @@ test('CSP uses the matching non-empty nonce and allows Firebase and Google authe
   const html = (await page.content()).slice(0, 6000);
   const policy = response?.headers()['content-security-policy'] ?? '';
   const nonce = policy.match(/'nonce-([^']+)'/)?.[1] ?? '';
-  const scriptNonces = await page.$$eval('script', elements => elements.map(element => (element as HTMLScriptElement).nonce));
+  const inlineScriptNonces = await page.$$eval('script:not([src])', elements => elements.map(element => (element as HTMLScriptElement).nonce));
+  const externalScripts = await page.$$eval('script[src]', elements => elements.map(element => ({
+    src: (element as HTMLScriptElement).src,
+    nonce: (element as HTMLScriptElement).nonce,
+  })));
+  const externalScriptsWithoutNonce = externalScripts.filter(script => !script.nonce);
   const styleNonces = await page.$$eval('link[rel="stylesheet"]', elements => elements.map(element => (element as HTMLLinkElement).nonce));
   console.log('E2E login diagnostic', JSON.stringify({
     status: response?.status(),
@@ -21,17 +26,20 @@ test('CSP uses the matching non-empty nonce and allows Firebase and Google authe
     body: body.slice(0, 1200),
     html,
     noncePresent: nonce.length > 0,
-    scriptNonces,
+    inlineScriptNonces,
+    externalScripts,
     styleNonces,
     browserErrors,
   }));
 
   expect(response).not.toBeNull();
   expect(nonce).not.toBe('');
-  expect(scriptNonces.length).toBeGreaterThan(0);
-  expect(scriptNonces.every(value => value === nonce)).toBe(true);
+  expect(inlineScriptNonces.length).toBeGreaterThan(0);
+  expect(inlineScriptNonces.every(value => value === nonce)).toBe(true);
   expect(styleNonces.length).toBeGreaterThan(0);
   expect(styleNonces.every(value => value === nonce)).toBe(true);
+  expect(externalScriptsWithoutNonce.every(script => new URL(script.src).origin === 'https://apis.google.com')).toBe(true);
+  expect(policy).toContain('https://apis.google.com');
   expect(browserErrors.filter(error => error.includes('Refused to execute inline script'))).toEqual([]);
   expect(policy).toContain("frame-src 'self'");
   expect(policy).toContain('https://*.firebaseapp.com');

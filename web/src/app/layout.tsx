@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import { PwaRegister } from '@/components/pwa-register';
 import './globals.css';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'IMI — تواصل وتعلّم',
   description: 'IMI منصة اجتماعية وتعليمية عربية للمحادثات والحالات ومقاطع الفيديو والتعلّم.',

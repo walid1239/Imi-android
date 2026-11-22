@@ -5,6 +5,7 @@ const { createRequire } = require('node:module');
 const requireFunctions = createRequire(require.resolve('../functions/package.json'));
 const { initializeApp, getApps } = requireFunctions('firebase-admin/app');
 const { getFirestore } = requireFunctions('firebase-admin/firestore');
+const { getAuth } = requireFunctions('firebase-admin/auth');
 const { getStorage } = requireFunctions('firebase-admin/storage');
 const { cleanupAccountData } = requireFunctions('../functions/lib/shared/accountDeletion.js');
 
@@ -15,6 +16,7 @@ if (!projectId.startsWith('demo-') || !process.env.FIRESTORE_EMULATOR_HOST || !p
 if (!process.env.STORAGE_EMULATOR_HOST) process.env.STORAGE_EMULATOR_HOST = process.env.FIREBASE_STORAGE_EMULATOR_HOST;
 if (!getApps().length) initializeApp({ projectId, storageBucket: projectId + '.firebasestorage.app' });
 const db = getFirestore();
+const auth = getAuth();
 const bucket = getStorage().bucket(projectId + '.firebasestorage.app');
 const uid = 'account-delete-user';
 const other = 'account-delete-other';
@@ -28,6 +30,11 @@ async function fileExists(path) {
 }
 
 async function main() {
+  try { await auth.getUser(uid); }
+  catch (error) {
+    if (error.code !== 'auth/user-not-found') throw error;
+    await auth.createUser({ uid, email: uid + '@example.invalid' });
+  }
   await db.doc('users/' + uid).set({ displayName: 'Delete me' });
   await db.doc('users/' + uid + '/friends/' + other).set({ uid: other, status: 'accepted' });
   await db.doc('users/' + other + '/friends/' + uid).set({ uid, status: 'accepted' });
@@ -55,7 +62,7 @@ async function main() {
   await db.doc('reels/reel-1').set({ ownerUid: uid, storagePath: 'reels/' + uid + '/reel-1/video.mp4' });
   await db.doc('statuses/status-1').set({ ownerUid: uid, mediaPath: 'statuses/' + uid + '/status-1/image.png' });
   await db.doc('teacherLiveSessions/session-1').set({ teacherUid: uid, recordingPath: 'teachers/' + uid + '/live/session-1.mp4' });
-  await db.doc('teacherClaimsOutbox/claim-1').set({ targetUid: uid, status: 'pending' });
+  await db.doc('teacherClaimsOutbox/claim-1').set({ targetUid: uid, desiredTeacher: false, status: 'pending' });
   await db.doc('reportRateLimits/' + uid).set({ count: 10 });
   const rateLimitKey = createHash('sha256').update('createStatus:' + uid).digest('hex');
   await db.doc('apiRateLimits/' + rateLimitKey).set({ operation: 'createStatus', uidHash: rateLimitKey, count: 1 });

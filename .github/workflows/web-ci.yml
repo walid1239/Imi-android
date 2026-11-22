@@ -181,4 +181,4 @@ jobs:
           --only auth,firestore,functions,storage
           --project demo-imi-playwright
           "cd functions && node scripts/seed-e2e.cjs &&
-          cd ../web && npm run e2e"
+          cd ../web && npm run test:prove-admin && npm run e2e"

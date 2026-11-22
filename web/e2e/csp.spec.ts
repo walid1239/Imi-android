@@ -8,7 +8,7 @@ test('CSP uses a nonce and allows Firebase and Google authentication origins', a
   page.on('pageerror', error => browserErrors.push('pageerror: ' + error.message));
   page.on('requestfailed', request => browserErrors.push('requestfailed: ' + request.url() + ' — ' + (request.failure()?.errorText ?? 'unknown')));
   const response = await page.goto('/login');
-  const scriptsWithoutNonce = await page.$eval('script:not([nonce]):not([src])', els => els.length);
+  const scriptsWithoutNonce = await page.$$eval('script:not([nonce]):not([src])', els => els.length);
   expect(scriptsWithoutNonce).toBe(0);
   expect(browserErrors.filter(error => error.includes('Refused to execute inline script'))).toEqual([]);
   const body = await page.locator('body').innerText().catch(() => '');

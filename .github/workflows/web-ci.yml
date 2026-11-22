@@ -109,7 +109,17 @@ jobs:
           node -e "const x=require(process.argv[1]); if(x.status!=='ok'||x.service!=='imi-web') process.exit(1)" "$RUNNER_TEMP/imi-worker-health.json"
           curl --silent --show-error --fail http://127.0.0.1:8787/api/v1/health --output "$RUNNER_TEMP/imi-worker-v1-health.json"
           node -e "const x=require(process.argv[1]); if(x.status!=='ok'||x.service!=='imi-web') process.exit(1)" "$RUNNER_TEMP/imi-worker-v1-health.json"
-          echo "PASS: Cloudflare Worker runtime served both health routes locally. No deployment was performed."
+
+          # Exercise a Node-runtime API route module without invoking POST,
+          # initializing Firebase Admin, or touching Firestore.
+          API_STATUS=$(curl --silent --show-error --output "$RUNNER_TEMP/imi-worker-api-route.txt" --write-out '%{http_code}' http://127.0.0.1:8787/api/v1/conversations/direct)
+          if [ "$API_STATUS" != "405" ]; then
+            cat "$RUNNER_TEMP/imi-worker-api-route.txt"
+            echo "Expected HTTP 405 from POST-only API route, got $API_STATUS."
+            exit 1
+          fi
+
+          echo "PASS: Cloudflare Worker served both health routes and loaded a Node-runtime API route (405 for GET). No Firebase operation or deployment was performed."
           cat "$LOG"
       - run: npm run test:health
 

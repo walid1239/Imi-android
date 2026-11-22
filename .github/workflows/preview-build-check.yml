@@ -1,0 +1,58 @@
+name: Preview build check
+on:
+  push:
+    branches: [feature/imi-teacher-admin-preview, feature/imi-web-foundation]
+    paths: ['web/**', 'functions/src/**', '.github/workflows/preview-build-check.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: preview-build-check-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    env:
+      VERCEL: "1"
+      NEXT_PUBLIC_FIREBASE_API_KEY: ci-placeholder
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: imi-indroid.firebaseapp.com
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: imi-indroid
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: imi-indroid.appspot.com
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "1"
+      NEXT_PUBLIC_FIREBASE_APP_ID: ci-placeholder
+      FIREBASE_PROJECT_ID: imi-indroid
+      FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"imi-indroid","client_email":"ci@example.invalid","private_key":"placeholder"}'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Hosted env guard must fail when variables are missing
+        run: |
+          set +e
+          env -i PATH="$PATH" VERCEL=1 node scripts/check-env.mjs
+          code=$?
+          echo "exit code: $code"
+          test "$code" -eq 1
+      - name: Build like Vercel (no functions install)
+        run: npm run build
+      - name: Smoke test production server
+        run: |
+          npx next start -p 3100 &
+          server=$!
+          for i in $(seq 1 40); do curl -fs -o /dev/null http://127.0.0.1:3100/api/health && break; sleep 1; done
+          check() { code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3100$1"); echo "$1 -> $code"; test "$code" = "$2"; }
+          fail=0
+          check /api/health 200 || fail=1
+          check /login 200 || fail=1
+          check /academy 200 || fail=1
+          check /api/v1/health/admin 404 || fail=1
+          kill "$server" || true
+          exit "$fail"

@@ -59,6 +59,10 @@ async function main() {
   await db.doc('reportRateLimits/' + uid).set({ count: 10 });
   const rateLimitKey = createHash('sha256').update('createStatus:' + uid).digest('hex');
   await db.doc('apiRateLimits/' + rateLimitKey).set({ operation: 'createStatus', uidHash: rateLimitKey, count: 1 });
+  const teacherSubmitRateLimitKey = createHash('sha256').update('submitTeacherApplication:' + uid).digest('hex');
+  const teacherReviewRateLimitKey = createHash('sha256').update('reviewTeacherApplication:' + uid).digest('hex');
+  await db.doc('apiRateLimits/' + teacherSubmitRateLimitKey).set({ operation: 'submitTeacherApplication', uidHash: teacherSubmitRateLimitKey, count: 1 });
+  await db.doc('apiRateLimits/' + teacherReviewRateLimitKey).set({ operation: 'reviewTeacherApplication', uidHash: teacherReviewRateLimitKey, count: 1 });
   await db.doc('teacherApplications/' + uid).set({ uid, proofUrl: 'https://drive.google.com/file/d/account-delete-proof/view' });
   await db.doc('teacherProfiles/' + uid).set({ uid, photoPath: 'teachers/' + uid + '/avatar/profile.png' });
   await db.doc('publicProfiles/' + uid).set({ uid, photoPath: 'users/' + uid + '/avatar/profile.png' });
@@ -85,6 +89,8 @@ async function main() {
   assert.equal((await db.doc('teacherProfiles/' + uid).get()).exists, false);
   assert.equal((await db.doc('reportRateLimits/' + uid).get()).exists, false);
   assert.equal((await db.doc('apiRateLimits/' + rateLimitKey).get()).exists, false);
+  assert.equal((await db.doc('apiRateLimits/' + teacherSubmitRateLimitKey).get()).exists, false);
+  assert.equal((await db.doc('apiRateLimits/' + teacherReviewRateLimitKey).get()).exists, false);
   assert.equal((await db.doc('friendRequests/outgoing').get()).exists, false);
   assert.equal((await db.doc('friendRequests/incoming').get()).exists, false);
   assert.equal((await db.doc('contentReports/report-1').get()).exists, false);

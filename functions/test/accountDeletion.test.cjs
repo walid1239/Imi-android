@@ -12,29 +12,39 @@ function makeHarness({ failStorage = false, failFirstRecursiveDelete = false } =
     failStorage,
     failFirstRecursiveDelete,
   };
-
-  const emptySnapshot = { docs: [] };
-  const query = {
-    where() { return this; },
-    async get() { return emptySnapshot; },
-  };
   const refs = new Map();
   function ref(path) {
     if (!refs.has(path)) {
       refs.set(path, {
         path,
-        async get() { return { id: path.split("/").at(-1), exists: false, ref: this, get: () => undefined }; },
+        async get() {
+          return { id: path.split("/").at(-1), exists: false, ref: this, get: () => undefined };
+        },
         async delete() { state.documentDeleteCalls += 1; },
       });
     }
     return refs.get(path);
   }
 
-  const db = {
-    collection() {
-      return { ...query, doc(id) { return ref(`unused/${id}`); } };
+  const conversation = {
+    id: "direct_123",
+    ref: ref("conversations/direct_123"),
+    get(field) {
+      if (field === "participants") return ["teacher_123"];
+      if (field === "type") return "direct";
+      return undefined;
     },
-    collectionGroup() { return { ...query }; },
+  };
+  const emptySnapshot = { docs: [] };
+  const queryFor = name => ({
+    where() { return this; },
+    async get() { return name === "conversations" ? { docs: [conversation] } : emptySnapshot; },
+    doc(id) { return ref(`${name}/${id}`); },
+  });
+
+  const db = {
+    collection(name) { return queryFor(name); },
+    collectionGroup() { return queryFor("collectionGroup"); },
     doc(path) { return ref(path); },
     batch() {
       return {
@@ -84,7 +94,7 @@ test("account cleanup can resume after a mid-cleanup Firestore failure without d
 
   await cleanupAccountData(harness.db, harness.bucket, "teacher_123");
   assert.equal(harness.state.storageObjectsDeleted, 1);
-  assert.equal(harness.state.recursiveDeleteCalls, 2);
+  assert.equal(harness.state.recursiveDeleteCalls, 3);
   assert.ok(harness.state.documentDeleteCalls > 0);
 });
 

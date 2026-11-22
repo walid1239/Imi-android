@@ -59,6 +59,7 @@ export default function TeacherApplicationPanel() {
           collection(db, 'curriculumNodes'),
           where('status', '==', 'published'),
           where('needsReview', '==', false),
+          where('type', 'in', ['level', 'track', 'subject', 'unit']),
         );
         const snapshot = await getDocs(published);
         if (!active) return;

@@ -8,7 +8,7 @@
 - ثبّت JDK 21 أو أحدث لتشغيل Firebase Emulator Suite مع firebase-tools 15.37.0؛ Gradle build Android يبقى على JDK 17 كما هو.
 - استخدم مشروع Firebase الصحيح فقط: `imi-indroid`.
 - ملفات القفل الثلاثة ملتزمة في المستودع ومولّدة بـ npm 22: `package-lock.json` و`functions/package-lock.json` و`web/package-lock.json`. استخدم `npm ci` ولا تعدّلها يدوياً.
-- **لا تنشر Firestore rules الحالية الآن.** يجب أولاً حل تعارض/عدم تطابق عقد `users/{uid}` بين كتابة Android وحقول السماح في `firestore.rules`، ثم إضافة/اجتياز Emulator tests التي تغطي كتابة Android الفعلية. لا يكفي نجاح الاختبارات الحالية وحده.
+- **تطابق `users/{uid}`:** تسمح القواعد الحالية بحقول الملف الشخصي التي يكتبها Android (`displayName`, `city`, `photoPath`, `bio`, `languages`, `updatedAt`) وتقيّد `photoPath` بمسار الصورة الخاص بالحساب. توجد اختبارات Emulator لحقول الملف الشخصي والحماية من تصعيد الصلاحيات؛ أضف/احتفظ باختبار مطابق تماماً لكتابة صورة الملف الشخصي قبل اعتبار عقد Android مكتملاً. هذا تحقق محلي فقط ولا يثبت نشر القواعد على Firebase الحقيقي.
 - لا تغيّر منطقة الدوال إلى `europe-west1` قبل موافقة المالك؛ المنطقة المقترحة لم تُعتمد بعد.
 
 ## 1. تثبيت الأدوات والتحقق محلياً
@@ -38,17 +38,13 @@ npx --yes firebase-tools@15.37.0 use imi-indroid
 
 تأكد من أن المشروع النشط هو `imi-indroid` قبل أي أمر نشر. ملف `.firebaserc` يحدد هذا المشروع كـ default فقط؛ لا يمنح صلاحيات ولا ينشر شيئاً.
 
-## 3. إنشاء TURN_SECRET بواسطة المالك
+## 3. Cloud Functions وTURN — خارج المرحلة المجانية
 
-إذا قررت استخدام callable الحالي الذي يربط السر، أنشئ السر بنفسك محلياً:
+- لا تنشئ `TURN_SECRET` ولا تربط Secret Manager في مرحلة Firebase Spark الحالية.
+- تبقى ملفات Cloud Functions القديمة محفوظة في المستودع، لكن لا تُستدعَ ولا تُنشَر في هذه المرحلة. لا تحذفها ولا تشغّل أي أمر نشر لها.
+- لا يوجد خادم TURN مستضاف أو مثبت. يبقى WebRTC المعتمد على TURN غير مفعّل؛ لا تضع `TURN_HOST` ولا تدّعِ توفر relay.
+- المسارات الموثوقة الجديدة تكون داخل Next.js `/api/v1`، ولا يتطلب هذا المسار نشر Cloud Functions.
 
-```powershell
-npx --yes firebase-tools@15.37.0 functions:secrets:set TURN_SECRET --project imi-indroid
-```
-
-أدخل القيمة العشوائية في المطالبة التفاعلية محلياً. لا ترسل السر في المحادثة ولا تضفه إلى Git أو ملف `.env` متعقب. احتفظ به في مدير كلمات مرور آمن. لدى Secret Manager حصة مجانية محدودة؛ تجاوز الحصة أو استخدام خدمات مدفوعة قد يسبب تكلفة، لذلك تحقق من الأسعار والحصة قبل الإنشاء ولا تفترض أن الخدمة غير محدودة مجاناً.
-
-حتى إن لم يكن لديك خادم TURN، اترك `TURN_HOST` غير مضبوط. في هذه الحالة يعيد `getIceServers` خوادم STUN فقط ويكون `turnAvailable=false`. وجود secret لا يشغّل Coturn ولا يفتح منافذ. لا تضبط `TURN_HOST` حتى يكون لديك خادم TURN يمكن الوصول إليه واختباره.
 
 ## 4. اختبار القواعد محلياً — قبل أي نشر
 
@@ -64,46 +60,31 @@ npm test --prefix functions
 
 إذا ظهر أن منفذ Emulator مستخدم، أوقف العملية المحلية التي تستخدمه أو غيّر المنفذ في إعدادات Emulator واختبر من جديد. إذا ظهر `Permission denied` في اختبار، لا تتجاوز القاعدة ولا تنشرها؛ حدّد المستند والعملية والـ UID التي فشلت.
 
-### بوابة users/{uid} — توقف إلزامي
+### تحقق users/{uid} وأمر نشر القواعد
 
-قبل نشر القواعد:
-1. اجرد كل حقول مستند المستخدم الجذر التي ينشئها أو يعدلها Android.
-2. قارنها بالـ allowlist في `firestore.rules` وبالكتابة من Web.
-3. قرر حقولاً مشتركة آمنة، واجعل الحقول الحساسة server-owned.
-4. أضف Emulator tests للعمليات نفسها التي ينفذها Android (إنشاء/تحديث الملف الشخصي، وأي تحديثات أخرى).
-5. لا تتابع إلا بعد نجاح الاختبارات ومراجعة diff صريح للقواعد.
+تتوافق حقول كتابة الملف الشخصي الظاهرة في Android مع allowlist الحالية في `firestore.rules`: تحديث الملف النصي يكتب `displayName`, `city`, `bio`, `languages`, `updatedAt`، وتحديث الصورة يضيف `photoPath` ضمن `users/{uid}/avatars/...`. يجب أن تغطي اختبارات Emulator كلا الشكلين، بما في ذلك تحديث الصورة، قبل اعتماد النتيجة نهائياً.
 
-**لا تنفذ أمر نشر القواعد في الوضع الحالي.**
+لا يوجد نشر للقواعد على Firebase الحقيقي ضمن هذه الخطوات. بعد نجاح اختبارات Emulator وموافقة المالك الصريحة فقط، نفّذ من حاسوب المالك:
 
-بعد إغلاق هذه البوابة وموافقة المالك فقط:
-
-```powershell
-npx --yes firebase-tools@15.37.0 deploy --only firestore:rules,firestore:indexes,storage --project imi-indroid
+```bash
+npx firebase-tools@15.37.0 login
+npx firebase-tools@15.37.0 use imi-indroid
+npx firebase-tools@15.37.0 deploy --only firestore:rules,firestore:indexes
 ```
 
-## 5. نشر Cloud Functions بعد القواعد
+هذا الأمر ينشر Firestore Rules وIndexes فقط؛ لا ينشر Storage Rules أو Cloud Functions. لا تنفّذه الآن دون موافقة المالك.
 
-**قيد خطة مجانية مهم:** Firebase يشترط خطة Blaze وربط حساب فوترة لنشر Cloud Functions؛ حصص الاستخدام المجانية لا تعني أن النشر متاح على Spark. وثائق Firebase تشترط Blaze قبل ترقية Node runtime، وتمنع نشر الدوال على Spark. بما أن شرط المشروع الحالي عدم ربط فوترة، فهذه الخطوة متوقفة ولا يجوز تشغيل أمر النشر أو Workflow حتى يقرر المالك صراحة قبول Blaze ومخاطر الفوترة.
+## 5. Cloud Functions — محفوظة وغير منشورة
 
-تأكد من بناء Functions واختبارها:
+مرحلة IMI الحالية ملتزمة بخطة Firebase Spark فقط. لذلك لا تنفّذ `firebase deploy --only functions` ولا تستدعِ Cloud Functions من العملاء. ملفات الدوال القديمة تبقى محفوظة كما هي لأسباب التوافق والمراجعة، ولا نحذفها. المسارات الخلفية الجديدة تُنفّذ داخل Next.js `/api/v1`. أي انتقال مستقبلي إلى Cloud Functions يتطلب قراراً مستقلاً وموافقة صريحة على خطة Blaze والفوترة، وهو خارج نطاق هذه المرحلة.
 
-```powershell
-npm test --prefix functions
-```
-
-ثم، بعد موافقة نشر مستقلة:
-
-```powershell
-npx --yes firebase-tools@15.37.0 deploy --only functions --project imi-indroid
-```
-
-لا تتابع إذا ظهرت مطالبة Secret غير متوقعة أو اختلاف مشروع. تأكد من أن السر `TURN_SECRET` أُنشئ بواسطة المالك قبل نشر الدالة التي تعلنه ضمن secret bindings.
 
 ## 6. إعداد ونشر الويب — بعد اختيار المضيف
 
 الويب يستخدم Next.js 15 App Router. اختر المضيف أولاً:
-- Vercel: مناسب لتجربة مجانية شخصية ضمن قيود Hobby وشروطه؛ لا تفترض أنه مجاني بلا حدود لتطبيق اجتماعي عام/تجاري.
-- Firebase App Hosting: يدعم Next.js، لكنه يتطلب Blaze وربط Cloud Billing؛ لا تستخدمه ما دام شرط عدم ربط فوترة قائماً.
+- Vercel Hobby: خيار معاينة مجاني فقط إذا كان الاستخدام شخصياً وغير تجاري. شروط Vercel الحالية تقصر Hobby على الاستخدام الشخصي/غير التجاري، وتحتفظ بحق تعطيل أو إزالة المشروع؛ لذلك لا يصلح لاستضافة IMI تجارياً أو مع تحقيق دخل. راجع [شروط Vercel، القسم 4](https://vercel.com/legal/terms).
+- Cloudflare Workers: لم يُثبت حتى الآن تشغيل `firebase-admin` مع `verifyIdToken` وكتابة Firestore تحت `nodejs_compat` باختبار موثق؛ لا تعتبره مضيفاً معتمداً ولا تنشر عليه.
+- Firebase App Hosting: يتطلب Blaze وربط Cloud Billing؛ لا تستخدمه ما دام شرط Spark قائماً.
 
 المتغيرات العامة المطلوبة موجودة في `web/.env.example`:
 - `NEXT_PUBLIC_FIREBASE_API_KEY`
@@ -112,6 +93,8 @@ npx --yes firebase-tools@15.37.0 deploy --only functions --project imi-indroid
 - `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
+- `FIREBASE_PROJECT_ID=imi-indroid`
+- `FIREBASE_SERVICE_ACCOUNT_JSON` — سرّ خادم يوضع في إعدادات Environment Variables على منصة الاستضافة فقط، ولا يُحفظ في المستودع أو السجلات أو المتصفح.
 - `NEXT_PUBLIC_FIREBASE_VAPID_KEY` (اختياري بعد إعداد FCM)
 - `NEXT_PUBLIC_STUN_URLS`
 - `NEXT_PUBLIC_ICE_TRANSPORT_POLICY`
@@ -124,19 +107,18 @@ npm run build --prefix web
 npm run test:health --prefix web
 ```
 
+في إعدادات الإنتاج/المعاينة لا تضبط `NEXT_PUBLIC_FIREBASE_EMULATORS` ولا `IMI_USE_FIREBASE_EMULATORS`. اترك `IMI_ACCOUNT_DELETION_ENABLED` غير مضبوط (معطّلاً افتراضياً). لا تنسخ Service Account إلى Git أو أي ملف متعقب.
+
 لا يوجد حالياً Firebase Hosting target في `firebase.json`، ولذلك فإن `firebase deploy --only hosting` ليس أمراً صالحاً لهذا المستودع. لا تنشئ backend أو domain أو DNS قبل اختيار المضيف وموافقة المالك.
 
-## 7. تفعيل Workflow النشر بعد وجوده على main
+## 7. مسار نشر القواعد — اختياري وبموافقة المالك فقط
 
-ملف `.github/workflows/firebase-deploy.yml` مصمم ليعمل يدوياً (`workflow_dispatch`) فقط، وينشر **Cloud Functions فقط**. لا ينشر Firestore Rules أو Storage Rules أو indexes. يجب أن تبقى القواعد خارج هذا الـWorkflow إلى أن يُصلح تعارض `users/{uid}` مع Android وتنجح اختبارات العقد الفعلي ويوافق المالك على نشر القواعد منفصلاً. كما أن نشر Functions يتطلب Blaze؛ لذلك لا تشغّل الـWorkflow مع بقاء شرط Spark/عدم ربط الفوترة. بعد مراجعة التغييرات ودمجها إلى `main` بموافقة المالك، ومن دون تفعيل تلقائي:
-1. افتح GitHub → Actions → **IMI Firebase Cloud Deployment**.
-2. اختر **Run workflow** على فرع `main`.
-3. أدخل `project_id=imi-indroid`.
-4. اكتب `DEPLOY` حرفياً في خانة التأكيد.
-5. لا تتابع إلا بعد موافقة مستقلة على Blaze؛ وتأكد من إعداد GitHub Environment باسم `firebase-production`، مع allowlist للمشروع `FIREBASE_PROJECT_ID`، وOIDC provider وservice account بأقل صلاحيات لازمة، ومراجعة/موافقة Environment عند تفعيلها.
-6. راجع SHA واسم كل Job وكل Step قبل متابعة أي إجراء.
+المسار الأبسط لخطة Spark هو تشغيل Firebase CLI محلياً من حاسوب المالك باستخدام الأمر المحدد في القسم 4. لا يحتاج هذا المسار إلى Workload Identity أو Service Account للنشر من GitHub، ولا ينشر Storage أو Functions.
 
-لا تفعّل Workflow أو تشغّله أثناء وضع الأمان الحالي.
+يبقى `.github/workflows/firebase-deploy.yml` خياراً إضافياً فقط: يتحقق أولاً من قواعد Firestore والفهارس في Emulator، ثم لا يحاول النشر إلا عند تشغيل يدوي مع `confirm_deploy=DEPLOY` وموافقة المالك. مصادقة Google OIDC اختيارية؛ إذا لم يكن السرّان `GCP_WORKLOAD_IDENTITY_PROVIDER` و`FIREBASE_DEPLOY_SERVICE_ACCOUNT` مضبوطين، يتخطى الـWorkflow النشر صراحةً ولا يحدث أي تغيير في Firebase.
+
+لا تشغّل CLI أو Workflow الآن؛ لا نشر إنتاجي ولا تعديل Firebase حقيقي دون موافقة مستقلة.
+
 
 ## أخطاء متوقعة وكيفية التعامل معها
 

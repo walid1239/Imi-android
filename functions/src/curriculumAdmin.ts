@@ -1,4 +1,5 @@
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
+import { createHash } from "node:crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 
 type NodeType = "level" | "track" | "subject" | "unit";
@@ -76,6 +77,19 @@ export const academyCurriculumAdminAction = onCall<ActionInput>(async request =>
   const actorUid = requireAdmin(request);
   const action = request.data?.action;
   const db = getFirestore();
+  const rateKey = createHash("sha256").update(`academyAdmin:${actorUid}:window`).digest("hex");
+  const rateRef = db.collection("apiRateLimits").doc(rateKey);
+  const now = Date.now();
+  await db.runTransaction(async tx => {
+    const snapshot = await tx.get(rateRef);
+    const start = snapshot.exists ? (snapshot.get("windowStartedAt") as Timestamp).toMillis() : now;
+    const count = snapshot.exists && now - start < 60_000 ? Number(snapshot.get("count") ?? 0) : 0;
+    if (count >= 20) throw new HttpsError("resource-exhausted", "طلبات إدارة الأكاديمية كثيرة؛ انتظر دقيقة ثم أعد المحاولة.");
+    tx.set(rateRef, {
+      operation: "academyAdmin", uidHash: rateKey,
+      windowStartedAt: Timestamp.fromMillis(count ? start : now), count: count + 1,
+    });
+  });
   const nodes = db.collection("curriculumNodes");
 
   if (action === "createCurriculumNode") {

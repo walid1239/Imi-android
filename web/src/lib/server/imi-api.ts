@@ -4,6 +4,7 @@ import { getStorage } from "firebase-admin/storage";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import { reserveRateLimitWindows } from "./rate-limit-core.mjs";
+import { applyTeacherClaimsOutboxOperation } from "../../../../functions/src/teacherClaimsOutbox";
 import { cleanupAccountData } from "../../../../functions/src/shared/accountDeletion";
 import { directConversationId } from "../../../../functions/src/conversationLogic";
 import { NextResponse } from "next/server";
@@ -36,7 +37,7 @@ const limits: Record<Operation, { count: number; windowMs: number }> = {
   publishCurriculum: { count: 5, windowMs: 60_000 },
 };
 
-function adminApp(): App {
+export function adminApp(): App {
   const existing = getApps().find(app => app.name === "imi-server-api");
   if (existing) return existing;
   const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;

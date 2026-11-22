@@ -73,3 +73,15 @@ Binding constraints: Firebase Spark only; do not invoke Cloud Functions; Next.js
 - Firebase workflow Run [45008353988](https://github.com/walid1239/Imi-android/actions/runs/45008353988): validation succeeded; protected Firestore rules/index deployment job was **skipped**. No real Firebase deployment occurred.
 - PR #2 remains open and unmerged. No production deployment, Firebase mutation, paid-plan upgrade, or secret change was performed.
 - This is a green CI/debug-artifact baseline, **not production acceptance**. Physical-device installation, signed Release APK acceptance, live Firebase Auth/domain verification, approved hosting/runtime proof, and the documented feature/security/legal gates remain outstanding.
+
+
+## Latest verified CI baseline — 2026-11-22 11:02 UTC
+
+- Exact head SHA: `1035350f53a582c35c3c47b64a3cc8ed110392f2`.
+- Web CI Run [45014982868](https://github.com/walid1239/Imi-android/actions/runs/45014982868): **success**. Playwright browser tests, TypeScript/build/health checks, Functions tests, Firestore/Storage Emulator rules tests, and Coturn configuration validation completed successfully.
+- Android CI Run [45014982819](https://github.com/walid1239/Imi-android/actions/runs/45014982819): **success**. Android unit tests and Debug APK assembly/upload completed successfully. The live-Firebase smoke test was skipped; the Android emulator launch was also skipped by the workflow guard to avoid anonymous Auth writes to the real Firebase project.
+- APK artifact: `IMI-debug-apk-firebase-configured`, artifact ID `14750684003`, 23,571,477 bytes, expires 2026-12-06 11:01 UTC. Downloaded and extracted locally; APK SHA-256 verified as `624ce6167e42ee165cde58a0173c6464bcc806121c3c736943da80b779c5d0ca`. This is a **Debug** APK, not a signed Release acceptance build.
+- Firebase rules/index workflow Run [45014982817](https://github.com/walid1239/Imi-android/actions/runs/45014982817): **success** for validation; protected deployment was skipped. No real Firebase rules/index deployment occurred.
+- Teacher workflow updates are present at this head: authenticated server routes for teacher application submission and admin review, with the existing claims outbox path covered by E2E tests. The public teacher application UI is deliberately closed and displays `التقديم متوقف مؤقتاً`; it does not collect personal data while child-safety/verification operations remain unready.
+- PR #2 remains open and unmerged. No production deployment, Firebase Console mutation, paid-plan upgrade, secret change, or Cloud Functions invocation occurred.
+- This CI baseline is not production acceptance. Physical-device installation/runtime testing, signed Release APK acceptance, live Firebase Auth/domain verification, approved hosting/runtime proof, and the remaining security/legal gates are outstanding.

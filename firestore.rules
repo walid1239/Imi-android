@@ -502,8 +502,8 @@ service cloud.firestore {
     }
 
     match /moderationAudit/{entryId} {
-      allow read: if isAdmin();
-      allow create, update, delete: if false;
+      // Audit records are server-only, including reads; Admin SDK bypasses client rules.
+      allow read, write: if false;
     }
 
     // Server-only counters; clients cannot read, forge, reset or delete rate limits.

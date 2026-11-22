@@ -44,7 +44,7 @@ Binding constraints: Firebase Spark only; do not invoke Cloud Functions; Next.js
 
 1. No Production deployment or real Firebase mutation has been performed. Do not deploy rules/indexes until the owner separately approves.
 2. Real-project Google OAuth/Email Auth and admin claims have not been verified on the actual domain.
-3. Teacher application submission and admin review routes are implemented and E2E-tested, but the public application UI remains closed. Complete teacher profile, content submission and moderation endpoints under `/api/v1`; keep those unimplemented actions disabled and do not restore Firebase Functions client calls.
+3. Teacher application submission and admin review routes are implemented and E2E-tested. The public form and admin review UI are reopened on the isolated work branch; profile save is migrated to `/api/v1/teachers/profile` without photo upload. Teacher content submission/moderation remains a blocker; keep those unimplemented actions disabled and do not restore Firebase Functions client calls.
 4. Confirm Firebase Spark Storage eligibility before enabling Storage-dependent uploads.
 5. Complete account-deletion failure/retry tests and keep `IMI_ACCOUNT_DELETION_ENABLED` unset.
 6. Prove Cloudflare Firebase Admin compatibility, or use Vercel Hobby only for personal/non-commercial preview. No host deployment has been performed.
@@ -85,3 +85,40 @@ Binding constraints: Firebase Spark only; do not invoke Cloud Functions; Next.js
 - Teacher workflow updates are present at this head: authenticated server routes for teacher application submission and admin review, with the existing claims outbox path covered by E2E tests. The public teacher application UI is deliberately closed and displays `التقديم متوقف مؤقتاً`; it does not collect personal data while child-safety/verification operations remain unready.
 - PR #2 remains open and unmerged. No production deployment, Firebase Console mutation, paid-plan upgrade, secret change, or Cloud Functions invocation occurred.
 - This CI baseline is not production acceptance. Physical-device installation/runtime testing, signed Release APK acceptance, live Firebase Auth/domain verification, approved hosting/runtime proof, and the remaining security/legal gates are outstanding.
+
+## تحديث مراجعة 2026-11-22 — فرع معاينة منفصل
+
+- العمل الجديد معزول في `feature/imi-teacher-admin-preview` بدءاً من أساس `106d656c044769828065b5bf5d76998820d27880`. لم نعدّل الفرع الأصلي أو PR #2.
+- PR #2 لا يزال مفتوحاً وغير مدمج. PR #3 يبقى Draft وغير مدمج وعلى قاعدته الحالية؛ لا تدمجه أو تعِد توجيهه.
+- Web CI على SHA `9dc895c4b710de7d22cfa4d7d951829f6b0e7beb`: Run [45056409945](https://github.com/walid1239/Imi-android/actions/runs/45056409945) انتهى بفشل Cloudflare Worker runtime smoke. الخطأ الحرفي: `EvalError: Code generation from strings disallowed for this context` داخل `protobufjs` أثناء تحميل `firebase-admin/firestore`. نجح typecheck وbuild وOpenNext build، كما نجح health smoke: `PASS /api/health: HTTP 200` و`PASS /api/v1/health: HTTP 200`.
+- Functions emulator job ضمن Run `45056409945`: نجح؛ `npm test` أظهر 48 اختباراً ناجحاً، واختبار إدارة المنهاج على Auth/Firestore Emulator أُدرج في هذا التشغيل. لم تُنشر Cloud Functions.
+- Playwright job ضمن Run `45056409945`: `32 passed`. Firestore Rules job: `41 tests passed`. هذه اختبارات محاكاة وليست اختباراً على Firebase الحقيقي.
+- Android Run [45056409860](https://github.com/walid1239/Imi-android/actions/runs/45056409860): بناء Debug واختبارات الوحدة ورفع Artifact نجحت؛ Artifact `IMI-debug-apk-firebase-configured`، ID `14767507612`، SHA-256 `84da7de300a5d1c3985946a0a75cd29f96d8d7d089b81aa2b718307fbf266f70`. اختبار تشغيل Android Emulator ما زال `in_progress` عند آخر قراءة؛ لا تسجل نجاحه قبل انتهاء Job.
+- Firebase safety gate Run `45056409885`: نجاح فحص السلامة غير الناشر؛ خطوة Validate/Test/Deploy Firebase backend كانت skipped. لم يحدث أي نشر أو تعديل على Firebase الحقيقي.
+- اختبار GET على معاينة Vercel القديمة لا يثبت POST أو الاتصال بقاعدة Firebase؛ 405 لمسارات POST-only دليل مطابقة المسار والطريقة فقط.
+
+### تصنيف الاختبارات وحدودها
+
+| المجال | ما ثبت | ما لم يثبت |
+|---|---|---|
+| Auth/Firestore Emulator | مسارات تقديم/مراجعة الأستاذ وclaims outbox وعمليات المنهاج وقواعد Firestore والعمليات التي يغطيها E2E | لا يثبت إعداد موفّرات Firebase الحقيقيين أو Authorized Domains أو صلاحيات الخدمة في الاستضافة |
+| Web build | TypeScript وNext build وOpenNext Worker build نجحت على SHA السابق | Worker runtime smoke فشل؛ لا يوجد دليل تشغيل ناجح على Cloudflare |
+| Browser E2E | 32 اختباراً نجحت على المحاكيات | لا يثبت Google OAuth أو Email Auth أو كتابة Firestore على Firebase الحقيقي |
+| Android | Unit tests وassembleDebug ورفع APK نجحت | Emulator runtime job لم يكن قد اكتمل عند آخر تحقق؛ لا يوجد قبول على جهاز فعلي |
+| Hosting/Firebase | Vercel preview routes/health استجابت | لم يُختبر POST فعلياً مع أسرار الخادم على Preview، ولم يتم اختبار Authorized Domains أو اتصال Firestore الحقيقي |
+
+### عناصر Functions القديمة التي لم تُنقل بعد
+
+تبقى هذه العمليات معطلة برسالة عربية في الواجهة، ولا تستدعِ Cloud Functions من العميل. ينقل عنصر واحد في كل دفعة، مع اختبار Emulator مستقل قبل تفعيل زرّه:
+
+| Callable قديم | المسار المقترح | الحالة |
+|---|---|---|
+| `saveTeacherProfile` | `POST /api/v1/teachers/profile` | نُقل على فرع العمل؛ بلا رفع صورة و`photoPath: ""`، مع اشتراط claim الأستاذ الموثق واتفاقيتي المحتوى وحماية القاصرين؛ ينتظر CI |
+| `createTeacherContent` | لاحقاً بعد مراجعة مسار المحتوى والحقوق | معطّل |
+| `reviewTeacherContent` | لاحقاً، للمشرف فقط | معطّل |
+| `scheduleTeacherLiveSession` | لاحقاً بعد اختيار مزود بث حقيقي مجاني ومتوافق | معطّل |
+| `reviewContentReport` | لاحقاً، للمشرف فقط | معطّل |
+| `publishCourse` | لاحقاً، بعد نقل إدارة الدورات | معطّل |
+| بقية استدعاءات `call()` في `academy-admin-panel.tsx` مثل إنشاء الدورات والدروس ونشرها | تُحصَر وتُنقل واحدة في كل دفعة | معطّلة |
+
+راجع `docs/DEPLOY_PREVIEW.md` لخطوات إعداد Preview اليدوية. هذا التوثيق لا ينفّذ نشراً ولا يغيّر إعدادات Firebase. لا تضع أي اعتماد Admin في المستودع أو سجلات CI.

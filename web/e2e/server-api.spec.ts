@@ -37,6 +37,26 @@ async function post(path: string, body: Record<string, unknown>, token?: string)
   });
 }
 
+async function emulatorDocument(path: string): Promise<Record<string, unknown> | null> {
+  const response = await fetch(
+    `http://127.0.0.1:8080/v1/projects/demo-imi-playwright/databases/(default)/documents/${path}`,
+    { headers: { authorization: 'Bearer owner' } },
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`Firestore Emulator read failed: ${response.status}`);
+  return await response.json() as Record<string, unknown>;
+}
+
+async function emulatorCollectionCount(path: string): Promise<number> {
+  const response = await fetch(
+    `http://127.0.0.1:8080/v1/projects/demo-imi-playwright/databases/(default)/documents/${path}?pageSize=1000`,
+    { headers: { authorization: 'Bearer owner' } },
+  );
+  if (!response.ok) throw new Error(`Firestore Emulator list failed: ${response.status}`);
+  const payload = await response.json() as { documents?: unknown[] };
+  return payload.documents?.length ?? 0;
+}
+
 test('Next.js server routes reject missing and forged tokens without echoing credentials', async () => {
   const crossOrigin = await fetch(`${apiBase}/api/v1/status`, {
     method: 'POST',
@@ -147,6 +167,60 @@ test('group and block lifecycle routes enforce friendship, admin and bilateral s
   expect((await newFriend.json()).data.status).toBe('pending');
 });
 
+
+
+test('admin can preview and publish a large curriculum level without publishing nameless nodes or creating lessons', async () => {
+  const suffix = fixtureSuffix(test.info().project.name, test.info().retry);
+  const adminToken = await idToken(`e2e-admin-${suffix}@imi.test`);
+  const userToken = await idToken(`e2e-b-${suffix}@imi.test`);
+  const scopeId = `e2e-publish-level-${suffix}`;
+  const nestedLevelId = `e2e-publish-nested-level-${suffix}`;
+  const namelessId = scopeId + '-track-subject-nameless';
+  const lessonCountBefore = await emulatorCollectionCount('courses/e2e-general-skills/lessons');
+
+  const denied = await post('/api/v1/admin/curriculum/publish', {
+    scopeId, dryRun: true,
+  }, userToken);
+  expect(denied.status).toBe(403);
+
+  const parentBlocked = await post('/api/v1/admin/curriculum/publish', {
+    scopeId: nestedLevelId, dryRun: true,
+  }, adminToken);
+  expect(parentBlocked.status).toBe(400);
+  expect((await parentBlocked.json()).error).toContain('العقدة الأب');
+
+  const preview = await post('/api/v1/admin/curriculum/publish', {
+    scopeId, dryRun: true,
+  }, adminToken);
+  expect(preview.status).toBe(200);
+  const previewData = (await preview.json()).data as { dryRun: boolean; count: number; byType: Record<string, number> };
+  expect(previewData.dryRun).toBe(true);
+  expect(previewData.count).toBe(404);
+  expect(previewData.byType.unit).toBe(401);
+
+  const rootBefore = await emulatorDocument('curriculumNodes/' + scopeId);
+  expect((rootBefore?.fields as Record<string, { stringValue?: string }>).status.stringValue).toBe('hidden');
+
+  const published = await post('/api/v1/admin/curriculum/publish', {
+    scopeId, dryRun: false, confirmation: 'PUBLISH',
+  }, adminToken);
+  expect(published.status).toBe(200);
+  const publishedData = (await published.json()).data as { dryRun: boolean; count: number };
+  expect(publishedData.dryRun).toBe(false);
+  expect(publishedData.count).toBe(404);
+
+  const rootAfter = await emulatorDocument('curriculumNodes/' + scopeId);
+  expect((rootAfter?.fields as Record<string, { stringValue?: string }>).status.stringValue).toBe('published');
+  const nameless = await emulatorDocument('curriculumNodes/' + namelessId);
+  expect((nameless?.fields as Record<string, { stringValue?: string }>).status.stringValue).toBe('hidden');
+
+  const secondPreview = await post('/api/v1/admin/curriculum/publish', {
+    scopeId, dryRun: true,
+  }, adminToken);
+  expect(secondPreview.status).toBe(200);
+  expect((await secondPreview.json()).data.count).toBe(0);
+  expect(await emulatorCollectionCount('courses/e2e-general-skills/lessons')).toBe(lessonCountBefore);
+});
 
 test('Reels API validates submissions and keeps moderation admin-only', async () => {
   const suffix = fixtureSuffix(test.info().project.name, test.info().retry);

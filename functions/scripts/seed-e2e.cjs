@@ -112,6 +112,12 @@ async function main() {
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
   }
+  await db.doc('curriculumNodes/e2e-unpublished-subject').set({
+    id: 'e2e-unpublished-subject', parentId: 'e2e-primary-track', type: 'subject',
+    nameAr: 'مادة غير منشورة - اختبار', nameFr: '', language: 'ar', order: 99,
+    needsReview: true, status: 'hidden', createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
 
   // Isolated admin curriculum publishing fixtures: 404 publishable nodes,
   // one nameless node that must remain hidden, and a nested level with a hidden parent.
@@ -159,7 +165,7 @@ async function main() {
     await db.doc('teacherApplications/' + teacherUid).set({
       uid: teacherUid, fullName: 'أستاذ اختبار آلي ' + variant,
       subjectIds: ['e2e-primary-math'], levelIds: ['e2e-primary'],
-      evidencePath: 'teacher-verification/' + teacherUid + '/mock.pdf',
+      proofUrl: 'https://drive.google.com/file/d/imi-e2e-fixture/view',
       status: 'pending', submittedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
 

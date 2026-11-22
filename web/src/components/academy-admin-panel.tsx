@@ -185,11 +185,11 @@ export default function AcademyAdminPanel({ user }: { user: User }) {
         <p className="mt-1 text-xs text-slate-400">المستويات: {application.levelIds.join('، ')}</p>
         <p className="mt-1 text-xs text-slate-400">المواد: {application.subjectIds.join('، ')}</p>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-          {application.proofUrl && <a href={application.proofUrl} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-white/10 px-3 py-2 text-slate-200">فتح رابط الإثبات</a>}
+          {application.proofUrl && <a href={application.proofUrl} target="_blank" rel="noopener noreferrer" data-testid={'proof-link-' + application.uid} className="rounded-lg border border-white/10 px-3 py-2 text-slate-200">فتح رابط الإثبات</a>}
         </div>
         <div className="mt-3 flex gap-2">
-          <button disabled={busy} onClick={() => void reviewTeacher(application.uid, true)} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold disabled:opacity-50">اعتماد التوثيق</button>
-          <button disabled={busy} onClick={() => void reviewTeacher(application.uid, false)} className="rounded-lg border border-red-400/30 px-3 py-2 text-xs text-red-200 disabled:opacity-50">رفض الطلب</button>
+          <button data-testid={'approve-' + application.uid} disabled={busy} onClick={() => void reviewTeacher(application.uid, true)} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold disabled:opacity-50">اعتماد التوثيق</button>
+          <button data-testid={'reject-' + application.uid} disabled={busy} onClick={() => void reviewTeacher(application.uid, false)} className="rounded-lg border border-red-400/30 px-3 py-2 text-xs text-red-200 disabled:opacity-50">رفض الطلب</button>
         </div>
       </article>)}
     </section>

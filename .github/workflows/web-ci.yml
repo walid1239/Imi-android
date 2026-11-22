@@ -69,6 +69,10 @@ jobs:
         run: npm audit --audit-level=high
       - run: npm run typecheck
       - run: npm run build
+      - name: Build Cloudflare OpenNext Worker (no deployment)
+        run: |
+          npm install --no-save --package-lock=false @opennextjs/cloudflare@latest wrangler@latest
+          npm run cf:build
       - run: npm run test:health
 
   # Firebase CLI 15.37.0 Emulator Suite requires JDK 21+.

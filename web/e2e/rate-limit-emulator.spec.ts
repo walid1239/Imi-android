@@ -30,22 +30,28 @@ test('Firestore Emulator rate limit is atomic under concurrent authenticated API
   expect(signIn.status).toBe(200);
   const { idToken } = await signIn.json() as { idToken: string };
 
-  const responses = await Promise.all(Array.from({ length: 8 }, () =>
-    fetch(`${apiBase}/api/v1/status`, {
-      method: 'POST',
-      headers: {
-        origin: apiBase,
-        'content-type': 'application/json',
-        authorization: `Bearer ${idToken}`,
-      },
-      body: JSON.stringify({ text: 'اختبار التزامن عبر Firestore Emulator' }),
-    }),
-  ));
+  const sendStatus = () => fetch(`${apiBase}/api/v1/status`, {
+    method: 'POST',
+    headers: {
+      origin: apiBase,
+      'content-type': 'application/json',
+      authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ text: 'اختبار التزامن عبر Firestore Emulator' }),
+  });
+
+  // The status domain also enforces a 30-second cooldown. Wait beyond it so
+  // the second accepted rate-limit reservation is not rejected by that rule.
+  const first = await sendStatus();
+  expect(first.status).toBe(200);
+  await new Promise(resolve => setTimeout(resolve, 31_000));
+  const second = await sendStatus();
+  expect(second.status).toBe(200);
+
+  const responses = await Promise.all(Array.from({ length: 6 }, sendStatus));
 
   const statuses = responses.map(response => response.status);
-  expect(statuses.filter(status => status === 200)).toHaveLength(2);
-  expect(statuses.filter(status => status === 429)).toHaveLength(6);
-  expect(statuses.every(status => status === 200 || status === 429)).toBe(true);
+  expect(statuses).toEqual([429, 429, 429, 429, 429, 429]);
 
   const key = createHash('sha256').update(`createStatus:${uid}`).digest('hex');
   const counter = await db.doc(`apiRateLimits/${key}`).get();

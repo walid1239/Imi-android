@@ -1,33 +1,15 @@
 import { expect, test } from '@playwright/test';
 
-test('login shows Arabic guidance when the current origin is not authorized for Google OAuth', async ({ page }) => {
-  await page.route('**/identitytoolkit.googleapis.com/v1/projects**', async route => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        projectId: 'demo-imi-playwright',
-        authorizedDomains: ['localhost'],
-      }),
-    });
-  });
-
-  await page.goto('/login');
-  await page.getByRole('button', { name: 'المتابعة باستخدام Google' }).click();
-
-  await expect(page.getByRole('status')).toContainText(
-    'عنوان الموقع غير مسموح له باستخدام Firebase Authentication.',
-  );
-  await expect(page.getByRole('status')).not.toContainText('auth/unauthorized-domain');
-});
-
-test('login shows Arabic guidance for CONFIGURATION_NOT_FOUND', async ({ page }) => {
-  await page.route('**/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword**', async route => {
+const loginWithMockedAuthError = async (
+  page: Parameters<typeof test>[0] extends never ? never : any,
+  firebaseMessage: string,
+) => {
+  await page.route('**/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword**', async (route: any) => {
     await route.fulfill({
       status: 400,
       contentType: 'application/json',
       body: JSON.stringify({
-        error: { code: 400, message: 'CONFIGURATION_NOT_FOUND' },
+        error: { code: 400, message: firebaseMessage },
       }),
     });
   });
@@ -36,6 +18,20 @@ test('login shows Arabic guidance for CONFIGURATION_NOT_FOUND', async ({ page })
   await page.getByLabel('البريد الإلكتروني').fill('auth-error-test@imi.test');
   await page.getByLabel('كلمة المرور').fill('IMI-Emulator-Password-2026!');
   await page.getByRole('button', { name: 'تسجيل الدخول' }).click();
+};
+
+test('login shows Arabic guidance for auth/unauthorized-domain', async ({ page }) => {
+  // Firebase Auth maps the backend INVALID_ORIGIN response to auth/unauthorized-domain.
+  await loginWithMockedAuthError(page, 'INVALID_ORIGIN');
+
+  await expect(page.getByRole('status')).toContainText(
+    'عنوان الموقع غير مسموح له باستخدام Firebase Authentication.',
+  );
+  await expect(page.getByRole('status')).not.toContainText('INVALID_ORIGIN');
+});
+
+test('login shows Arabic guidance for CONFIGURATION_NOT_FOUND', async ({ page }) => {
+  await loginWithMockedAuthError(page, 'CONFIGURATION_NOT_FOUND');
 
   await expect(page.getByRole('status')).toContainText(
     'خدمة تسجيل الدخول في Firebase غير مكتملة الإعداد.',

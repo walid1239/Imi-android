@@ -34,6 +34,26 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci --no-audit --no-fund
+      - name: Verify Vercel branch and Preview-only guard
+        run: |
+          set +e
+          VERCEL_GIT_COMMIT_REF=feature/imi-teacher-admin-preview VERCEL_ENV=preview bash scripts/vercel-ignore.sh
+          feature_code=$?
+          VERCEL_GIT_COMMIT_REF=main VERCEL_ENV=preview bash scripts/vercel-ignore.sh
+          main_code=$?
+          VERCEL_GIT_COMMIT_REF=untrusted-branch VERCEL_ENV=preview bash scripts/vercel-ignore.sh
+          other_code=$?
+          VERCEL_GIT_COMMIT_REF=main VERCEL_ENV=production bash scripts/vercel-ignore.sh
+          production_code=$?
+          set -e
+          echo "feature preview exit: $feature_code"
+          echo "main preview exit: $main_code"
+          echo "other branch exit: $other_code"
+          echo "production exit: $production_code"
+          test "$feature_code" -eq 1
+          test "$main_code" -eq 1
+          test "$other_code" -eq 0
+          test "$production_code" -eq 0
       - name: Hosted env guard must fail when variables are missing
         run: |
           set +e

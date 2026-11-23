@@ -35,6 +35,19 @@
 
 ### إعداد Google Cloud المطلوب
 
+في **APIs & Services → Enabled APIs & services** تأكد من تفعيل:
+- Security Token Service API: `sts.googleapis.com`
+- IAM Service Account Credentials API: `iamcredentials.googleapis.com`
+- IAM API: `iam.googleapis.com`
+
+إذا ظهر زر **Enable** لأي API، فعّله في مشروع `imi-indroid` قبل متابعة الربط. قد تحتاج صلاحية Service Usage Admin أو Owner لتفعيلها.
+
+**قيمة New principal الجاهزة (انسخها كما هي):**
+
+`principal://iam.googleapis.com/projects/135769436246/locations/global/workloadIdentityPools/imi-vercel-preview/subject/owner:walid2:project:imi-preview:environment:preview`
+
+هذه صيغة Google الرسمية لهوية واحدة داخل Workload Identity Pool؛ استخدمها في صلاحيات حساب الخدمة، وليس `principalSet://...` أو صلاحية على المشروع كله.
+
 في مشروع Google Cloud رقم `135769436246`:
 
 1. افتح **IAM & Admin → Workload Identity Federation** وأنشئ Pool:

@@ -89,14 +89,14 @@ gcloud auth application-default login
 gcloud config set project imi-indroid
 $env:GCLOUD_PROJECT = "imi-indroid"
 $env:IMI_ADMIN_EMAIL = "البريد-المسجل-في-IMI"
-node .\functions\\scripts\\grant-admin.cjs
+node .\functions\scripts\grant-admin.cjs
 ```
 
 التشغيل الأول بالبريد دون تأكيد سيوقف العملية ويعرض UID الفعلي المطلوب للتأكيد. تحقق من أن UID يعود إلى الحساب الصحيح، ثم:
 
 ```powershell
 $env:CONFIRM_GRANT_IMI_ADMIN = "GRANT_ADMIN_TO_UID_الحقيقي"
-node .\functions\\scripts\\grant-admin.cjs
+node .\functions\scripts\grant-admin.cjs
 ```
 
 بدلاً من البريد، يمكن استخدام UID مباشرة (ولا تضبط البريد معه):
@@ -105,7 +105,7 @@ node .\functions\\scripts\\grant-admin.cjs
 Remove-Item Env:IMI_ADMIN_EMAIL -ErrorAction SilentlyContinue
 $env:IMI_ADMIN_UID = "UID_الحقيقي"
 $env:CONFIRM_GRANT_IMI_ADMIN = "GRANT_ADMIN_TO_UID_الحقيقي"
-node .\functions\\scripts\\grant-admin.cjs
+node .\functions\scripts\grant-admin.cjs
 ```
 
 يجب أن يكون المستخدم موجوداً بالفعل في Firebase Authentication، وأن يملك حساب Google الذي نفّذ `gcloud auth application-default login` صلاحية إدارة مستخدمي Firebase Authentication في المشروع. لا تشارك ملفات ADC أو access tokens أو أي اعتماد. بعد نجاح السكربت، سجّل خروج حساب المشرف من IMI ثم ادخل مجدداً كي يتجدد ID token ويحمل claim `admin: true`.

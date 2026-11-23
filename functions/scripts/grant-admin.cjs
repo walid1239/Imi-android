@@ -9,12 +9,12 @@ async function main() {
   const emailInput = process.env.IMI_ADMIN_EMAIL?.trim();
   const projectId = process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT_ID;
   if ((!uidInput && !emailInput) || (uidInput && emailInput) || !projectId) {
-    throw new Error('Set exactly one of IMI_ADMIN_UID or IMI_ADMIN_EMAIL, and set GCLOUD_PROJECT (or FIREBASE_PROJECT_ID).');
+    throw new Error('Set IMI_ADMIN_UID and GCLOUD_PROJECT (or IMI_ADMIN_EMAIL and GCLOUD_PROJECT); provide exactly one account identifier.');
   }
   if (projectId !== 'imi-indroid') {
     throw new Error(`Refusing to grant admin outside the approved IMI project (received: ${projectId}).`);
   }
-  const app = initializeApp({ credential: applicationDefault(), projectId });
+  if (uidInput && process.env.CONFIRM_GRANT_IMI_ADMIN !== `GRANT_ADMIN_TO_${uidInput}`) {\n    throw new Error(`Set CONFIRM_GRANT_IMI_ADMIN to the exact value GRANT_ADMIN_TO_${uidInput}.`);\n  }\n  const app = initializeApp({ credential: applicationDefault(), projectId });
   const auth = getAuth(app);
   const user = uidInput ? await auth.getUser(uidInput) : await auth.getUserByEmail(emailInput);
   const confirmation = `GRANT_ADMIN_TO_${user.uid}`;

@@ -2,11 +2,11 @@
 
 ## Latest verification — 2026-11-23
 
-This section supersedes older run/status references below where they conflict. The latest verified branch head before this documentation-only update is `e08ecd9b41d6e60acee39d3938b29321e35d432f`; application code is unchanged from the fully tested application SHA `2cc6c764297eaa7665608936780937a6aa324b25`.
+This section supersedes older run/status references below where they conflict. Latest verified branch head: `9fbd79c90f79a25b08d944eb79cfbca39680323b`.
 
-- Preview build check: [Run 45133481536](https://github.com/walid1239/Imi-android/actions/runs/45133481536) — **success**.
-- Web CI: [Run 45133487595](https://github.com/walid1239/Imi-android/actions/runs/45133487595) — **success**; Playwright result: `50 passed (1.0m)`; Functions, Firestore rules, Coturn validation and web build jobs succeeded.
-- Android CI: [Run 45133487524](https://github.com/walid1239/Imi-android/actions/runs/45133487524) — **success**; Firebase security-rules emulator tests, Android unit tests, debug APK assembly and artifact upload succeeded. `Run IMI on Android emulator` was **skipped**; the live-Firebase Android smoke test was skipped by design.
+- Preview build check: [Run 45134218614](https://github.com/walid1239/Imi-android/actions/runs/45134218614) — **success**.
+- Web CI: [Run 45134226715](https://github.com/walid1239/Imi-android/actions/runs/45134226715) — **success**; Playwright: `49 passed (1.6m)`, with one flaky retry in the existing Academy admin mobile test. That test's first attempt logged `Developer claims payload should not exceed 1000 characters.`; the workflow completed successfully after retry. The two new login-error E2E cases are included in this run.
+- Android CI: [Run 45134226695](https://github.com/walid1239/Imi-android/actions/runs/45134226695) — **success**; Firebase security-rules emulator tests, Android unit tests, debug APK assembly and artifact upload succeeded. `Run IMI on Android emulator` was **skipped**; the live-Firebase Android smoke test was skipped by design.
 
 ### Exact Preview smoke output
 
@@ -19,7 +19,7 @@ IMI_ADMIN_HEALTH unset
 /api/v1/health/admin -> 404
 ```
 
-The Vercel branch guard test passed with these exact exit codes:
+The Vercel branch allowlist test passed with these exact exit codes:
 
 ```text
 feature preview exit: 1
@@ -28,14 +28,18 @@ other branch exit: 0
 production exit: 0
 ```
 
-The build compiled successfully (`Compiled successfully in 7.5s`). The 404 on `/api/v1/health/admin` is expected because `IMI_ADMIN_HEALTH` is unset.
+The build compiled successfully (`Compiled successfully in 10.9s`). The 404 on `/api/v1/health/admin` is expected because `IMI_ADMIN_HEALTH` is unset.
 
 ### Vercel / owner setup status
 
-- Vercel project `imi-preview` still has no `FIREBASE_SERVICE_ACCOUNT_JSON` in Preview. The six public `NEXT_PUBLIC_FIREBASE_*` values and `FIREBASE_PROJECT_ID` are present; no secret value was read or printed.
+- Vercel project `imi-preview` has the six public `NEXT_PUBLIC_FIREBASE_*` values and `FIREBASE_PROJECT_ID` in Preview, but no `FIREBASE_SERVICE_ACCOUNT_JSON`. No secret value was decrypted or printed.
 - The last recorded Vercel deployment `dpl_HUNAdSugYnEetHNVTPhuWgtPi7sj` ended with `ERROR`. First build error: `متغير مفقود: FIREBASE_SERVICE_ACCOUNT_JSON`; then `Error: [BUILD_UTILS_SPAWN_1] Command "npm run build" exited with 1`.
 - No Vercel deployment for the latest branch SHA appeared after pushes. GitHub auto-deploy integration, Root Directory `web`, Node `22.x`, and **Include source files outside of the Root Directory** are not verified as configured. Follow `docs/OWNER_DEPLOY_MESSAGE.md` once, then monitor the resulting Preview.
-- The owner must add `FIREBASE_SERVICE_ACCOUNT_JSON` as a Sensitive Preview-only variable and connect the GitHub repository. No key or token was requested, copied, or committed.
+- The owner must connect the GitHub repository and add `FIREBASE_SERVICE_ACCOUNT_JSON` as a Sensitive Preview-only variable. No key or token was requested, copied, or committed.
+
+### PR state
+
+PR #4 is **Ready for review**, open, and unmerged: https://github.com/walid1239/Imi-android/pull/4. No merge is authorized.
 
 ### Not tested / not performed
 
@@ -43,13 +47,12 @@ The build compiled successfully (`Compiled successfully in 7.5s`). The 404 on `/
 - No Firestore rules/indexes were deployed to the real Firebase project.
 - No Cloud Functions deployment, Blaze upgrade, payment, Production deployment, or PR merge occurred.
 - The Preview URL and its hosted smoke tests remain unavailable until the owner completes the one-time Vercel connection and Preview environment setup.
-- PR #4 remains Draft pending the checks for this final handoff documentation commit; it must not be merged without explicit approval.
 
 ## Repository and owner constraints
 
 - Repository: `walid1239/Imi-android`
 - Baseline branch: `feature/imi-web-foundation`; isolated implementation branch: `feature/imi-teacher-admin-preview`.
-- Base SHA: `106d656c044769828065b5bf5d76998820d27880`; latest verified application/workflow SHA: `e08ecd9b41d6e60acee39d3938b29321e35d432f` (CI-green; see latest verification below).
+- Base SHA: `106d656c044769828065b5bf5d76998820d27880`; latest verified application/workflow SHA: `9fbd79c90f79a25b08d944eb79cfbca39680323b` (CI-green; see latest verification below).
 - PR #2 is open, not merged; base: `feature/server-authoritative-status`. PR #4 is Draft and targets `feature/imi-web-foundation`.
 - This handoff records source changes on isolated Draft PR #4; it does not change Firebase/hosting runtime or perform deployment.
 - No Production deployment, PR merge, Firebase Console mutation, Firebase rules/index deployment, Blaze upgrade, payment card, paid service, or secret publication was performed.

@@ -136,7 +136,7 @@ jobs:
       # Only a deliberate manual run publishes/replaces the public preview release.
       # PR checks never publish binaries and Production remains untouched.
       - name: Publish APK to the IMI preview release
-        if: github.event_name == 'workflow_dispatch' && steps.android_build.outcome == 'success' && steps.firebase_config.outputs.configured == 'true'
+        if: ${{ steps.android_build.outcome == 'success' && steps.firebase_config.outputs.configured == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feature/imi-teacher-admin-preview' && github.event.pull_request.head.repo.full_name == github.repository)) }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: imi-preview

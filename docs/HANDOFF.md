@@ -2,9 +2,9 @@
 
 ## حالة المعاينة — تحديث 2026-11-23 15:40 UTC
 
-- رأس الفرع وقت الفحص: `45e04d464f9aff15d404e2a2f88506b86c51fddf`.
-- Web CI: [Run 45205980954](https://github.com/walid1239/Imi-android/actions/runs/45205980954) — `completed / success` على SHA الرأس.
-- Android CI: [Run 45205980943](https://github.com/walid1239/Imi-android/actions/runs/45205980943) — `completed / success` على SHA الرأس؛ تشغيل التطبيق على Android Emulator كان `skipped`.
+- رأس التطبيق الذي فُحص: `45e04d464f9aff15d404e2a2f88506b86c51fddf`. بعده أُنشئت تحديثات توثيق فقط: `47d6d93b0b21aef3eb2a586286b151077eb11f21` لتصحيح حالة المعاينة، ثم `424399055cd098bbe0747b537a1cdbefd8f56327` لتصحيح تعليمات Git في دليل المالك. لا تتضمن هاتان الدفعتان تغييراً في كود التطبيق؛ آخر SHA بعد تحديث HANDOFF الحالي سيظهر في سجل GitHub.
+- Web CI: [Run 45205980954](https://github.com/walid1239/Imi-android/actions/runs/45205980954) — `completed / success` على SHA التطبيق `45e04d4`.
+- Android CI: [Run 45205980943](https://github.com/walid1239/Imi-android/actions/runs/45205980943) — `completed / success` على SHA التطبيق `45e04d4`؛ تشغيل التطبيق على Android Emulator كان `skipped`.
 - Preview build check: آخر Run متاح [45204952842](https://github.com/walid1239/Imi-android/actions/runs/45204952842) على SHA أقدم `34a35b1f19b6ce0c4b5ee03d22631316871c1daf`، وليس على رأس الفرع الحالي. حالته `completed / success`.
 - Firebase safety: آخر Run متاح [45056409885](https://github.com/walid1239/Imi-android/actions/runs/45056409885) أقدم من SHA الحالي؛ الحارس `success` والتحقق/النشر `skipped`. لم يظهر Run مطابق للرأس الحالي.
 - مخرجات Preview build check القديم حرفياً: `feature preview exit: 1`, `main preview exit: 1`, `other branch exit: 0`, `production exit: 0`; البناء `✓ Compiled successfully in 10.8s`; `/api/health -> 200`; `/login -> 200`; `/academy -> 200`; `IMI_ADMIN_HEALTH unset`; جسم `/api/v1/health/admin`: `{"error":"Not found."}`; وحالته `/api/v1/health/admin -> 404`.

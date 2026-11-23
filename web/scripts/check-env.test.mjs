@@ -17,17 +17,18 @@ test('hosted build reports missing settings without exposing credentials', () =>
   const result = run({ CHECK_PRODUCTION_ENV: 'true' });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /متغير مفقود: NEXT_PUBLIC_FIREBASE_API_KEY/);
-  assert.match(result.stderr, /متغير مفقود: GCP_PROJECT_NUMBER/);\n  assert.match(result.stderr, /متغير مفقود: GCP_WORKLOAD_IDENTITY_POOL_ID/);
+  assert.match(result.stderr, /متغير مفقود: GCP_PROJECT_NUMBER/);
+  assert.match(result.stderr, /متغير مفقود: GCP_WORKLOAD_IDENTITY_POOL_ID/);
   assert.doesNotMatch(result.stderr, /private_key|client_email/);
 });
-test('hosted build rejects emulator and unsafe flags', () => {
-  const result = run({ CHECK_PRODUCTION_ENV: 'true', NEXT_PUBLIC_FIREBASE_EMULATORS: 'false', IMI_ADMIN_HEALTH: 'true', IMI_ACCOUNT_DELETION_ENABLED: 'true' });
+test('hosted build rejects emulator, legacy key and unsafe flags', () => {
+  const result = run({ CHECK_PRODUCTION_ENV: 'true', NEXT_PUBLIC_FIREBASE_EMULATORS: 'false', IMI_ADMIN_HEALTH: 'true', IMI_ACCOUNT_DELETION_ENABLED: 'true', FIREBASE_SERVICE_ACCOUNT_JSON: '{}' });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /NEXT_PUBLIC_FIREBASE_EMULATORS/);
   assert.match(result.stderr, /IMI_ADMIN_HEALTH/);
   assert.match(result.stderr, /IMI_ACCOUNT_DELETION_ENABLED/);
+  assert.match(result.stderr, /FIREBASE_SERVICE_ACCOUNT_JSON/);
 });
-
 test('hosted build accepts Preview OIDC configuration without a service-account key', () => {
   const result = run({
     CHECK_PRODUCTION_ENV: 'true',

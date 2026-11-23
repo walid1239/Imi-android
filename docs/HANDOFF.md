@@ -1,5 +1,22 @@
 # IMI handoff — latest verified evidence, 2026-11-23
 
+## حالة المعاينة — تحديث 2026-11-23 15:40 UTC
+
+- رأس الفرع وقت الفحص: `45e04d464f9aff15d404e2a2f88506b86c51fddf`.
+- Web CI: [Run 45205980954](https://github.com/walid1239/Imi-android/actions/runs/45205980954) — `completed / success` على SHA الرأس.
+- Android CI: [Run 45205980943](https://github.com/walid1239/Imi-android/actions/runs/45205980943) — `completed / success` على SHA الرأس؛ تشغيل التطبيق على Android Emulator كان `skipped`.
+- Preview build check: آخر Run متاح [45204952842](https://github.com/walid1239/Imi-android/actions/runs/45204952842) على SHA أقدم `34a35b1f19b6ce0c4b5ee03d22631316871c1daf`، وليس على رأس الفرع الحالي. حالته `completed / success`.
+- Firebase safety: آخر Run متاح [45056409885](https://github.com/walid1239/Imi-android/actions/runs/45056409885) أقدم من SHA الحالي؛ الحارس `success` والتحقق/النشر `skipped`. لم يظهر Run مطابق للرأس الحالي.
+- مخرجات Preview build check القديم حرفياً: `feature preview exit: 1`, `main preview exit: 1`, `other branch exit: 0`, `production exit: 0`; البناء `✓ Compiled successfully in 10.8s`; `/api/health -> 200`; `/login -> 200`; `/academy -> 200`; `IMI_ADMIN_HEALTH unset`; جسم `/api/v1/health/admin`: `{"error":"Not found."}`; وحالته `/api/v1/health/admin -> 404`.
+- Vercel project `imi-preview` ضمن `walid2` لديه Deployment سابق فاشل للفرع نفسه، SHA `21cfddbe887a46c4658c2f13d17c87e3924edfb1`: [Deployment](https://vercel.com/walid2/imi-preview/HUNAdSugYnEetHNVTPhuWgtPi7sj) — `ERROR`. سجل البناء يؤكد أن Vercel استنسخ المستودع والفرع، لذلك اتصال GitHub استُخدم لهذا النشر؛ لا يوجد Deployment مثبت على SHA الحالي.
+- أول خطأ بناء Vercel: `متغير مفقود: FIREBASE_SERVICE_ACCOUNT_JSON`. ثم `Error: [BUILD_UTILS_SPAWN_1] Command "npm run build" exited with 1`.
+- بيانات Preview التي أمكن قراءتها أظهرت سبعة أسماء متغيرات: ستة `NEXT_PUBLIC_FIREBASE_*` و`FIREBASE_PROJECT_ID`. `FIREBASE_SERVICE_ACCOUNT_JSON` غير موجود. لم تُقرأ أو تُطبع أي قيمة سرية.
+- إعداد Root Directory وخيار تضمين الملفات خارج الجذر لم يظهر في قراءة إعدادات المشروع المتاحة؛ يظلان غير مؤكدين. لم يُنفّذ اختبار دخان على Vercel لأن النشر الحالي فاشل ولا يوجد رابط Preview صالح.
+- لم يتغير Firebase الحقيقي، ولم يحدث نشر Production أو Cloud Functions أو دمج PR.
+
+---
+
+
 This section supersedes older status statements below where they conflict.
 
 ## Latest verified source SHA
@@ -61,12 +78,12 @@ Both jobs completed successfully: Firebase security-rules tests and Android buil
 
 - Existing Vercel project: `imi-preview`, team `walid2`, framework `nextjs`, Node `22.x`.
 - A project settings update request was accepted for Root Directory `web`, source files outside Root Directory enabled, default install/build commands, and ignore command `bash scripts/vercel-ignore.sh`; the API readback does not expose all these fields, so they are not independently confirmed.
-- Team Git deployment context still reports `linkedProjects: []`; the existing Vercel project is not connected to GitHub. No new deployment was created for this SHA.
+- سجل Build للـDeployment الفاشل يثبت حرفياً `Cloning github.com/walid1239/Imi-android (Branch: feature/imi-teacher-admin-preview, Commit: 21cfddb)`؛ لذلك استُخدم اتصال GitHub لهذا النشر. لا يوجد Deployment جديد مثبت على SHA الحالي.
 - Project SSO protection is currently enabled for `all_except_custom_domains`; default Vercel deployment URLs may require team authentication. This has not been changed.
 - Preview environment metadata contains six `NEXT_PUBLIC_FIREBASE_*` values and `FIREBASE_PROJECT_ID`; `FIREBASE_SERVICE_ACCOUNT_JSON` is absent. No secret was decrypted or printed.
 - Current code requires `FIREBASE_SERVICE_ACCOUNT_JSON` in `web/scripts/check-env.mjs` and uses it with Firebase Admin `cert(...)` in `web/src/lib/server/imi-api.ts`. WIF is not implemented in this runtime; Vercel OIDC alone does not replace this requirement.
 - Last Vercel deployment remains the old failed deployment `dpl_HUNAdSugYnEetHNVTPhuWgtPi7sj`, SHA `21cfddbe887a46c4658c2f13d17c87e3924edfb1`, state `ERROR`, URL `https://imi-preview-goovq2nyt-walid2.vercel.app`. First error: `متغير مفقود: FIREBASE_SERVICE_ACCOUNT_JSON`.
-- No live Preview URL exists for SHA `34a35b1f19b6ce0c4b5ee03d22631316871c1daf`; no hosted smoke test was possible. **Not deployed.**
+- لا يوجد Deployment صالح/ناجح مثبت على SHA `45e04d464f9aff15d404e2a2f88506b86c51fddf`؛ النشر السابق للفرع انتهى `ERROR` على SHA `21cfddbe887a46c4658c2f13d17c87e3924edfb1`. لم يُنفّذ فحص دخان مستضاف. **لم تُنشر معاينة صالحة لهذا الرأس.**
 - Owner actions are documented in `docs/OWNER_DEPLOY_MESSAGE.md`: add the service-account JSON as Sensitive Preview-only env, connect the existing Vercel project to GitHub, confirm Root Directory and Include source files outside of Root Directory, set a non-used Production Branch, and decide how Preview SSO protection should be handled for intended testers.
 
 ## Not tested / not performed

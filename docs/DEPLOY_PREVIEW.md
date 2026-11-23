@@ -55,8 +55,11 @@
 
 ### Windows PowerShell
 
-1. ثبّت Google Cloud CLI وسجّل دخولك بحساب Google الذي يملك صلاحية إدارة مستخدمي Firebase Authentication في المشروع.
-2. نفّذ:
+1. ثبّت Google Cloud CLI. من جذر المستودع ثبّت اعتماديات Functions التي يحتاجها السكربت (لا ينشر ذلك أي Function):
+```powershell
+npm --prefix .\\functions ci
+```
+2. سجّل دخولك بحساب Google الذي يملك صلاحية إدارة مستخدمي Firebase Authentication في المشروع، ثم نفّذ:
 ```powershell
 gcloud auth application-default login
 gcloud config set project imi-indroid

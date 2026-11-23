@@ -57,7 +57,7 @@
 
 1. ثبّت Google Cloud CLI. من جذر المستودع ثبّت اعتماديات Functions التي يحتاجها السكربت (لا ينشر ذلك أي Function):
 ```powershell
-npm --prefix .\\functions ci
+npm --prefix .\functions ci
 ```
 2. سجّل دخولك بحساب Google الذي يملك صلاحية إدارة مستخدمي Firebase Authentication في المشروع، ثم نفّذ:
 ```powershell

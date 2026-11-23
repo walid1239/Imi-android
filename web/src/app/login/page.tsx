@@ -2,7 +2,6 @@
 
 import { FormEvent, useState } from 'react';
 import { GoogleAuthProvider, createUserWithEmailAndPassword, sendPasswordResetEmail, signInAnonymously, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
-import { FirebaseError } from 'firebase/app';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { auth, firebaseConfigured } from '@/lib/firebase/client';
@@ -10,8 +9,21 @@ import FirebaseConfigRequired from '@/components/firebase-config-required';
 
 
 function getArabicAuthError(error: unknown, action: 'email' | 'google' | 'guest' | 'reset'): string {
-  const code = error instanceof FirebaseError ? error.code : '';
-  if (code === 'auth/configuration-not-found' || (error instanceof Error && error.message.includes('CONFIGURATION_NOT_FOUND'))) {
+  const code =
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof error.code === 'string'
+      ? error.code
+      : '';
+  const errorMessage =
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string'
+      ? error.message
+      : '';
+  if (code === 'auth/configuration-not-found' || errorMessage.includes('CONFIGURATION_NOT_FOUND')) {
     return 'خدمة تسجيل الدخول في Firebase غير مكتملة الإعداد. راجع لوحة Firebase: Authentication ← Sign-in method، وفعّل طريقة الدخول التي تستخدمها، ثم تحقق من إعداد تطبيق الويب ومفتاح API والنطاقات المسموح بها.';
   }
   if (code === 'auth/operation-not-allowed') {
@@ -20,7 +32,7 @@ function getArabicAuthError(error: unknown, action: 'email' | 'google' | 'guest'
   if (code === 'auth/invalid-api-key' || code === 'auth/app-not-authorized') {
     return 'إعداد تطبيق IMI لا يطابق مشروع Firebase أو أن مفتاح API غير صالح. تحقق من Project settings ← Your apps ومن متغيرات NEXT_PUBLIC_FIREBASE_* دون مشاركة أي مفاتيح خاصة.';
   }
-  if (code === 'auth/unauthorized-domain') {
+  if (code === 'auth/unauthorized-domain' || errorMessage.includes('auth/unauthorized-domain')) {
     return 'عنوان الموقع غير مسموح له باستخدام Firebase Authentication. أضف نطاق الموقع الفعلي إلى Authentication ← Settings ← Authorized domains.';
   }
   if (code === 'auth/network-request-failed') return 'تعذر الاتصال بخدمة Firebase. تحقق من الإنترنت أو إعدادات الشبكة ثم حاول مجدداً.';

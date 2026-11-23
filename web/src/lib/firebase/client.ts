@@ -37,8 +37,17 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 // Emulator endpoints are enabled only in explicit local/CI test mode.
 // This flag is public by design and must never be enabled in production builds.
+const skipAuthEmulatorForDomainTest =
+  process.env.NEXT_PUBLIC_PLAYWRIGHT_E2E === 'true' &&
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).get('e2e-auth-domain-check') === '1';
+
 if (process.env.NEXT_PUBLIC_FIREBASE_EMULATORS === 'true' && typeof window !== 'undefined') {
-  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  // Only the dedicated Playwright auth-domain test bypasses Auth Emulator so the SDK
+  // exercises its real authorized-domain validation against a mocked project-config response.
+  if (!skipAuthEmulatorForDomainTest) {
+    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  }
   connectFirestoreEmulator(db, '127.0.0.1', 8080);
   connectStorageEmulator(storage, '127.0.0.1', 9199);
 }

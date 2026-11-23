@@ -1,4 +1,5 @@
-import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
+import { getApps, initializeApp, type App } from "firebase-admin/app";
+import { ExternalAccountClient } from "google-auth-library";
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
@@ -39,9 +40,9 @@ const limits: Record<Operation, { count: number; windowMs: number }> = {
   publishCurriculum: { count: 5, windowMs: 60_000 },
 };
 
-export function adminApp(): App {
-  const existing = getApps().find(app => app.name === "imi-server-api");
-  if (existing) return existing;
+let currentVercelOidcToken: string | null = null;
+
+export function adminApp(request: Request): App {
   const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   const usingEmulators = process.env.IMI_USE_FIREBASE_EMULATORS === "true"
     && Boolean(process.env.FIREBASE_AUTH_EMULATOR_HOST && process.env.FIRESTORE_EMULATOR_HOST)
@@ -49,29 +50,49 @@ export function adminApp(): App {
   if (!projectId || (!usingEmulators && projectId !== "imi-indroid")) {
     throw new Error("Firebase project configuration is unavailable.");
   }
-  if (process.env.FIREBASE_AUTH_EMULATOR_HOST && process.env.FIRESTORE_EMULATOR_HOST) {
-    return initializeApp({ projectId }, "imi-server-api");
-  }
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!raw) throw new Error("Server credentials are not configured.");
-  const serviceAccount = JSON.parse(raw) as { project_id?: string; client_email?: string; private_key?: string };
-  if (serviceAccount.project_id !== projectId || !serviceAccount.client_email || !serviceAccount.private_key) {
-    throw new Error("Server credentials are invalid.");
-  }
-  return initializeApp({ credential: cert(serviceAccount as Parameters<typeof cert>[0]), projectId }, "imi-server-api");
-}
+  const existing = getApps().find(app => app.name === "imi-server-api");
+  if (usingEmulators) return existing ?? initializeApp({ projectId }, "imi-server-api");
 
-function assertOrigin(request: Request): void {
-  const origin = request.headers.get("origin");
-  if (!origin) return; // Native clients do not send Origin; bearer auth remains mandatory.
-  const url = new URL(request.url);
-  const host = request.headers.get("host");
-  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
-  const protocol = forwardedProto || url.protocol.slice(0, -1);
-  const requestOrigin = host ? `${protocol}://${host}` : url.origin;
-  if (origin !== requestOrigin && origin !== url.origin) {
-    throw new Error("ORIGIN_REJECTED");
+  const oidcToken = request.headers.get("x-vercel-oidc-token") || process.env.VERCEL_OIDC_TOKEN;
+  if (!oidcToken) throw new Error("Vercel OIDC identity token is unavailable.");
+  currentVercelOidcToken = oidcToken;
+  if (existing) return existing;
+
+  const projectNumber = process.env.GCP_PROJECT_NUMBER;
+  const poolId = process.env.GCP_WORKLOAD_IDENTITY_POOL_ID;
+  const providerId = process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID;
+  const serviceAccountEmail = process.env.FIREBASE_SERVICE_ACCOUNT_EMAIL;
+  if (!projectNumber || !poolId || !providerId || !serviceAccountEmail) {
+    throw new Error("Google Workload Identity Federation is not configured.");
   }
+
+  const authClient = ExternalAccountClient.fromJSON({
+    type: "external_account",
+    audience: `//iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`,
+    subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
+    token_url: "https://sts.googleapis.com/v1/token",
+    service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccountEmail}:generateAccessToken`,
+    subject_token_supplier: {
+      getSubjectToken: async () => {
+        if (!currentVercelOidcToken) throw new Error("Vercel OIDC identity token is unavailable.");
+        return currentVercelOidcToken;
+      },
+    },
+  });
+  if (!authClient) throw new Error("Google Workload Identity Federation configuration is invalid.");
+
+  const credential = {
+    getAccessToken: async () => {
+      const result = await authClient.getAccessToken();
+      if (!result.token) throw new Error("Google Workload Identity Federation returned no access token.");
+      const expiryDate = authClient.credentials.expiry_date ?? Date.now() + 55 * 60_000;
+      return {
+        access_token: result.token,
+        expires_in: Math.max(1, Math.floor((expiryDate - Date.now()) / 1000)),
+      };
+    },
+  };
+  return initializeApp({ credential, projectId }, "imi-server-api");
 }
 
 function makeStore(app: App): StorePort {
@@ -168,7 +189,7 @@ export async function handleDeleteAccount(request: Request): Promise<Response> {
       return NextResponse.json({ error: "اكتب DELETE لتأكيد حذف الحساب وبياناته." }, { status: 400 });
     }
 
-    const app = adminApp();
+    const app = adminApp(request);
     const authorization = request.headers.get("authorization") ?? "";
     const match = /^Bearer\s+(.+)$/i.exec(authorization);
     if (!match) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -233,7 +254,7 @@ export async function handleImiPost(request: Request, operation: Operation): Pro
       return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
     }
 
-    const app = adminApp();
+    const app = adminApp(request);
     const uid = await authenticateBearer(request.headers.get("authorization"), {
       verifyIdToken: token => getAuth(app).verifyIdToken(token, true),
     });

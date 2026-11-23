@@ -49,18 +49,17 @@
 
 ## 4. ربط GitHub بمشروع Vercel الحالي
 
-مشروع Vercel `imi-preview` موجود بالفعل، لكنه غير مرتبط حالياً بمستودع GitHub. إعدادات البناء الأساسية جرى ضبطها من جانبنا: Framework Next.js، Root Directory = `web`، Node.js = `22.x`، تفعيل ملفات المصدر خارج مجلد الجذر، وأمر تجاهل البناء `bash scripts/vercel-ignore.sh`. لم يظهر اتصال GitHub في بيانات المشروع بعد.
+مشروع Vercel `imi-preview` موجود بالفعل. سجل بناء Vercel السابق يثبت أنه استنسخ `github.com/walid1239/Imi-android` من الفرع `feature/imi-teacher-admin-preview`؛ لذلك لا تُعد خطوة ربط GitHub مطلوبة من جديد ما دام هذا الاتصال ظاهراً في Settings → Git. إعدادات Root Directory = `web` وخيار Include source files outside of Root Directory لم يمكن تأكيدهما من قراءة API، لذا تحقق منهما يدوياً. Node.js الظاهر في إعداد المشروع هو `22.x`، وأمر تجاهل البناء المسجل في الإعدادات هو `bash scripts/vercel-ignore.sh`.
 
 نفّذ الربط داخل حساب Vercel:
 
-1. افتح **Vercel → Team walid2 → Project imi-preview → Settings → Git**.
-2. اختر **Connect Git Repository** (أو Import Git Repository إذا كانت الواجهة تعرض ذلك) واربط المستودع `walid1239/Imi-android` بالمشروع الحالي `imi-preview`. لا تنشئ مشروعاً آخر إذا أمكن ربط المشروع الحالي.
-3. تأكد من أن **Root Directory = `web`**.
-4. تأكد من **Framework Preset = Next.js** و**Node.js Version = 22.x**.
-5. اترك **Install Command** و**Build Command** افتراضيين؛ سيشغّل Vercel تثبيت الحزم و`prebuild` ثم `next build`.
-6. تأكد من تفعيل **Include source files outside of the Root Directory**؛ التطبيق يستورد وحدات مشتركة من `functions/src` خارج `web`.
-7. اجعل Production Branch اسماً غير مستخدم مثل `production-disabled`. السبب: نريد أن يُعامل `main` كـ Preview لا Production. لا تختَر `main` كفرع Production.
-8. لا تضغط Deploy إلى Production ولا تغيّر إعدادات النشر إلى Production.
+1. افتح **Vercel → Team walid2 → Project imi-preview → Settings → Git** وتحقق أن المستودع المرتبط هو `walid1239/Imi-android` وأن فرع المعاينة هو `feature/imi-teacher-admin-preview`. سجل البناء السابق يثبت أن Git clone يعمل؛ لا تفصل الاتصال ولا تنشئ مشروعاً جديداً.
+2. تأكد من أن **Root Directory = `web`**.
+3. تأكد من **Framework Preset = Next.js** و**Node.js Version = 22.x**.
+4. اترك **Install Command** و**Build Command** افتراضيين؛ سيشغّل Vercel تثبيت الحزم و`prebuild` ثم `next build`.
+5. تأكد من تفعيل **Include source files outside of the Root Directory**؛ التطبيق يستورد وحدات مشتركة من `functions/src` خارج `web`.
+6. اجعل Production Branch اسماً غير مستخدم مثل `production-disabled`. السبب: نريد أن يُعامل `main` كـ Preview لا Production. لا تختَر `main` كفرع Production.
+7. لا تضغط Deploy إلى Production ولا تغيّر إعدادات النشر إلى Production.
 
 بعد الربط، يطلق Vercel تلقائياً Preview عند كل push إلى `feature/imi-teacher-admin-preview` أو `main`. سكربت `web/scripts/vercel-ignore.sh` يسمح بهذين الفرعين في Preview فقط، ويتخطى الفروع الأخرى وكل بيئة Production.
 

@@ -1,8 +1,8 @@
 # رسالة إعداد المعاينة — المالك (خطوة لمرة واحدة)
 
-**الهدف:** ربط مستودع IMI بمشروع Vercel الحالي حتى ينشئ كل `push` إلى الفرع `feature/imi-teacher-admin-preview` معاينة Preview تلقائياً. هذا ليس نشر Production.
+**الحالة الحالية:** نُشرت معاينة IMI بنجاح بالفعل على Vercel Preview للفرع `feature/imi-teacher-admin-preview`، والرابط هو `https://imi-preview-dwanvq27v-walid2.vercel.app`. هذا ليس نشر Production. هذا الدليل يوضح إعداد WIF المتبقي، واختبار المعاينة، وربط GitHub اختيارياً للنشر التلقائي.
 
-لا ترسل أي مفتاح أو token أو ملف اعتماد إلى الدردشة أو GitHub أو Issues. أدخل المفتاح مباشرة في Vercel فقط. لا تفعّل Blaze أو خطة مدفوعة، ولا تنشر Cloud Functions أو Production.
+لا تنشئ مفتاح JSON لحساب الخدمة، ولا ترسل أي token أو ملف اعتماد إلى الدردشة أو GitHub أو Issues. لا تفعّل Blaze أو خطة مدفوعة، ولا تنشر Cloud Functions أو Production.
 
 ## 1. إعداد Firebase Authentication
 
@@ -29,39 +29,59 @@
 
 إذا كان أي متغير ناقصاً، انسخ القيمة من تطبيق Web في Firebase إلى Vercel مباشرة، وعيّن الهدف **Preview فقط**.
 
-## 3. إضافة اعتماد Firebase Admin للخادم — Vercel Preview فقط
+## 3. إكمال Workload Identity Federation — مرة واحدة
 
-الكود الفعلي في `web/src/lib/server/imi-api.ts` يستعمل `FIREBASE_SERVICE_ACCOUNT_JSON` مع `firebase-admin` و`cert(...)`. متغيرات `google-services.json` أو بريد حساب الخدمة وحده لا يكفيان. Workload Identity Federation غير مطبق في كود الخادم الحالي؛ تفعيل OIDC في Vercel وحده لا يستبدل مفتاح Firebase Admin.
+الكود في `web/src/lib/server/imi-api.ts` يستخدم Vercel OIDC لتبادل هوية قصيرة العمر مع Google Cloud. لا يحتاج إلى `FIREBASE_SERVICE_ACCOUNT_JSON` ولا إلى مفتاح JSON. تم بالفعل تفعيل إصدار OIDC في مشروع Vercel بنمط Team، وإضافة متغيرات WIF الأربعة إلى Preview فقط.
 
-1. افتح Firebase Console → **Project settings → Service accounts** للمشروع `imi-indroid`.
-2. أنشئ مفتاح JSON خاصاً لحساب الخدمة المعتمد لهذا المشروع، ونزّله إلى مجلد محلي آمن على جهازك.
-3. لا ترفع الملف إلى GitHub ولا تضعه في مجلد المشروع ولا ترسله بالبريد أو الدردشة.
-4. محلياً حوّل JSON إلى سطر واحد (minified) دون مشاركته. لا تلصق المفتاح في أي مكان غير حقل Vercel.
-5. في Vercel → **imi-preview → Settings → Environment Variables** أضف:
-   - الاسم: `FIREBASE_SERVICE_ACCOUNT_JSON`
-   - القيمة: JSON الكامل في سطر واحد
-   - البيئة: **Preview فقط**
-   - النوع/الحماية: **Sensitive** إن ظهر الخيار.
-6. احفظ المتغير. تحقق من وجود الاسم والهدف Preview فقط، دون فتح القيمة أو طباعتها.
-7. بعد التأكد من الحفظ، احذف ملف JSON المحلي من جهازك. لا تضف هذا المتغير إلى Production أو Development.
+### إعداد Google Cloud المطلوب
 
-**مهم:** لا تشارك المفتاح معي ولا مع أي شخص. لا تضعه في GitHub Secrets أو CI logs. إعداد هذا المتغير هو إجراء يدوي داخل حساب المالك.
+في مشروع Google Cloud رقم `135769436246`:
 
-## 4. ربط GitHub بمشروع Vercel الحالي
+1. افتح **IAM & Admin → Workload Identity Federation** وأنشئ Pool:
+   - Pool name: `IMI Vercel Preview`
+   - Pool ID: `imi-vercel-preview`
+2. أضف Provider من النوع **OpenID Connect (OIDC)**:
+   - Provider name: `Vercel Preview`
+   - Provider ID: `vercel-preview`
+   - Issuer URL: `https://oidc.vercel.com/walid2`
+   - Allowed audience: `https://vercel.com/walid2`
+   - Attribute mapping: `google.subject = assertion.sub`
+3. من تفاصيل Pool انسخ IAM principal، ثم قيّد السماح بالـ subject التالي فقط:
+   `owner:walid2:project:imi-preview:environment:preview`
+4. افتح **IAM & Admin → Service Accounts** واختر حساب الخدمة الموجود:
+   `firebase-adminsdk-fbsvc@imi-indroid.iam.gserviceaccount.com`
+5. أضف الـ principal أعلاه إلى صلاحيات حساب الخدمة بدور **Workload Identity User** (`roles/iam.workloadIdentityUser`). لا تمنح هذا الدور على المشروع كله.
+6. لا تغيّر أدوار Firebase الحالية لحساب الخدمة؛ هذا الربط يسمح لهوية Vercel Preview بانتحال حساب الخدمة فقط.
 
-مشروع Vercel `imi-preview` موجود بالفعل. سجل بناء Vercel السابق يثبت أنه استنسخ `github.com/walid1239/Imi-android` من الفرع `feature/imi-teacher-admin-preview`؛ لذلك لا تُعد خطوة ربط GitHub مطلوبة من جديد ما دام هذا الاتصال ظاهراً في Settings → Git. إعدادات Root Directory = `web` وخيار Include source files outside of Root Directory لم يمكن تأكيدهما من قراءة API، لذا تحقق منهما يدوياً. Node.js الظاهر في إعداد المشروع هو `22.x`، وأمر تجاهل البناء المسجل في الإعدادات هو `bash scripts/vercel-ignore.sh`.
+### متغيرات Vercel الموجودة بالفعل
 
-نفّذ الربط داخل حساب Vercel:
+في **Team walid2 → Project imi-preview → Settings → Environment Variables**، يجب أن تكون القيم التالية على **Preview فقط**:
 
-1. افتح **Vercel → Team walid2 → Project imi-preview → Settings → Git** وتحقق أن المستودع المرتبط هو `walid1239/Imi-android` وأن فرع المعاينة هو `feature/imi-teacher-admin-preview`. سجل البناء السابق يثبت أن Git clone يعمل؛ لا تفصل الاتصال ولا تنشئ مشروعاً جديداً.
-2. تأكد من أن **Root Directory = `web`**.
-3. تأكد من **Framework Preset = Next.js** و**Node.js Version = 22.x**.
-4. اترك **Install Command** و**Build Command** افتراضيين؛ سيشغّل Vercel تثبيت الحزم و`prebuild` ثم `next build`.
-5. تأكد من تفعيل **Include source files outside of the Root Directory**؛ التطبيق يستورد وحدات مشتركة من `functions/src` خارج `web`.
-6. اجعل Production Branch اسماً غير مستخدم مثل `production-disabled`. السبب: نريد أن يُعامل `main` كـ Preview لا Production. لا تختَر `main` كفرع Production.
-7. لا تضغط Deploy إلى Production ولا تغيّر إعدادات النشر إلى Production.
+- `GCP_PROJECT_NUMBER=135769436246`
+- `GCP_WORKLOAD_IDENTITY_POOL_ID=imi-vercel-preview`
+- `GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID=vercel-preview`
+- `FIREBASE_SERVICE_ACCOUNT_EMAIL=firebase-adminsdk-fbsvc@imi-indroid.iam.gserviceaccount.com`
+- `FIREBASE_PROJECT_ID=imi-indroid`
 
-بعد الربط، يطلق Vercel تلقائياً Preview عند كل push إلى `feature/imi-teacher-admin-preview` أو `main`. سكربت `web/scripts/vercel-ignore.sh` يسمح بهذين الفرعين في Preview فقط، ويتخطى الفروع الأخرى وكل بيئة Production.
+أُضيفت هذه المتغيرات بالفعل عبر إعدادات Vercel. لا تضف `FIREBASE_SERVICE_ACCOUNT_JSON` ولا تنشئ مفتاحاً خاصاً.
+
+**مهم:** يمكن بناء ونشر صفحة Preview قبل اكتمال ربط Google Cloud، لكن عمليات الخادم التي تستخدم Firebase Admin لن تُعدّ مختبرة حتى ينشئ المالك Pool/Provider ويضيف دور Workload Identity User ثم يختبر طلباً حقيقياً. لا نعتبر المصادقة مكتملة قبل نجاح هذا الاختبار.
+
+## 4. إعداد GitHub وVercel للنشر التلقائي — اختياري
+
+المعاينة الحالية منشورة بالفعل من مستودع GitHub على الفرع `feature/imi-teacher-admin-preview`، ونجح بناء Vercel. لكن بيانات مشروع Vercel التي قرأناها لا تعرض مستودع Git مرتبطاً (`repo=null))؛ لذلك لا أفترض أن كل push سينشئ معاينة تلقائياً.
+
+إذا أردت النشر التلقائي لكل push:
+
+1. افتح **Vercel → Team walid2 → Project imi-preview → Settings → Git**.
+2. اربط المستودع `walid1239/Imi-android` إذا لم يكن مرتبطاً.
+3. اضبط **Root Directory = web** و**Framework = Next.js** و**Node.js = 22.x**.
+4. فعّل **Include source files outside of the Root Directory** لأن التطبيق يستورد وحدات مشتركة من `functions/src`.
+5. اترك Install Command وBuild Command افتراضيين، ولا تضبط Production Branch على `main`.
+6. تأكد من أن النشر المطلوب للفرع `feature/imi-teacher-admin-preview` هو **Preview** فقط. سكربت `scripts/vercel-ignore.sh` يرفض Production ويسمح بفرعي المعاينة المتفق عليهما.
+7. لا تضغط Deploy إلى Production ولا تدمج PR.
+
+إذا لم ترد النشر التلقائي الآن، لا تغيّر إعداد Git؛ المعاينة الحالية READY ويمكن فتحها بعد تسجيل الدخول إلى Vercel، لأن حماية SSO مفعّلة على Preview.
 
 ## 5. إضافة نطاق Preview إلى Firebase Authorized domains
 
@@ -72,7 +92,7 @@
 3. أضف hostname الفعلي للمعاينة.
 4. لا تضف نطاقاً غير تابع لمشروعك أو لا تثق به.
 
-لا يمكن إكمال هذه الخطوة قبل أن يظهر نطاق Preview حقيقي.
+رابط Preview الحالي هو `imi-preview-dwanvq27v-walid2.vercel.app`. أضف هذا hostname إلى Firebase Authorized domains بعد التأكد منه في حساب المالك.
 
 ## 6. منح صلاحية المشرف من حاسوب المالك (اختياري، عند الحاجة)
 
@@ -123,7 +143,7 @@ node .\functions\scripts\grant-admin.cjs
 
 بعد أول نشر Preview:
 
-- [ ] رابط Vercel يشير إلى Preview وليس Production.
+- [ ] رابط Vercel يشير إلى Preview وليس Production: `https://imi-preview-dwanvq27v-walid2.vercel.app`.
 - [ ] `/api/health` يعيد HTTP 200.
 - [ ] `/login` يفتح ويعرض الواجهة العربية.
 - [ ] `/academy` يفتح ويعرض مستويات المنهج بعد استيراده ونشره.
@@ -151,11 +171,11 @@ npx firebase-tools@15.37.0 deploy --only firestore:rules,firestore:indexes
 
 | الرسالة | السبب المحتمل | الإجراء |
 |---|---|---|
-| `متغير مفقود: FIREBASE_SERVICE_ACCOUNT_JSON` | سر Admin غير موجود في Preview | أضفه كـ Sensitive في Preview فقط، دون طباعته. |
-| `FIREBASE_SERVICE_ACCOUNT_JSON ليس JSON صالحاً` | JSON غير صالح أو منسق على عدة أسطر | أعد نسخه محلياً كسطر واحد وتحقق من سلامته دون عرضه. |
+| `متغير مفقود: GCP_PROJECT_NUMBER` أو أحد متغيرات WIF | إعداد WIF ناقص | راجع متغيرات Preview في القسم 3. |
+| `Vercel OIDC identity token is unavailable` | OIDC غير مفعّل أو لم يصل header | تحقق من تفعيل Team OIDC وأن الطلب من Preview. |
 | `auth/unauthorized-domain` | نطاق Vercel غير مسموح | أضف hostname الفعلي إلى Authorized domains. |
 | `CONFIGURATION_NOT_FOUND` أو `auth/configuration-not-found` | موفر الدخول غير مفعّل أو إعداد تطبيق الويب خاطئ | فعّل الموفر وتحقق من Project ID وAuth Domain ومفتاح API. |
-| `Server credentials are not configured` | اعتماد Admin غير متاح في Runtime | تحقق من اسم المتغير وبيئة Preview ثم أعد النشر. |
+| `Google Workload Identity Federation is not configured` | Pool/Provider أو متغيرات Preview ناقصة | راجع إعداد Google Cloud وربط Workload Identity User في القسم 3. |
 | `403` في لوحة المشرف | claim غير موجود أو ID token قديم | تحقق من حساب المشرف وجدّد ID token/سجّل الدخول مجدداً. |
 | `404` لمسار Admin health | الفحص التشخيصي محمي أو غير مفعّل | متوقع افتراضياً؛ لا تفعّل `IMI_ADMIN_HEALTH` في الاستضافة. |
 | فشل استيراد `functions/src` | ملفات المصدر خارج Root Directory غير مضمنة | فعّل Include source files outside of the Root Directory. |

@@ -42,7 +42,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: android-${{ github.event.pull_request.head.ref || github.ref_name }}
@@ -132,6 +132,23 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
+
+      # Only a deliberate manual run publishes/replaces the public preview release.
+      # PR checks never publish binaries and Production remains untouched.
+      - name: Publish APK to the IMI preview release
+        if: github.event_name == 'workflow_dispatch' && steps.android_build.outcome == 'success' && steps.firebase_config.outputs.configured == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: imi-preview
+          name: IMI Preview APK
+          prerelease: true
+          make_latest: false
+          files: app/build/outputs/apk/debug/app-debug.apk
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          body: |
+            Automated preview build from commit ${{ github.sha }}.
+            This is a preview APK, not a production release.
 
       # MainActivity creates an anonymous Firebase Auth user on launch.
       # Never launch a Firebase-configured APK against the production project in CI.

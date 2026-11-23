@@ -25,7 +25,10 @@ jobs:
       NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "1"
       NEXT_PUBLIC_FIREBASE_APP_ID: ci-placeholder
       FIREBASE_PROJECT_ID: imi-indroid
-      FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"imi-indroid","client_email":"ci@example.invalid","private_key":"placeholder"}'
+      GCP_PROJECT_NUMBER: "135769436246"
+      GCP_WORKLOAD_IDENTITY_POOL_ID: imi-vercel-preview
+      GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID: vercel-preview
+      FIREBASE_SERVICE_ACCOUNT_EMAIL: firebase-adminsdk-fbsvc@imi-indroid.iam.gserviceaccount.com
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

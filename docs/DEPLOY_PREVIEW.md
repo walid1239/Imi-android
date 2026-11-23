@@ -18,22 +18,54 @@
 - `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
-وأضف `FIREBASE_PROJECT_ID=imi-indroid`.
+وأضف `FIREBASE_PROJECT_ID=imi-indroid`. إعدادات OIDC الإضافية موضحة في القسم التالي.
 
 هذه إعدادات عميل وليست مفتاح Admin. لا تنسخ أي قيمة إلى GitHub أو سجل عام أو هذه المحادثة.
 
-## 3. اعتماد Firebase Admin للخادم
+## 3. اعتماد Firebase Admin للخادم عبر Workload Identity Federation
 
-الكود الحالي في `web/src/lib/server/imi-api.ts` يستخدم `FIREBASE_SERVICE_ACCOUNT_JSON` ويحوّله إلى `cert(...)` من Firebase Admin SDK. لذلك لا يكفي `google-services.json` ولا بريد حساب الخدمة وحده.
+يعتمد الخادم على Vercel OIDC لتبادل هوية قصيرة العمر مع Google Cloud؛ لا يُستخدم مفتاح JSON ولا يُخزّن أي مفتاح خاص لحساب الخدمة.
 
-1. افتح Firebase Console → **Project settings → Service accounts** للمشروع `imi-indroid).
-2. أنشئ مفتاحاً خاصاً لحساب الخدمة المخصص لـ Firebase Admin، ونزّل JSON إلى جهازك المحلي الآمن.
-3. لا تفتح الملف في محرر سحابي ولا ترفعه إلى GitHub ولا ترسله في الدردشة.
-4. حوّل محتوى JSON إلى سطر واحد (minified) محلياً، ثم ألصقه في Vercel كمتغير **Sensitive** باسم `FIREBASE_SERVICE_ACCOUNT_JSON)، ضمن **Preview فقط**.
-5. تحقق من وجود المتغير دون عرض قيمته في السجلات، ثم احذف ملف JSON المحلي بأمان. لا تضفه إلى Environment Production أو Development.
-6. أضف `FIREBASE_PROJECT_ID=imi-indroid` إلى Preview أيضاً.
+### إعداد Vercel OIDC
 
-تنبيه: مفاتيح حساب الخدمة طويلة العمر وحساسة. الأفضل أمنياً استخدام Workload Identity Federation عند توافر إعداد GCP/Vercel موثق ومختبر. هذا الفرع حالياً لا يطبق WIF؛ لا تحذف متغير الخدمة قبل تغيير موثق ومختبر في كود الخادم.
+1. افتح مشروع Vercel `imi-preview` ضمن الفريق `walid2`.
+2. افتح **Settings → Security → Secure backend access with OIDC federation**، وفعّل OIDC واختر **Team issuer**.
+3. يجب أن يكون issuer هو `https://oidc.vercel.com/walid2`، وأن يكون جمهور الرمز `https://vercel.com/walid2`.
+4. لا تضف إعدادات Production أو Development؛ صلاحية Google ستُمنح لبيئة Preview فقط.
+
+### إعداد Google Cloud مرة واحدة
+
+في مشروع Google Cloud رقم `135769436246`:
+
+1. افتح **IAM & Admin → Workload Identity Federation** وأنشئ Pool:
+   - Pool name: `IMI Vercel Preview`
+   - Pool ID: `imi-vercel-preview`
+2. أضف Provider من النوع **OpenID Connect (OIDC)**:
+   - Provider name: `Vercel Preview`
+   - Provider ID: `vercel-preview`
+   - Issuer URL: `https://oidc.vercel.com/walid2`
+   - Allowed audience: `https://vercel.com/walid2`
+   - Attribute mapping: `google.subject = assertion.sub`
+3. افتح تفاصيل Pool وانسخ IAM principal الخاص بالـ subject، ثم استخدم subject التالي حرفياً عند منح الوصول:
+   `owner:walid2:project:imi-preview:environment:preview`
+4. افتح **IAM & Admin → Service Accounts** واختر حساب Firebase Admin الموجود:
+   `firebase-adminsdk-fbsvc@imi-indroid.iam.gserviceaccount.com`
+5. في صلاحيات حساب الخدمة، أضف principal أعلاه بدور **Workload Identity User** (`roles/iam.workloadIdentityUser`). لا تمنح صلاحية للمشروع كله ولا تستخدم مفتاح JSON.
+6. لا تغيّر أدوار حساب الخدمة الحالية في مشروع Firebase؛ الـ federated principal يكتسب فقط حق انتحال حساب الخدمة، بينما تبقى صلاحيات Firebase على حساب الخدمة نفسه.
+
+### متغيرات Vercel
+
+أُضيفت القيم التالية إلى **Preview فقط** في مشروع `imi-preview`:
+
+- `GCP_PROJECT_NUMBER=135769436246`
+- `GCP_WORKLOAD_IDENTITY_POOL_ID=imi-vercel-preview`
+- `GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID=vercel-preview`
+- `FIREBASE_SERVICE_ACCOUNT_EMAIL=firebase-adminsdk-fbsvc@imi-indroid.iam.gserviceaccount.com`
+
+ويظل `FIREBASE_PROJECT_ID=imi-indroid` موجوداً في Preview. لا تضف `FIREBASE_SERVICE_ACCOUNT_JSON`؛ يتحقق فحص البناء من غيابه ويرفضه إذا أُضيف.
+
+بعد إعداد Pool وProvider وربط دور Workload Identity User، أعد نشر Preview. فشل استدعاء Firebase Admin بعد ذلك يعني عادةً أن issuer أو audience أو subject أو صلاحية انتحال حساب الخدمة لا تطابق الإعداد أعلاه.
+
 
 ## 4. ربط GitHub بمشروع Vercel — Preview فقط
 
@@ -121,11 +153,11 @@ npx firebase-tools@15.37.0 deploy --only firestore:rules,firestore:indexes
 
 | الخطأ الظاهر | السبب المحتمل | الإجراء |
 |---|---|---|
-| `متغير مفقود: FIREBASE_SERVICE_ACCOUNT_JSON` | السر غير موجود في Preview | أضفه كـ Sensitive في Preview فقط، ولا تطبعه في logs. |
-| `FIREBASE_SERVICE_ACCOUNT_JSON ليس JSON صالحاً` | JSON منسّق على عدة أسطر أو ناقص | أعد نسخه كسطر واحد من الملف المحلي وتحقق من صلاحيته دون طباعته. |
+| `متغير مفقود: GCP_PROJECT_NUMBER` أو أحد متغيرات WIF | إعدادات Workload Identity غير مكتملة في Preview | أضف متغيرات القسم 3 إلى Preview فقط. |
+| `Vercel OIDC identity token is unavailable` | OIDC غير مفعّل أو لا يصل header إلى Function | فعّل Team OIDC في إعدادات المشروع وتحقق من أن النشر Preview. |
 | `auth/unauthorized-domain` | نطاق Vercel غير مسموح | أضف hostname الفعلي إلى Authorized domains. |
 | `CONFIGURATION_NOT_FOUND` أو `auth/configuration-not-found` | مزود الدخول غير مفعّل أو إعداد مشروع الويب غير صحيح | فعّل المزود المستخدم وراجع Project ID وAuth Domain ومفتاح API. |
-| `Server credentials are not configured` | اعتماد Admin لم يصل إلى Runtime | راجع اسم متغير Preview ونطاق البيئة ثم أعد النشر. |
+| `Google Workload Identity Federation is not configured` | إعداد Pool/Provider أو متغيرات Preview ناقصة | راجع القيم في القسم 3. |
 | `403` في لوحة المشرف | المستخدم لا يحمل claim admin أو ID token قديم | أعد التحقق من claim وجدّد ID token/أعد تسجيل الدخول. |
 | `404` لمسار Admin health | المسار التشخيصي محمي/غير مفعّل | هذا متوقع افتراضياً؛ لا تفعّل `IMI_ADMIN_HEALTH` في الاستضافة. |
 | فشل استيراد وحدات `functions/src` | لم يُفعّل Include source files outside Root Directory | فعّل الخيار في إعدادات Root Directory ثم أعد Preview. |
@@ -135,7 +167,7 @@ npx firebase-tools@15.37.0 deploy --only firestore:rules,firestore:indexes
 ## 11. الممنوعات وحدود الاختبار
 
 - لا Production، لا دمج PR، لا Blaze، لا دفع، ولا Cloud Functions.
-- لا تضع أسراراً في GitHub أو سجلات CI أو الدردشة.
+- لا تنشئ أو ترفع أو تخزن مفتاح JSON لحساب الخدمة. لا تضع أسراراً في GitHub أو سجلات CI أو الدردشة.
 - لا تنشر Firestore/Storage rules إلى المشروع الحقيقي إلا وفق بند الموافقة أعلاه.
 - CI يستخدم Firebase Emulators منفصلة؛ نجاحه لا يثبت اتصالاً أو مصادقة أو صلاحيات على Firebase الحقيقي.
 - لا تعتبر Vercel Preview إطلاقاً تجارياً معتمداً؛ راجع شروط الخطة وحدودها قبل أي استخدام تجاري.

@@ -3,6 +3,9 @@ on:
   push:
     branches: [feature/imi-teacher-admin-preview, feature/imi-web-foundation]
     paths: ['web/**', 'functions/src/**', 'functions/scripts/**', 'docs/HANDOFF.md', '.github/workflows/web-ci.yml', '.github/workflows/android-build.yml', '.github/workflows/preview-build-check.yml']
+  pull_request:
+    branches: [ main, master ]
+    paths: ['web/**', 'functions/src/**', 'functions/scripts/**', 'docs/HANDOFF.md', '.github/workflows/web-ci.yml', '.github/workflows/android-build.yml', '.github/workflows/preview-build-check.yml']
   workflow_dispatch:
 permissions:
   contents: read

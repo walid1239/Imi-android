@@ -2,7 +2,7 @@ name: Preview build check
 on:
   push:
     branches: [feature/imi-teacher-admin-preview, feature/imi-web-foundation]
-    paths: ['web/**', 'functions/src/**', '.github/workflows/preview-build-check.yml']
+    paths: ['web/**', 'functions/src/**', 'functions/scripts/**', '.github/workflows/preview-build-check.yml']
   workflow_dispatch:
 permissions:
   contents: read

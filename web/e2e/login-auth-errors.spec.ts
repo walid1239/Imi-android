@@ -1,10 +1,10 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const loginWithMockedAuthError = async (
-  page: Parameters<typeof test>[0] extends never ? never : any,
+  page: Page,
   firebaseMessage: string,
 ) => {
-  await page.route('**/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword**', async (route: any) => {
+  await page.route('**/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword**', async route => {
     await route.fulfill({
       status: 400,
       contentType: 'application/json',

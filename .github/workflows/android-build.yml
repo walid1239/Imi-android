@@ -23,6 +23,7 @@ on:
       - 'scripts/test-teacher-emulator.cjs'
       - 'web/src/components/phone-otp-form.tsx'
       - 'web/src/app/login/page.tsx'
+      - 'docs/HANDOFF.md'
       - 'web/src/components/profile-panel.tsx'
   pull_request:
     branches: [ main, master, 'feature/**' ]

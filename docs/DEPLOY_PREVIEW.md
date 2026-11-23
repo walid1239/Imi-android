@@ -1,108 +1,138 @@
 # دليل إعداد معاينة IMI على Vercel
 
-هذا الدليل للمالك فقط. يجهّز **معاينة Preview شخصية** ولا ينفّذ أي نشر أو تغيير في Firebase تلقائياً. لا تستخدم Vercel Hobby لإطلاق تجاري؛ راجع شروط الخطة قبل الاستخدام.
+هذا الدليل يجهّز **Preview فقط** على Firebase Spark. لا ينفّذ نشر Production أو يدمج PR أو ينشر قواعد Firebase أو Cloud Functions. لا تفعّل Blaze ولا تضف بطاقة دفع. افحص شروط خطة Vercel الحالية قبل استخدامها؛ هذا المسار ليس اعتماداً لإطلاق تجاري.
 
-## 1. إعداد موفّرات تسجيل الدخول في Firebase
+## 1. تفعيل طرق تسجيل الدخول في Firebase
 
-من Firebase Console للمشروع `imi-indroid`:
+في Firebase Console للمشروع `imi-indroid`:
 1. افتح **Authentication → Sign-in method**.
 2. فعّل **Anonymous** و**Email/Password** و**Google**.
-3. لا تفعّل OTP أو تسجيل WhatsApp؛ هذا المسار غير منفّذ.
+3. لا تفعّل OTP أو WhatsApp؛ مسار OTP غير منفّذ في هذا الفرع.
 
-## 2. إعداد تطبيق الويب العام
+## 2. نسخ إعدادات تطبيق الويب
 
-من **Project settings → Your apps** اختر تطبيق الويب وانسخ القيم إلى متغيرات البيئة العامة التالية في الاستضافة:
+من **Project settings → Your apps** اختر تطبيق الويب وانسخ قيمه إلى متغيرات **Preview** في Vercel:
 - `NEXT_PUBLIC_FIREBASE_API_KEY`
 - `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
-- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
+- `NEXT_PUBLIC_FIREBASE_PROJECT_ID` — يجب أن تساوي `imi-indroid`.
 - `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
+وأضف `FIREBASE_PROJECT_ID=imi-indroid`.
 
-يجب أن تكون `NEXT_PUBLIC_FIREBASE_PROJECT_ID=imi-indroid`. هذه إعدادات عميل وليست مفتاح خدمة Admin، لكن لا تنشرها في محادثات أو سجلات عامة.
+هذه إعدادات عميل وليست مفتاح Admin. لا تنسخ أي قيمة إلى GitHub أو سجل عام أو هذه المحادثة.
 
-## 3. إعداد اعتماد الخادم
+## 3. اعتماد Firebase Admin للخادم
 
-من **Project settings → Service accounts → Generate new private key** أنشئ مفتاح خدمة للمشروع الصحيح. احفظ JSON محلياً بأمان، ثم ضع محتواه كاملاً في سطر واحد (minified) في متغير الاستضافة `FIREBASE_SERVICE_ACCOUNT_JSON` ضمن بيئة **Preview** فقط. أضف أيضاً `FIREBASE_PROJECT_ID=imi-indroid`.
+الكود الحالي في `web/src/lib/server/imi-api.ts` يستخدم `FIREBASE_SERVICE_ACCOUNT_JSON` ويحوّله إلى `cert(...)` من Firebase Admin SDK. لذلك لا يكفي `google-services.json` ولا بريد حساب الخدمة وحده.
 
-- لا تضع ملف JSON في المستودع أو ملفات المشروع.
-- لا ترفعه إلى GitHub أو GitHub Actions Secrets؛ لا حاجة لذلك في هذا المسار.
-- لا تلصقه في الدردشة أو Issues أو السجلات.
-- احذف النسخة المحلية بعد التأكد من حفظ السر في إعدادات الاستضافة، أو خزّنه في مدير أسرار محلي آمن.
-- لا تشارك المفتاح مع أي شخص. امتيازات Admin SDK واسعة؛ دوّر المفتاح فور الاشتباه بتسريبه.
+1. افتح Firebase Console → **Project settings → Service accounts** للمشروع `imi-indroid).
+2. أنشئ مفتاحاً خاصاً لحساب الخدمة المخصص لـ Firebase Admin، ونزّل JSON إلى جهازك المحلي الآمن.
+3. لا تفتح الملف في محرر سحابي ولا ترفعه إلى GitHub ولا ترسله في الدردشة.
+4. حوّل محتوى JSON إلى سطر واحد (minified) محلياً، ثم ألصقه في Vercel كمتغير **Sensitive** باسم `FIREBASE_SERVICE_ACCOUNT_JSON)، ضمن **Preview فقط**.
+5. تحقق من وجود المتغير دون عرض قيمته في السجلات، ثم احذف ملف JSON المحلي بأمان. لا تضفه إلى Environment Production أو Development.
+6. أضف `FIREBASE_PROJECT_ID=imi-indroid` إلى Preview أيضاً.
 
-## 4. إنشاء معاينة Vercel
+تنبيه: مفاتيح حساب الخدمة طويلة العمر وحساسة. الأفضل أمنياً استخدام Workload Identity Federation عند توافر إعداد GCP/Vercel موثق ومختبر. هذا الفرع حالياً لا يطبق WIF؛ لا تحذف متغير الخدمة قبل تغيير موثق ومختبر في كود الخادم.
 
-استخدم خطة **Hobby للمعاينة الشخصية غير التجارية فقط**:
-1. Add New Project واختر مستودع `walid1239/Imi-android`.
-2. Root Directory: `web`.
-3. Framework Preset: **Next.js**.
-4. لمعاينة التغييرات الموجودة في PR #4 اختر الفرع `feature/imi-teacher-admin-preview` بعد موافقة المالك على إنشاء Preview. لا تستخدم `feature/imi-web-foundation` لهذه التغييرات إلا بعد دمجها هناك بموافقة منفصلة؛ لا تدمج PR #4 تلقائياً.
-5. تحقق من إعداد **Include source files outside of the Root Directory** (أو ما يعادله في واجهة Vercel) حتى يستطيع البناء تتبّع ملفات `functions/src` المستوردة من خارج `web`.
-6. أضف المتغيرات المذكورة في الخطوتين 2 و3 إلى **Preview Environment** فقط. لا تضفها إلى Production.
-7. لا تفعّل أي متغير من القائمة المحظورة في الخطوة 10.
+## 4. ربط GitHub بمشروع Vercel — Preview فقط
 
-فحص `prebuild` يوقف البناء إذا غابت متغيرات Firebase المطلوبة أو وُجدت أعلام Emulator/التجارب المحظورة. لا يطبع أي قيمة سرية.
+1. في Vercel اختر **Add New → Project** ثم استورد `walid1239/Imi-android`.
+2. اضبط **Root Directory = web** و**Framework Preset = Next.js**.
+3. اضبط Node.js على **22.x**. اترك Install Command وBuild Command على القيم الافتراضية لـ Next.js؛ `web/package.json` يحتوي `prebuild` ثم `next build`.
+4. فعّل خيار **Include source files outside of the Root Directory** في إعداد Root Directory؛ لأن `web/src/lib/server/imi-api.ts` يستورد وحدات من `functions/src` خارج مجلد `web`.
+5. اجعل جميع المتغيرات أعلاه في **Preview Environment فقط**.
+6. في Git settings اضبط Production Branch على اسم فرع غير مستخدم، مثلاً `production-disabled`، حتى لا يتحول `main` إلى نشر Production. سكربت `scripts/vercel-ignore.sh` يتخطى أي build إذا كانت `VERCEL_ENV=production`، ويسمح في Preview بفرعي `feature/imi-teacher-admin-preview` و`main` فقط. اضبط Ignored Build Step إن لزم على `bash scripts/vercel-ignore.sh`؛ وملف `vercel.json` يضبطه أيضاً.
+7. لا تنفذ Deploy يدويّاً إلى Production. النشر المتوقع بعد الربط هو Preview تلقائي مع كل push إلى الفرع المسموح.
 
 ## 5. السماح بنطاق المعاينة في Firebase Auth
 
-بعد إنشاء أول رابط Preview، انسخ النطاق فقط (من دون مسار)، ثم افتح **Firebase Console → Authentication → Settings → Authorized domains** وأضفه. لا تضف نطاقاً غير موثوق.
+بعد أول Preview ناجح، انسخ hostname فقط من الرابط، ثم افتح **Firebase Console → Authentication → Settings → Authorized domains** وأضفه. لا تضف نطاقاً لا تملكه أو لا تثق به.
 
-## 6. فحص المعاينة يدوياً
+## 6. منح صلاحية المشرف من جهاز المالك
 
-بعد نجاح بناء المعاينة:
-1. افتح رابط Preview.
-2. اختبر تسجيل الدخول بالبريد وكلمة المرور، وGoogle، والدخول كضيف.
-3. أنشئ حالة نصية وتأكد من ظهورها وفق قواعد الصلاحيات.
-4. افتح محادثة واختبر إرسال رسالة.
-5. تصفح الأكاديمية والمناهج المنشورة.
-6. تحقق أن `/api/v1/health` يعيد JSON بحالة `ok`.
-7. لا تعتبر HTTP 200 لصفحة أو 405 لمسار API دليلاً على نجاح POST أو Firestore؛ اختبر العمليات الفعلية بحسابات اختبار مخصصة وعلى المعاينة.
+السكربت الفعلي هو `functions/scripts/grant-admin.cjs`. يقبل UID أو بريداً إلكترونياً (واحداً فقط)، ويبحث عن المستخدم ثم يطلب تأكيداً باستخدام UID الفعلي. لا يمنح صلاحية لحساب غير موجود، ويتأكد أن المشروع `imi-indroid`، ويحافظ على الـ custom claims الأخرى، ثم يعيد قراءة الحساب للتحقق.
 
-## 7. منح صلاحية المشرف من جهاز المالك فقط
+### Windows PowerShell
 
-شغّل `functions/scripts/grant-admin.cjs` محلياً. يتطلب اعتماد Google Application Default Credentials لخدمة تملك صلاحية إدارة Firebase Authentication. إذا استخدمت ملف اعتماد محلياً، أبقه خارج المستودع:
+1. ثبّت Google Cloud CLI وسجّل دخولك بحساب Google الذي يملك صلاحية إدارة مستخدمي Firebase Authentication في المشروع.
+2. نفّذ:
+```powershell
+gcloud auth application-default login
+gcloud config set project imi-indroid
+$env:GCLOUD_PROJECT = "imi-indroid"
+$env:IMI_ADMIN_EMAIL = "البريد-المسجل-في-IMI"
+node .\functions\scripts\grant-admin.cjs
+```
+3. إذا رفض السكربت لعدم وجود تأكيد، اقرأ UID الذي أعاده Firebase للحساب الصحيح من Firebase Console → Authentication → Users، ثم عيّن:
+```powershell
+$env:CONFIRM_GRANT_IMI_ADMIN = "GRANT_ADMIN_TO_UID_الحقيقي"
+node .\functions\scripts\grant-admin.cjs
+```
+4. بدلاً من البريد يمكن استعمال `$env:IMI_ADMIN_UID = "UID_الحقيقي"`، مع حذف `IMI_ADMIN_EMAIL` من الجلسة. لا تضبط الاثنين معاً.
+5. بعد رسالة النجاح، سجّل خروج المشرف ثم ادخل مجدداً أو جدّد ID token كي تصل الـ custom claim. تحقق من لوحة المشرف. لا تنسخ ADC token أو أي اعتماد إلى المحادثة أو المستودع.
+
+### macOS / Linux
+
 ```bash
-export GOOGLE_APPLICATION_CREDENTIALS="/absolute/path/to/imi-admin-service-account.json"
-export GCLOUD_PROJECT="imi-indroid"
+gcloud auth application-default login
+export GCLOUD_PROJECT=imi-indroid
 export IMI_ADMIN_UID="<UID>"
 export CONFIRM_GRANT_IMI_ADMIN="GRANT_ADMIN_TO_<UID>"
 node functions/scripts/grant-admin.cjs
 ```
-استبدل `<UID>` بمعرّف الحساب المقصود في السطرين. يتحقق السكربت من المشروع `imi-indroid` ومن قيمة التأكيد، ثم يضيف claim باسم `admin: true` مع الاحتفاظ بالـclaims السابقة ويعيد قراءتها للتحقق. بعد النجاح يجب على الحساب تحديث ID token/تسجيل الدخول مجدداً. لا تشغّل الأمر لحساب آخر ولا تضع ملف الاعتماد في المستودع أو السجلات. لا تنفذ هذه الخطوة إلا بموافقة المالك.
 
-بعد منح الصلاحية، افتح لوحة المشرف، واستورد `data/curriculum.json`، ثم استخدم **معاينة النشر** أولاً، وبعد مراجعة العدد والعناصر استخدم **نشر الهيكل** لكل مستوى على حدة.
+## 7. استيراد المنهج ونشر الهيكل
 
-## 8. نشر قواعد Firestore والفهارس — يدوي وبموافقة منفصلة
+1. افتح لوحة المشرف بعد تحديث ID token.
+2. استورد الملف `data/curriculum.json` من نسخة المستودع نفسها.
+3. راجع عدد العناصر والتحذيرات في المعاينة.
+4. انشر الجذور الثلاثة فقط: `primary` ثم `lower-secondary` ثم `upper-secondary`. النشر هرمي ويشمل الأبناء؛ لا تنشر العقد الفرعية منفردة.
+5. تحقق من ظهور الهيكل في `/academy`. ملف المنهج الحالي بنية أولية وليس اعتماداً رسمياً من الوزارة، ولا يحتوي دروساً مكتملة.
 
-لا تنفّذ هذه الخطوة إلا بعد اخضرار CI وموافقة المالك الصريحة على تغيير Firebase الحقيقي. من جهاز المالك:
-```bash
+## 8. قائمة قبول يدوية بالنقر
+
+- [ ] حالة Vercel الأخيرة Preview وليست Production.
+- [ ] `/api/health` يعيد HTTP 200.
+- [ ] `/login` يفتح بالعربية دون خطأ إعداد.
+- [ ] `/academy` يفتح ويعرض مستويات المنهج.
+- [ ] جرّب البريد وكلمة المرور، Google، والدخول كضيف بحسابات اختبار.
+- [ ] بعد إضافة النطاق، تحقق من تسجيل الدخول الحقيقي؛ E2E المحلي لا يثبت Authorized Domains على النطاق المستضاف.
+- [ ] حساب المشرف يرى لوحة الإدارة؛ الحساب العادي لا يرى عمليات الإدارة.
+- [ ] معاينة نشر المنهج ثم نشر الجذور الثلاثة فقط.
+- [ ] اختبر محادثة ورسالة وصداقة وحالة بحسابي اختبار.
+- [ ] لا تعتبر HTTP 200 للصفحة دليلاً على نجاح عمليات الكتابة في Firestore.
+- [ ] لا تفعّل رفع الفيديو أو الملفات قبل حسم أهلية Firebase Storage على Spark واختبار القواعد.
+
+## 9. نشر قواعد Firestore والفهارس — من جهاز المالك وبعد موافقة صريحة
+
+لا تنشر القواعد إلا بعد اخضرار CI على SHA المعني ومراجعة التغييرات وموافقة المالك الصريحة. من جذر المستودع:
+```powershell
 npx firebase-tools@15.37.0 login
 npx firebase-tools@15.37.0 use imi-indroid
 npx firebase-tools@15.37.0 deploy --only firestore:rules,firestore:indexes
 ```
-هذا الأمر ينشر قواعد Firestore وفهارسه فقط. لا تضف `storage` أو `functions`، ولا تفعّل Cloud Functions. راجع الـdiff في ملفات القواعد والفهارس قبل الموافقة.
+لا تضف `storage` أو `functions` إلى الأمر. لا يتم نشر أي قواعد إلى Firebase الحقيقي بواسطة CI.
 
-## 9. بناء Android على نطاق المعاينة
+## 10. جدول أخطاء وحلولها
 
-من جذر المشروع:
-```bash
-./gradlew assembleDebug -PIMI_API_BASE_URL=https://<نطاق-المعاينة>
-```
-استخدم أصل النطاق فقط دون `/api` أو مسار إضافي. ضع `app/google-services.json` محلياً ومن مشروع Firebase نفسه؛ يجب أن يبقى متجاهلاً في Git ولا ترفعه إلى المستودع.
+| الخطأ الظاهر | السبب المحتمل | الإجراء |
+|---|---|---|
+| `متغير مفقود: FIREBASE_SERVICE_ACCOUNT_JSON` | السر غير موجود في Preview | أضفه كـ Sensitive في Preview فقط، ولا تطبعه في logs. |
+| `FIREBASE_SERVICE_ACCOUNT_JSON ليس JSON صالحاً` | JSON منسّق على عدة أسطر أو ناقص | أعد نسخه كسطر واحد من الملف المحلي وتحقق من صلاحيته دون طباعته. |
+| `auth/unauthorized-domain` | نطاق Vercel غير مسموح | أضف hostname الفعلي إلى Authorized domains. |
+| `CONFIGURATION_NOT_FOUND` أو `auth/configuration-not-found` | مزود الدخول غير مفعّل أو إعداد مشروع الويب غير صحيح | فعّل المزود المستخدم وراجع Project ID وAuth Domain ومفتاح API. |
+| `Server credentials are not configured` | اعتماد Admin لم يصل إلى Runtime | راجع اسم متغير Preview ونطاق البيئة ثم أعد النشر. |
+| `403` في لوحة المشرف | المستخدم لا يحمل claim admin أو ID token قديم | أعد التحقق من claim وجدّد ID token/أعد تسجيل الدخول. |
+| `404` لمسار Admin health | المسار التشخيصي محمي/غير مفعّل | هذا متوقع افتراضياً؛ لا تفعّل `IMI_ADMIN_HEALTH` في الاستضافة. |
+| فشل استيراد وحدات `functions/src` | لم يُفعّل Include source files outside Root Directory | فعّل الخيار في إعدادات Root Directory ثم أعد Preview. |
+| تم تخطي النشر | الفرع غير مسموح أو VERCEL_ENV=production | تحقق أن push على الفرع المسموح وأن البيئة Preview. |
+| فشل صلاحية المشرف | ADC لا يملك صلاحية Firebase Auth | سجّل ADC بحساب مخوّل وكرر بعد التأكد من المشروع `imi-indroid`. |
 
-## 10. ممنوعات ثابتة
+## 11. الممنوعات وحدود الاختبار
 
-- لا ترقية إلى Blaze، ولا بطاقة دفع، ولا خدمة مدفوعة.
-- لا تفعيل `IMI_ADMIN_HEALTH` أو `IMI_ACCOUNT_DELETION_ENABLED` في الاستضافة.
-- لا تفعيل Emulator flags أو عناوين Emulator في الاستضافة.
-- لا نشر Production، ولا دمج PR #2، ولا نشر Cloud Functions.
-- لا ترفع أسرار Firebase Admin أو ملفات الاعتماد إلى Git أو السجلات.
-- لا تفتح ميزات رفع الملفات/الفيديو قبل إثبات أهلية Storage على Spark ومراجعة قواعده.
-
-## 11. بوابة ما قبل أي إطلاق تجاري
-
-- Vercel Hobby هنا للمعاينة الشخصية غير التجارية فقط؛ لا تعتبره مضيفاً تجارياً معتمداً.
-- توافق Cloudflare Workers مع Firebase Admin Firestore **غير مثبت**؛ اختبار Worker الحالي يفشل عند dynamic code generation داخل `protobufjs` المستدعى من `firebase-admin/firestore`.
-- قبل أي إطلاق تجاري، إما تقديم اختبار موثق يثبت توافق Cloudflare، أو اختيار مضيف Node مجاني يسمح بالاستخدام التجاري وفق شروطه الحالية والتحقق من حدود الخطة وقيودها. لا تفترض أن أي خطة مجانية تسمح بالتجاري دون مراجعة شروطها.
-- لا يتم أي نشر إنتاجي أو ترقية خطة أو دفع أو دمج PR دون موافقة صريحة مستقلة من المالك.
+- لا Production، لا دمج PR، لا Blaze، لا دفع، ولا Cloud Functions.
+- لا تضع أسراراً في GitHub أو سجلات CI أو الدردشة.
+- لا تنشر Firestore/Storage rules إلى المشروع الحقيقي إلا وفق بند الموافقة أعلاه.
+- CI يستخدم Firebase Emulators منفصلة؛ نجاحه لا يثبت اتصالاً أو مصادقة أو صلاحيات على Firebase الحقيقي.
+- لا تعتبر Vercel Preview إطلاقاً تجارياً معتمداً؛ راجع شروط الخطة وحدودها قبل أي استخدام تجاري.

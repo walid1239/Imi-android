@@ -122,7 +122,7 @@ jobs:
 
       - name: Run unit tests and assemble debug APK
         id: android_build
-        run: gradle --no-daemon testDebugUnitTest assembleDebug assembleDebugAndroidTest assembleRelease
+        run: gradle --no-daemon -PIMI_API_BASE_URL=https://imi-api-preview.vercel.app testDebugUnitTest assembleDebug assembleDebugAndroidTest assembleRelease
 
       - name: Upload debug APK for device verification
         if: always() && steps.android_build.outcome == 'success'
@@ -150,8 +150,8 @@ jobs:
             Automated preview build from commit ${{ github.sha }}.
             This is a preview APK, not a production release.
 
-      # MainActivity creates an anonymous Firebase Auth user on launch.
-      # Never launch a Firebase-configured APK against the production project in CI.
+      # Live Firebase Android smoke tests are intentionally skipped in CI.
+      # Never create test accounts or write test data to the real Firebase project.
       - name: Skip live-Firebase Android smoke test
         if: steps.firebase_config.outputs.configured == 'true'
         run: echo "Skipped device launch to prevent anonymous Auth writes to the real Firebase project."

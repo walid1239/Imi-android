@@ -2,17 +2,22 @@
 
 This section supersedes older status statements below where they conflict.
 
-## Source and CI
+## Branch and tested source
 
-Latest source SHA: `182a64ec6f25a0ca9561f7f09c3c6985da0b9434`.
+- Current branch before this handoff update: `3a0c3592ec454a1aeccf523abe2e16b67f160935`.
+- Latest application/source SHA with all relevant checks green: `b093d5103b709a6e44d2b790c1be36868c32eebc`.
+- Commits `210c1b02ca81a052d1d830fb10b26d814f3bbc6c` and `3a0c3592ec454a1aeccf523abe2e16b67f160935` after that SHA changed documentation only (owner deployment instructions and Functions-admin setup docs). No application code changed in those commits.
 
-- Preview build check: [Run 45157792161](https://github.com/walid1239/Imi-android/actions/runs/45157792161) — `completed / success`.
-- IMI Web CI: [Run 45157802609](https://github.com/walid1239/Imi-android/actions/runs/45157802609) — `completed / success`.
-- IMI Android CI: [Run 45157802650](https://github.com/walid1239/Imi-android/actions/runs/45157802650) — `completed / success`.
-- All eight commit checks on this SHA report `completed / success`: rules, functions, Coturn config validation, Playwright browser tests, Firebase security rules tests, web, Android build/test, and preview build.
-- Web CI includes the Arabic login error tests for `auth/unauthorized-domain` and `CONFIGURATION_NOT_FOUND`. These are emulator/mock tests, not live Firebase Auth verification.
+### CI evidence on tested application SHA b093d5103b709a6e44d2b790c1be36868c32eebc
 
-### Preview build check output
+- Preview build check: [Run 45158531283](https://github.com/walid1239/Imi-android/actions/runs/45158531283) — `completed / success`.
+- IMI Web CI: [Run 45158538606](https://github.com/walid1239/Imi-android/actions/runs/45158538606) — `completed / success`.
+- IMI Android CI: [Run 45158538588](https://github.com/walid1239/Imi-android/actions/runs/45158538588) — `completed / success`.
+- Web CI jobs all succeeded: Playwright browser tests against disposable Firebase emulators (`50 passed (1.3m)`), Functions, rules/seeds, web typecheck/build/health, and Coturn configuration validation.
+- Android CI jobs succeeded: Firebase rules emulator tests, Functions build/unit tests, Android unit tests and debug APK assembly/artifact upload. Android emulator launch and live-Firebase Android smoke test were skipped by design.
+- Build log: `Compiled successfully in 9.0s`; `BUILD SUCCESSFUL in 2m 57s`.
+
+### Exact Preview smoke output
 
 ```text
 /api/health -> 200
@@ -23,7 +28,7 @@ IMI_ADMIN_HEALTH unset
 /api/v1/health/admin -> 404
 ```
 
-### Vercel branch guard test output
+### Exact Vercel ignore guard output
 
 ```text
 feature preview exit: 1
@@ -32,26 +37,31 @@ other branch exit: 0
 production exit: 0
 ```
 
+### Login error handling
+
+The login page maps `auth/unauthorized-domain` and `CONFIGURATION_NOT_FOUND` to Arabic guidance. Playwright covers both cases and is included in `50 passed (1.3m)`. This is mocked/emulator coverage, not proof that a live Firebase project or Vercel hostname is configured correctly.
+
 ### PR #4
 
-[PR #4](https://github.com/walid1239/Imi-android/pull/4) is `open`, `draft=false` (Ready for review), `merged=false`, head SHA `182a64ec6f25a0ca9561f7f09c3c6985da0b9434`. It was not merged.
+[PR #4](https://github.com/walid1239/Imi-android/pull/4) is `open`, `draft=false` (Ready for review), `merged=false`. It remains unmerged as required.
 
-## Vercel — blocked before deployment
+## Vercel configuration and deployment blocker
 
-- Vercel project `imi-preview` exists with framework `nextjs` and Node `22.x`.
-- The project's current metadata does not expose a linked Git repository or configured Root Directory. Existing project was not automatically connected to GitHub.
-- Preview environment metadata lists six `NEXT_PUBLIC_FIREBASE_*` variables and `FIREBASE_PROJECT_ID`; `FIREBASE_SERVICE_ACCOUNT_JSON` is absent. Values were not decrypted for inspection.
-- Latest Vercel deployment remains `dpl_HUNAdSugYnEetHNVTPhuWgtPi7sj`, source SHA `21cfddbe887a46c4658c2f13d17c87e3924edfb1`, state `ERROR`, URL `https://imi-preview-goovq2nyt-walid2.vercel.app`. Its first reported build error was `متغير مفقود: FIREBASE_SERVICE_ACCOUNT_JSON`.
-- There is no deployment on Vercel for SHA `182a64ec6f25a0ca9561f7f09c3c6985da0b9434`. No hosted Preview URL exists to smoke-test. Do not describe this as deployed.
-- `web/vercel.json` sets framework `nextjs` and `ignoreCommand` to `bash scripts/vercel-ignore.sh`. The script skips Production and non-allowlisted branches, and allows Preview for `feature/imi-teacher-admin-preview` and `main`.
-- The Vercel setup instructions, including Root Directory `web` and **Include source files outside of the Root Directory**, are in `docs/OWNER_DEPLOY_MESSAGE.md` and `docs/DEPLOY_PREVIEW.md`.
+- Existing Vercel project: `imi-preview`, ID `prj_r6YUoDocFOLdE0H2G25IKhp4AxVd`, team `walid2`, framework `nextjs`, Node `22.x`.
+- I submitted a Vercel project settings update and the API accepted it: Root Directory `web`, source files outside Root Directory enabled, default install/build commands (null overrides), and ignored-build command `bash scripts/vercel-ignore.sh`. The project metadata readback does not expose all these settings, so the owner should confirm the toggles in the dashboard.
+- Git deployment context still reports `linkedProjects: []`; the existing `imi-preview` project is not linked to GitHub. Vercel's Git project creation helper explicitly does not reconnect an existing unlinked project of the same name, so I did not create a duplicate project.
+- Preview environment metadata contains the six `NEXT_PUBLIC_FIREBASE_*` values and `FIREBASE_PROJECT_ID`; `FIREBASE_SERVICE_ACCOUNT_JSON` is absent. Values were not decrypted or echoed.
+- Current code still requires `FIREBASE_SERVICE_ACCOUNT_JSON` in `web/scripts/check-env.mjs` and uses it in the server Firebase Admin initialization. Vercel OIDC token generation alone does not satisfy that code path; Workload Identity Federation is not implemented in the Firebase Admin runtime.
+- Latest known Vercel deployment remains the failed old deployment `dpl_HUNAdSugYnEetHNVTPhuWgtPi7sj` from SHA `21cfddbe887a46c4658c2f13d17c87e3924edfb1`, state `ERROR`, URL `https://imi-preview-goovq2nyt-walid2.vercel.app`; first error: `متغير مفقود: FIREBASE_SERVICE_ACCOUNT_JSON`.
+- No Vercel deployment exists for tested SHA `b093d5103b709a6e44d2b790c1be36868c32eebc` or later documentation-only commits. No current Preview URL exists to smoke-test. Do not claim deployment.
+- Owner's remaining one-time actions are documented in `docs/OWNER_DEPLOY_MESSAGE.md`: add the service-account JSON as Sensitive Preview-only env var, connect the existing Vercel project to GitHub, confirm Root Directory/source-files option, and set an unused Production Branch so `main` remains Preview.
 
-## Explicitly not tested / not performed
+## Not tested / not performed
 
 - No live Firebase Authentication sign-in, real authorized-domain flow, real user/admin account, Firestore write, Storage upload, or real custom-claim change was tested.
-- No Firebase rules or indexes were deployed to the real project.
+- No Firebase rules or indexes were deployed to the real Firebase project.
 - No Cloud Functions, Blaze upgrade, paid service, Production deployment, or PR merge occurred.
-- CI green status is emulator/mock verification only; it does not prove live Firebase configuration or deployed runtime behavior.
+- CI uses Firebase Emulators/mocks; green CI does not prove live Firebase permissions, OAuth provider configuration, Authorized domains, or production data behavior.
 - Project remains Preview-only and not approved for Production.
 
 ---

@@ -1,10 +1,56 @@
-# IMI handoff — 2026-11-22
+# IMI handoff — 2026-11-23
+
+## Latest verification — 2026-11-23
+
+This section supersedes older run/status references below where they conflict. It records the latest verified application commit before this documentation-only handoff update.
+
+- Application SHA: `2cc6c764297eaa7665608936780937a6aa324b25`.
+- Preview build check: [Run 45132755575](https://github.com/walid1239/Imi-android/actions/runs/45132755575) — **success**.
+- Web CI: [Run 45132763698](https://github.com/walid1239/Imi-android/actions/runs/45132763698) — **success**; Playwright result: `50 passed (58.5s)`; Functions, Firestore rules, Coturn validation and web build jobs succeeded.
+- Android CI: [Run 45132763687](https://github.com/walid1239/Imi-android/actions/runs/45132763687) — **success**; Firebase security-rules emulator tests, Android unit tests, debug APK assembly and artifact upload succeeded. `Run IMI on Android emulator` was **skipped**; the live-Firebase Android smoke test was skipped by design.
+
+### Exact Preview smoke output
+
+```text
+/api/health -> 200
+/login -> 200
+/academy -> 200
+IMI_ADMIN_HEALTH unset
+{"error":"Not found."}
+/api/v1/health/admin -> 404
+```
+
+The branch allowlist test also passed with these exact exit codes:
+
+```text
+feature preview exit: 1
+main preview exit: 1
+other branch exit: 0
+production exit: 0
+```
+
+The Vercel build script compiled successfully (`Compiled successfully in 7.3s`). The 404 on `/api/v1/health/admin` is expected because `IMI_ADMIN_HEALTH` is unset.
+
+### Vercel / owner setup status
+
+- Vercel project `imi-preview` still has no `FIREBASE_SERVICE_ACCOUNT_JSON` in Preview. The six public `NEXT_PUBLIC_FIREBASE_*` values and `FIREBASE_PROJECT_ID` are present; no secret value was read or printed.
+- The last recorded Vercel deployment `dpl_HUNAdSugYnEetHNVTPhuWgtPi7sj` ended with `ERROR`. First build error: `متغير مفقود: FIREBASE_SERVICE_ACCOUNT_JSON`; then `Error: [BUILD_UTILS_SPAWN_1] Command "npm run build" exited with 1`.
+- No Vercel deployment for SHA `2cc6c764297eaa7665608936780937a6aa324b25` appeared after pushes. GitHub auto-deploy integration, Root Directory `web`, Node `22.x`, and **Include source files outside of the Root Directory** are not verified as configured. Follow `docs/OWNER_DEPLOY_MESSAGE.md` once, then monitor the resulting Preview.
+- The owner must add `FIREBASE_SERVICE_ACCOUNT_JSON` as a Sensitive Preview-only variable and connect the GitHub repository. No key or token was requested, copied, or committed.
+
+### Not tested / not performed
+
+- No live Firebase Authentication, Firestore, Storage, real user accounts, or real admin claim was changed or verified.
+- No Firestore rules/indexes were deployed to the real Firebase project.
+- No Cloud Functions deployment, Blaze upgrade, payment, Production deployment, or PR merge occurred.
+- The Preview URL and its hosted smoke tests remain unavailable until the owner completes the one-time Vercel connection and Preview environment setup.
+- PR #4 remains Draft pending the checks for this final handoff commit; it must not be merged without explicit approval.
 
 ## Repository and owner constraints
 
 - Repository: `walid1239/Imi-android`
 - Baseline branch: `feature/imi-web-foundation`; isolated implementation branch: `feature/imi-teacher-admin-preview`.
-- Base SHA: `106d656c044769828065b5bf5d76998820d27880`; latest tested code/test SHA: `ecc6b5452258697784058e8bb15544b80aa91dd6`.
+- Base SHA: `106d656c044769828065b5bf5d76998820d27880`; latest verified application SHA: `2cc6c764297eaa7665608936780937a6aa324b25` (CI-green; see latest verification below).
 - PR #2 is open, not merged; base: `feature/server-authoritative-status`. PR #4 is Draft and targets `feature/imi-web-foundation`.
 - This handoff records source changes on isolated Draft PR #4; it does not change Firebase/hosting runtime or perform deployment.
 - No Production deployment, PR merge, Firebase Console mutation, Firebase rules/index deployment, Blaze upgrade, payment card, paid service, or secret publication was performed.

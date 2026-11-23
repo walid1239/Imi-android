@@ -35,6 +35,13 @@
 
 ### إعداد Google Cloud مرة واحدة
 
+في **APIs & Services → Enabled APIs & services** تأكد من تفعيل:
+- Security Token Service API: `sts.googleapis.com`
+- IAM Service Account Credentials API: `iamcredentials.googleapis.com`
+- IAM API: `iam.googleapis.com`
+
+إذا ظهر زر **Enable** لأي API، فعّله في مشروع `imi-indroid` قبل متابعة الربط. قد تحتاج صلاحية Service Usage Admin أو Owner لتفعيلها.
+
 في مشروع Google Cloud رقم `135769436246`:
 
 1. افتح **IAM & Admin → Workload Identity Federation** وأنشئ Pool:

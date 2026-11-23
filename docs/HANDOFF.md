@@ -2,11 +2,11 @@
 
 ## Latest verification — 2026-11-23
 
-This section supersedes older run/status references below where they conflict. Latest verified branch head: `9fbd79c90f79a25b08d944eb79cfbca39680323b`.
+This section supersedes older run/status references below where they conflict. Latest verified branch head before this documentation-only refresh: `4afe56f5626097d473609f42952611cd31f29a30`.
 
-- Preview build check: [Run 45134218614](https://github.com/walid1239/Imi-android/actions/runs/45134218614) — **success**.
-- Web CI: [Run 45134226715](https://github.com/walid1239/Imi-android/actions/runs/45134226715) — **success**; Playwright: `49 passed (1.6m)`, with one flaky retry in the existing Academy admin mobile test. That test's first attempt logged `Developer claims payload should not exceed 1000 characters.`; the workflow completed successfully after retry. The two new login-error E2E cases are included in this run.
-- Android CI: [Run 45134226695](https://github.com/walid1239/Imi-android/actions/runs/45134226695) — **success**; Firebase security-rules emulator tests, Android unit tests, debug APK assembly and artifact upload succeeded. `Run IMI on Android emulator` was **skipped**; the live-Firebase Android smoke test was skipped by design.
+- Preview build check: [Run 45134977543](https://github.com/walid1239/Imi-android/actions/runs/45134977543) — **success**.
+- Web CI: [Run 45134982085](https://github.com/walid1239/Imi-android/actions/runs/45134982085) — **success**; Playwright: `50 passed (1.3m)`. A Functions-emulator request logged `socket hang up`, but all 50 tests passed and the job exited successfully.
+- Android CI: [Run 45134982098](https://github.com/walid1239/Imi-android/actions/runs/45134982098) — **success**; Firebase security-rules emulator tests, Android unit tests, debug APK assembly and artifact upload succeeded. `Run IMI on Android emulator` was **skipped**; the live-Firebase Android smoke test was skipped by design.
 
 ### Exact Preview smoke output
 
@@ -28,7 +28,7 @@ other branch exit: 0
 production exit: 0
 ```
 
-The build compiled successfully (`Compiled successfully in 10.9s`). The 404 on `/api/v1/health/admin` is expected because `IMI_ADMIN_HEALTH` is unset.
+The build compiled successfully (`Compiled successfully in 8.2s`). The 404 on `/api/v1/health/admin` is expected because `IMI_ADMIN_HEALTH` is unset.
 
 ### Vercel / owner setup status
 
@@ -52,7 +52,7 @@ PR #4 is **Ready for review**, open, and unmerged: https://github.com/walid1239/
 
 - Repository: `walid1239/Imi-android`
 - Baseline branch: `feature/imi-web-foundation`; isolated implementation branch: `feature/imi-teacher-admin-preview`.
-- Base SHA: `106d656c044769828065b5bf5d76998820d27880`; latest verified application/workflow SHA: `9fbd79c90f79a25b08d944eb79cfbca39680323b` (CI-green; see latest verification below).
+- Base SHA: `106d656c044769828065b5bf5d76998820d27880`; latest verified application/workflow SHA: `4afe56f5626097d473609f42952611cd31f29a30` (CI-green; see latest verification below).
 - PR #2 is open, not merged; base: `feature/server-authoritative-status`. PR #4 is Draft and targets `feature/imi-web-foundation`.
 - This handoff records source changes on isolated Draft PR #4; it does not change Firebase/hosting runtime or perform deployment.
 - No Production deployment, PR merge, Firebase Console mutation, Firebase rules/index deployment, Blaze upgrade, payment card, paid service, or secret publication was performed.

@@ -14,7 +14,11 @@ async function main() {
   if (projectId !== 'imi-indroid') {
     throw new Error(`Refusing to grant admin outside the approved IMI project (received: ${projectId}).`);
   }
-  if (uidInput && process.env.CONFIRM_GRANT_IMI_ADMIN !== `GRANT_ADMIN_TO_${uidInput}`) {\n    throw new Error(`Set CONFIRM_GRANT_IMI_ADMIN to the exact value GRANT_ADMIN_TO_${uidInput}.`);\n  }\n  const app = initializeApp({ credential: applicationDefault(), projectId });
+  if (uidInput && process.env.CONFIRM_GRANT_IMI_ADMIN !== `GRANT_ADMIN_TO_${uidInput}`) {
+    throw new Error(`Set CONFIRM_GRANT_IMI_ADMIN to the exact value GRANT_ADMIN_TO_${uidInput}.`);
+  }
+
+  const app = initializeApp({ credential: applicationDefault(), projectId });
   const auth = getAuth(app);
   const user = uidInput ? await auth.getUser(uidInput) : await auth.getUserByEmail(emailInput);
   const confirmation = `GRANT_ADMIN_TO_${user.uid}`;
@@ -24,10 +28,10 @@ async function main() {
   await auth.setCustomUserClaims(user.uid, { ...(user.customClaims || {}), admin: true });
   const verified = await auth.getUser(user.uid);
   if (verified.customClaims?.admin !== true) throw new Error('Admin claim verification failed.');
-  process.stdout.write(`Granted and verified IMI admin claim for UID ${user.uid} in project ${projectId}. The user must refresh their ID token.\\n`);
+  process.stdout.write(`Granted and verified IMI admin claim for UID ${user.uid} in project ${projectId}. The user must refresh their ID token.\n`);
 }
 
 main().catch(error => {
-  process.stderr.write(`Admin claim provisioning failed: ${error.message}\\n`);
+  process.stderr.write(`Admin claim provisioning failed: ${error.message}\n`);
   process.exitCode = 1;
 });

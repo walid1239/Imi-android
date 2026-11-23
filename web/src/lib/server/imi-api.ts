@@ -95,6 +95,19 @@ export function adminApp(request: Request): App {
   return initializeApp({ credential, projectId }, "imi-server-api");
 }
 
+function assertOrigin(request: Request): void {
+  const origin = request.headers.get("origin");
+  if (!origin) return; // Native clients do not send Origin; bearer auth remains mandatory.
+  const url = new URL(request.url);
+  const host = request.headers.get("host");
+  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const protocol = forwardedProto || url.protocol.slice(0, -1);
+  const requestOrigin = host ? `${protocol}://${host}` : url.origin;
+  if (origin !== requestOrigin && origin !== url.origin) {
+    throw new Error("ORIGIN_REJECTED");
+  }
+}
+
 function makeStore(app: App): StorePort {
   const db = getFirestore(app);
   const auth = getAuth(app);

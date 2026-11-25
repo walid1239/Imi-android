@@ -280,3 +280,57 @@ Binding constraints: Firebase Spark only; do not invoke Cloud Functions; Next.js
 - لا Vercel Preview أو Production deployment. `docs/DEPLOY_PREVIEW.md` دليل للمالك فقط.
 - لا Blaze، لا بطاقة، لا خدمة مدفوعة، لا Cloud Functions deploy، لا تعديل قواعد Firebase، لا أسرار في المستودع أو السجلات.
 - لا تُعتبر `46 passed` دليلاً على تشغيل Cloudflare أو جاهزية إنتاجية؛ `RELEASE_GATE.md` ما زال يحظر اعتماد Production حتى إغلاق البوابات المتبقية.
+
+
+## Owner handoff update — 2026-11-25
+
+### Latest implementation/documentation SHA before this HANDOFF-only commit
+
+- Branch: `feature/imi-teacher-admin-preview`.
+- Latest implementation/API-contract SHA: `00f7dc6f5df253dd7927ebfb324989449c55f4ff`.
+- This section is committed separately as a documentation-only follow-up; it does not change application code.
+- PR [#4](https://github.com/walid1239/Imi-android/pull/4) remains open and unmerged. No Production deployment, PR merge, Firebase secret/configuration change, Blaze upgrade, or Cloud Functions deployment/invocation was performed.
+
+### Completed work in this handoff
+
+1. **Android preview release permissions** — commit [a4f7fef](https://github.com/walid1239/Imi-android/commit/a4f7fef220e9f476679410b1299a7ab5d5f6fbd8). The workflow's default and build/security jobs use `contents: read`; the separate `publish-preview` job alone has `contents: write`. The build uploads the APK as an artifact; the publish job downloads and verifies it before updating the preview release. The API base URL remains `https://imi-api-preview.vercel.app`.
+2. **API contract** — commit [f3b01a2](https://github.com/walid1239/Imi-android/commit/f3b01a29532abfb3dabfeb52927444cef18c33bb), with a follow-up accuracy correction [00f7dc6](https://github.com/walid1239/Imi-android/commit/00f7dc6f5df253dd7927ebfb324989449c55f4ff). See [docs/API_CONTRACT.md](API_CONTRACT.md). It documents the implemented /api/v1 methods, bodies, responses, auth header, errors and rate limits.
+
+### CI evidence
+
+All listed runs are on exact SHA `f3b01a29532abfb3dabfeb52927444cef18c33bb` (the API-contract accuracy-only follow-up `00f7dc6` came afterwards):
+
+- Android CI [Run 45579973363](https://github.com/walid1239/Imi-android/actions/runs/45579973363): **completed / success**.
+  - Build job: success; Gradle reported `BUILD SUCCESSFUL in 3m 52s`.
+  - Firebase Android config validation: success for project `imi-indroid` and package `com.walid.chat`; secret values were not printed.
+  - Debug APK artifact: `IMI-debug-apk-firebase-configured`, artifact ID `15005883332`, size `23,582,541` bytes.
+  - Firebase security rules tests: success.
+  - Separate `Publish preview APK` job: success; artifact download, file verification and GitHub preview release update all succeeded.
+  - Emulator runtime step: **skipped**. Live-Firebase Android smoke test: **skipped** intentionally to avoid creating test users/writing to the real Auth project.
+- Web CI [Run 45579973370](https://github.com/walid1239/Imi-android/actions/runs/45579973370): **completed / success**.
+  - Web, Functions, Firebase Emulator rules, Coturn configuration and Playwright jobs all succeeded.
+  - Playwright result from the job log: `50 passed (59.1s)`.
+- Updated preview release: [imi-preview](https://github.com/walid1239/Imi-android/releases/tag/imi-preview), asset `app-debug.apk`, size `24,531,851` bytes, updated `2026-11-25T08:56:30Z`.
+- No physical-device acceptance test is implied by these CI results.
+
+### Vercel deployment and live smoke-check evidence — 2026-11-25
+
+- Project: `imi-preview`; latest Vercel deployment remains READY at [dpl_DZXzAzo8fgvkjLcuG7LxYLGhkKKZ](https://vercel.com/walid2/imi-preview/DZXzAzo8fgvkjLcuG7LxYLGhkKKZ), created `2026-11-23T17:29:45Z`, built from commit `7033fcec33535871a44cc42231d6015161f0d59e`. This is behind the current GitHub branch head; no new Vercel deployment was performed by this handoff.
+- Project SSO protection is enabled for `all_except_custom_domains`. The verified custom domain `imi-api-preview.vercel.app` is mapped to `feature/imi-teacher-admin-preview`; the Android build's API base URL is this custom domain. Thus the available evidence does **not** show that SSO redirects every request to the Android API domain. Default deployment preview hostnames remain protected; if an owner needs unauthenticated access to those hostnames, adjust Preview protection only, not Production. No Vercel protection setting was changed.
+- Live checks against `https://imi-api-preview.vercel.app`:
+  - `GET /api/health`: **200**; reports Firebase public configuration present and project `imi-indroid`, but explicitly says this is not a verified Firebase connectivity test.
+  - `GET /api/v1/health`: **200**.
+  - `GET /login`: **200**, page exists.
+  - `GET /academy`: **200**, page exists.
+  - `GET /api/v1/health/admin`: **404**, body `{"error":"Not found."}`, consistent with the endpoint being disabled unless `IMI_ADMIN_HEALTH=true`.
+- Therefore the requested expectation that `/api/health`, `/login`, and `/academy` should return 404 does not match the current code or observed deployment. Do not record those three checks as 404.
+
+### Blocked / owner action required
+
+1. **adminApp / Workload Identity Federation:** the requested owner/AI-Studio patch was not present in the conversation. Current code still uses `ExternalAccountClient` and a module-global OIDC token variable. `web/scripts/admin-app.test.mjs` does not exist, and `web/package.json` / `.github/workflows/web-ci.yml` do not yet run that test. Do not claim the applicationDefault()/atomic /tmp external_account-file fix is done. Waiting for the exact patch or written implementation details from the owner.
+2. **Live acceptance by owner:** a person signed into the owner's Preview account must click through email login, create a text status, and open a conversation. This was not performed by CI or by this handoff. Record exact visible errors and HTTP responses; if STS/IAM fails, capture the exact non-secret error from the Vercel function log. Do not share tokens or secret values.
+3. **Vercel deployment freshness:** latest deployment is still on `7033fcec...`, not the current branch head. A new Preview deployment and its post-deploy smoke checks remain outstanding.
+
+### Safety boundary
+
+No changes were made to `app/`, Firebase/Vercel secret values, Firebase rules/configuration, billing plan, Production, or PR merge state. No live Firebase writes were performed as part of these checks.

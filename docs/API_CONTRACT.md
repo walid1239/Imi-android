@@ -63,7 +63,7 @@ UID fields must be non-empty strings, at most 128 characters, and must not conta
 |---|---|---|
 | POST /api/v1/conversations/direct | { "otherUid": "<other user uid>" } | { "conversationId": "<id>" } |
 | POST /api/v1/conversations/groups | { "name": "<2-80 chars>", "participantUids": ["<uid>", "<uid>"] } | { "conversationId": "<id>", "participantCount": 3 } |
-| POST /api/v1/conversations/groups/members | { "conversationId": "<group id>", "participantUids": ["<uid>"] } | { "participantCount": 0 } |
+| POST /api/v1/conversations/groups/members | { "conversationId": "<group id>", "participantUids": ["<uid>"] } | { "participantCount": "<current count>" } |
 
 Rules:
 - Direct conversation: otherUid is required and cannot equal the caller UID. Both users must have public profiles; blocks and the verified-teacher role boundary are enforced.
@@ -192,7 +192,7 @@ Core error mapping: unauthenticated → 401; invalid-argument → 400; resource-
 | Review teacher application | 60 per minute |
 | Save teacher profile | 5 per minute |
 | Create status | 2 per minute (also a 30-second minimum interval) |
-| Send friend request | 10 per hour |
+| Send friend request | 10 per hour and 30 per 24 hours |
 | Create/get direct conversation | 20 per minute |
 | Accept/reject friend request | 30 per minute each |
 | Remove friend / block user | 10 per minute each |

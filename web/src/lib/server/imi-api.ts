@@ -1,5 +1,5 @@
-import { getApps, initializeApp, type App } from "firebase-admin/app";
-import { ExternalAccountClient } from "google-auth-library";
+import { applicationDefault, getApps, initializeApp, type App } from "firebase-admin/app";
+import { existsSync, renameSync, writeFileSync } from "node:fs";
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
@@ -40,8 +40,6 @@ const limits: Record<Operation, { count: number; windowMs: number }> = {
   publishCurriculum: { count: 5, windowMs: 60_000 },
 };
 
-let currentVercelOidcToken: string | null = null;
-
 export function adminApp(request: Request): App {
   const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   const usingEmulators = process.env.IMI_USE_FIREBASE_EMULATORS === "true"
@@ -55,8 +53,6 @@ export function adminApp(request: Request): App {
 
   const oidcToken = request.headers.get("x-vercel-oidc-token") || process.env.VERCEL_OIDC_TOKEN;
   if (!oidcToken) throw new Error("Vercel OIDC identity token is unavailable.");
-  currentVercelOidcToken = oidcToken;
-  if (existing) return existing;
 
   const projectNumber = process.env.GCP_PROJECT_NUMBER;
   const poolId = process.env.GCP_WORKLOAD_IDENTITY_POOL_ID;
@@ -66,33 +62,28 @@ export function adminApp(request: Request): App {
     throw new Error("Google Workload Identity Federation is not configured.");
   }
 
-  const authClient = ExternalAccountClient.fromJSON({
-    type: "external_account",
-    audience: `//iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`,
-    subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
-    token_url: "https://sts.googleapis.com/v1/token",
-    service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccountEmail}:generateAccessToken`,
-    subject_token_supplier: {
-      getSubjectToken: async () => {
-        if (!currentVercelOidcToken) throw new Error("Vercel OIDC identity token is unavailable.");
-        return currentVercelOidcToken;
-      },
-    },
-  });
-  if (!authClient) throw new Error("Google Workload Identity Federation configuration is invalid.");
+  const tokenFile = "/tmp/imi-vercel-oidc-token";
+  const configFile = "/tmp/imi-wif-config.json";
+  const tokenTmp = `${tokenFile}.${process.pid}.tmp`;
+  writeFileSync(tokenTmp, oidcToken, { mode: 0o600 });
+  renameSync(tokenTmp, tokenFile);
 
-  const credential = {
-    getAccessToken: async () => {
-      const result = await authClient.getAccessToken();
-      if (!result.token) throw new Error("Google Workload Identity Federation returned no access token.");
-      const expiryDate = authClient.credentials.expiry_date ?? Date.now() + 55 * 60_000;
-      return {
-        access_token: result.token,
-        expires_in: Math.max(1, Math.floor((expiryDate - Date.now()) / 1000)),
-      };
-    },
-  };
-  return initializeApp({ credential, projectId }, "imi-server-api");
+  if (!existsSync(configFile)) {
+    const configTmp = `${configFile}.${process.pid}.tmp`;
+    writeFileSync(configTmp, JSON.stringify({
+      type: "external_account",
+      audience: `//iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`,
+      subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
+      token_url: "https://sts.googleapis.com/v1/token",
+      service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccountEmail}:generateAccessToken`,
+      credential_source: { file: { path: tokenFile } },
+    }), { mode: 0o600 });
+    renameSync(configTmp, configFile);
+  }
+
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = configFile;
+  if (existing) return existing;
+  return initializeApp({ credential: applicationDefault(), projectId }, "imi-server-api");
 }
 
 function assertOrigin(request: Request): void {

@@ -42,7 +42,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: android-${{ github.event.pull_request.head.ref || github.ref_name }}
@@ -51,6 +51,11 @@ concurrency:
 jobs:
   build:
     name: Build and test Android app
+    permissions:
+      contents: read
+    outputs:
+      firebase_configured: ${{ steps.firebase_config.outputs.configured }}
+      apk_artifact_name: ${{ steps.firebase_config.outputs.artifact_name }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -115,8 +120,10 @@ jobs:
             fi
             echo "Firebase Android config validated: project_id='$actual_project_id', package='com.walid.chat'."
             echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=IMI-debug-apk-firebase-configured" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=IMI-debug-apk-no-firebase-config" >> "$GITHUB_OUTPUT"
             echo "::warning::Neither GOOGLE_SERVICES_JSON nor GOOGLE_SERVICES_JSON_BASE64 is configured. The APK will be test-only and will not connect to Firebase."
           fi
 
@@ -129,26 +136,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.firebase_config.outputs.configured == 'true' && 'IMI-debug-apk-firebase-configured' || 'IMI-debug-apk-no-firebase-config' }}
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
-
-      # Only a deliberate manual run publishes/replaces the public preview release.
-      # PR checks never publish binaries and Production remains untouched.
-      - name: Publish APK to the IMI preview release
-        if: ${{ steps.android_build.outcome == 'success' && steps.firebase_config.outputs.configured == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feature/imi-teacher-admin-preview' && github.event.pull_request.head.repo.full_name == github.repository)) }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: imi-preview
-          name: IMI Preview APK
-          prerelease: true
-          make_latest: false
-          files: app/build/outputs/apk/debug/app-debug.apk
-          fail_on_unmatched_files: true
-          overwrite_files: true
-          body: |
-            Automated preview build from commit ${{ github.sha }}.
-            This is a preview APK, not a production release.
 
       # Live Firebase Android smoke tests are intentionally skipped in CI.
       # Never create test accounts or write test data to the real Firebase project.
@@ -170,6 +160,37 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 900
           script: gradle --no-daemon connectedDebugAndroidTest
+
+  publish-preview:
+    name: Publish preview APK
+    needs: build
+    if: ${{ needs.build.result == 'success' && needs.build.outputs.firebase_configured == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feature/imi-teacher-admin-preview' && github.event.pull_request.head.repo.full_name == github.repository)) }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download the APK built by the read-only job
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.apk_artifact_name }}
+          path: dist/apk
+
+      - name: Verify downloaded APK
+        run: test -s dist/apk/app-debug.apk
+
+      - name: Publish APK to the IMI preview release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: imi-preview
+          name: IMI Preview APK
+          prerelease: true
+          make_latest: false
+          files: dist/apk/app-debug.apk
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          body: |
+            Automated preview build from commit ${{ github.sha }}.
+            This is a preview APK, not a production release.
 
   # Firebase CLI 15.37.0 Emulator Suite requires JDK 21+.
   security-rules:

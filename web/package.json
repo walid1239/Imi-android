@@ -13,7 +13,8 @@
     "test:rate-limit": "node --test scripts/rate-limit.test.mjs",
     "e2e": "playwright test",
     "prebuild": "node scripts/check-env.mjs",
-    "test:env": "node --test scripts/check-env.test.mjs"
+    "test:env": "node --test scripts/check-env.test.mjs",
+    "test:admin-app": "node scripts/admin-app.test.mjs"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.0",

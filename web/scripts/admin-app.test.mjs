@@ -8,16 +8,16 @@ import { ExternalAccountClient } from "google-auth-library";
 
 const sourcePath = resolve("src/lib/server/imi-api.ts");
 const source = readFileSync(sourcePath, "utf8");
-const match = source.match(/export function adminApp\\(request: Request\\): App \\{[\\s\\S]*?\\n\\}/);
+const match = source.match(/export function adminApp\(request: Request\): App \{[\s\\S]*?\n\\}/);
 assert.ok(match, "adminApp function must be present in imi-api.ts");
 
-const transpiled = ts.transpileModule(match[0].replace(/^export\\s+/, ""), {
+const transpiled = ts.transpileModule(match[0].replace(/^export\s+/, ""), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 const buildAdminApp = new Function(
   "applicationDefault", "getApps", "initializeApp", "existsSync", "renameSync",
   "writeFileSync", "process", "ExternalAccountClient",
-  "let currentVercelOidcToken = null;\\n" + transpiled + "\\nreturn adminApp;",
+  "let currentVercelOidcToken = null;\n" + transpiled + "\nreturn adminApp;",
 );
 const adminApp = buildAdminApp(
   applicationDefault, getApps, initializeApp, existsSync, renameSync,
@@ -82,7 +82,7 @@ try {
     "the subject-token file must be refreshed on every request",
   );
 
-  process.stdout.write("PASS adminApp: applicationDefault external_account credentials initialize getFirestore without network access; per-request token file refresh and file permissions verified.\\n");
+  process.stdout.write("PASS adminApp: applicationDefault external_account credentials initialize getFirestore without network access; per-request token file refresh and file permissions verified.\n");
 } finally {
   if (app) await deleteApp(app);
   for (const file of temporaryFiles) {

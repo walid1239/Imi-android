@@ -1,3 +1,48 @@
+# Latest handoff update — 2026-11-25 14:50 UTC
+
+## AdminApp Workload Identity Federation fix
+
+- Branch: `feature/imi-teacher-admin-preview`.
+- Verified implementation SHA: `406747c609ba7974ac2a8761f59602d232c40b80` ([commit](https://github.com/walid1239/Imi-android/commit/406747c609ba7974ac2a8761f59602d232c40b80)).
+- PR [#4](https://github.com/walid1239/Imi-android/pull/4) remains open and unmerged.
+- `web/src/lib/server/imi-api.ts` now initializes Firebase Admin using `applicationDefault()` and a generated `external_account` ADC configuration at `/tmp/imi-wif-config.json`. The request OIDC token is atomically written on each request to `/tmp/imi-vercel-oidc-token` with mode `0600`; the config file is atomically created with mode `0600`. The module-global OIDC token and custom credential object were removed. No token or credential-file contents are logged.
+- The four required WIF environment variables remain validated before credential setup. The named Admin app is reused only after the per-request token file has been refreshed.
+
+## Regression test — observed before and after
+
+- Added `web/scripts/admin-app.test.mjs`, `npm run test:admin-app`, and the test step in `.github/workflows/web-ci.yml`.
+- Before the fix, on test-enabled SHA `58af9bb715c390418757d562241595ef2da8dfe9`, Web CI [Run 45637373994](https://github.com/walid1239/Imi-android/actions/runs/45637373994) completed **failure** at `npm run test:admin-app`. The observed error was `firestore/invalid-credential`: “Failed to initialize Google Cloud Firestore client with the available credentials. Must initialize the SDK with a certificate credential or application default credentials to use Cloud Firestore API.”
+- After the fix, on implementation SHA `406747c609ba7974ac2a8761f59602d232c40b80`, the same test completed **success** in Web CI [Run 45637624813](https://github.com/walid1239/Imi-android/actions/runs/45637624813). Exact log line: `PASS adminApp: applicationDefault external_account credentials initialize getFirestore without network access; per-request token file refresh and file permissions verified.`
+- This is a local/offline SDK initialization regression test with dummy WIF values and dummy OIDC strings. It does **not** contact STS, call IAM Credentials, verify the real Vercel OIDC issuer/audience, or prove that the real service account can access Firestore.
+
+## CI and preview artifact evidence for implementation SHA
+
+All three workflow runs below are tied to exact SHA `406747c609ba7974ac2a8761f59602d232c40b80`:
+
+- Web CI [Run 45637624813](https://github.com/walid1239/Imi-android/actions/runs/45637624813): **completed / success**. Web job, Functions tests/integration, Firestore rules, and Playwright all succeeded. Playwright reported `50 passed (1.0m)`; Web tests included `test:env`, `test:admin-app`, dependency audit, TypeScript, rate-limit, build and health checks.
+- Android CI [Run 45637624918](https://github.com/walid1239/Imi-android/actions/runs/45637624918): **completed / success**. Android unit tests and Debug APK build/upload succeeded; Firebase security rules tests succeeded; separate `publish-preview` job downloaded and verified the APK and updated the preview release. Android emulator runtime step was **skipped** by the workflow; no physical-device test is implied.
+- Preview build check [Run 45637611654](https://github.com/walid1239/Imi-android/actions/runs/45637611654): **completed / success**. Preview branch guard, hosted-environment guard, Vercel-like build and local production-server smoke checks passed. This is CI validation, not a new Vercel deployment.
+
+Preview release [`imi-preview`](https://github.com/walid1239/Imi-android/releases/tag/imi-preview):
+- Asset: `app-debug.apk`, 24,531,851 bytes.
+- SHA-256: `6858bd60c94dad5b776ef847f5df4715d5c75dea3c7606b7ee22421328fb354f`.
+- Build artifact: `IMI-debug-apk-firebase-configured`, artifact ID `15035085498`, 23,582,534 bytes; SHA-256 `216663ee5beab24bda87218bf21e3a296df1e22e759511f2cac3fb57d68cb973`; expires 2026-12-09 14:50 UTC.
+
+## Live verification still outstanding
+
+1. **STS exchange and IAM service-account impersonation on Vercel Preview are not live-tested.** The offline test only proves that Firebase Admin accepts the ADC external-account credential configuration and can construct a Firestore client without making a network call. A real request must confirm STS token exchange, `generateAccessToken` permission, and the Firebase service account's Firestore access.
+2. **Real Firebase Auth/Firestore acceptance remains outstanding.** No real user login, status creation, or conversation write was performed by these CI runs.
+3. **Vercel deployment freshness remains outstanding.** No Vercel Preview deployment was initiated as part of this fix; do not treat the CI build as a live deployment or live WIF proof.
+4. The Android emulator runtime step was skipped; no physical-device acceptance was performed.
+
+## Safety and scope
+
+- No files under `app/` were changed.
+- No Production deployment, PR merge, Firebase/Vercel secret mutation, Firebase rules deployment, Blaze upgrade, payment, Cloud Functions deployment or invocation occurred.
+- The existing `docs/API_CONTRACT.md` and separate `publish-preview` workflow implementation were left unchanged in this adminApp fix.
+
+---
+
 # IMI handoff — latest verified evidence, 2026-11-23
 
 ## حالة المعاينة — تحديث 2026-11-23 15:40 UTC

@@ -6,14 +6,15 @@ import { applicationDefault, deleteApp, getApps, initializeApp } from "firebase-
 import { getFirestore } from "firebase-admin/firestore";
 import { ExternalAccountClient } from "google-auth-library";
 
-const sourcePath = resolve("src/lib/server/imi-api.ts");
-const source = readFileSync(sourcePath, "utf8");
-const match = source.match(/export function adminApp\(request: Request\): App \{[\s\\S]*?\n\\}/);
-assert.ok(match, "adminApp function must be present in imi-api.ts");
-
-const transpiled = ts.transpileModule(match[0].replace(/^export\s+/, ""), {
+const source = readFileSync(resolve("src/lib/server/imi-api.ts"), "utf8");
+const start = source.indexOf("export function adminApp(");
+const end = source.indexOf("\n}\n\nfunction assertOrigin", start);
+assert.ok(start >= 0 && end > start, "adminApp function must be present in imi-api.ts");
+const functionSource = source.slice(start, end + 2).replace(/^export\s+/, "");
+const transpiled = ts.transpileModule(functionSource, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
+
 const buildAdminApp = new Function(
   "applicationDefault", "getApps", "initializeApp", "existsSync", "renameSync",
   "writeFileSync", "process", "ExternalAccountClient",
@@ -33,9 +34,11 @@ const names = [
 const previous = Object.fromEntries(names.map(name => [name, process.env[name]]));
 const tokenFile = "/tmp/imi-vercel-oidc-token";
 const configFile = "/tmp/imi-wif-config.json";
-const temporaryFiles = [tokenFile, configFile, ...names.flatMap(name => [
-  `${tokenFile}.${process.pid}.tmp`, `${configFile}.${process.pid}.tmp`,
-])];
+const temporaryFiles = [
+  tokenFile, configFile,
+  tokenFile + "." + process.pid + ".tmp",
+  configFile + "." + process.pid + ".tmp",
+];
 let app;
 
 try {

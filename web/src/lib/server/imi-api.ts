@@ -1,5 +1,6 @@
 import { applicationDefault, getApps, initializeApp, type App } from "firebase-admin/app";
-import { existsSync, renameSync, writeFileSync } from "node:fs";
+import { renameSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
@@ -64,22 +65,22 @@ export function adminApp(request: Request): App {
 
   const tokenFile = "/tmp/imi-vercel-oidc-token";
   const configFile = "/tmp/imi-wif-config.json";
-  const tokenTmp = `${tokenFile}.${process.pid}.tmp`;
+  // Unique same-directory temporary files plus renameSync prevent partial reads and
+  // collisions when concurrent requests refresh the shared credential files.
+  const tokenTmp = `${tokenFile}.${process.pid}.${randomUUID()}.tmp`;
   writeFileSync(tokenTmp, oidcToken, { mode: 0o600 });
   renameSync(tokenTmp, tokenFile);
 
-  if (!existsSync(configFile)) {
-    const configTmp = `${configFile}.${process.pid}.tmp`;
-    writeFileSync(configTmp, JSON.stringify({
-      type: "external_account",
-      audience: `//iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`,
-      subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
-      token_url: "https://sts.googleapis.com/v1/token",
-      service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccountEmail}:generateAccessToken`,
-      credential_source: { file: { path: tokenFile } },
-    }), { mode: 0o600 });
-    renameSync(configTmp, configFile);
-  }
+  const configTmp = `${configFile}.${process.pid}.${randomUUID()}.tmp`;
+  writeFileSync(configTmp, JSON.stringify({
+    type: "external_account",
+    audience: `//iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`,
+    subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
+    token_url: "https://sts.googleapis.com/v1/token",
+    service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccountEmail}:generateAccessToken`,
+    credential_source: { file: { path: tokenFile } },
+  }), { mode: 0o600 });
+  renameSync(configTmp, configFile);
 
   process.env.GOOGLE_APPLICATION_CREDENTIALS = configFile;
   if (existing) return existing;

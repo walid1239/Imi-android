@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync, existsSync, renameSync, unlinkSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, renameSync, unlinkSync, statSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import ts from "typescript";
 import { applicationDefault, deleteApp, getApps, initializeApp } from "firebase-admin/app";
@@ -16,13 +17,13 @@ const transpiled = ts.transpileModule(functionSource, {
 }).outputText;
 
 const buildAdminApp = new Function(
-  "applicationDefault", "getApps", "initializeApp", "existsSync", "renameSync",
-  "writeFileSync", "process", "ExternalAccountClient",
+  "applicationDefault", "getApps", "initializeApp", "renameSync",
+  "writeFileSync", "randomUUID", "process", "ExternalAccountClient",
   "let currentVercelOidcToken = null;\n" + transpiled + "\nreturn adminApp;",
 );
 const adminApp = buildAdminApp(
-  applicationDefault, getApps, initializeApp, existsSync, renameSync,
-  writeFileSync, process, ExternalAccountClient,
+  applicationDefault, getApps, initializeApp, renameSync,
+  writeFileSync, randomUUID, process, ExternalAccountClient,
 );
 
 const names = [
@@ -36,8 +37,7 @@ const tokenFile = "/tmp/imi-vercel-oidc-token";
 const configFile = "/tmp/imi-wif-config.json";
 const temporaryFiles = [
   tokenFile, configFile,
-  tokenFile + "." + process.pid + ".tmp",
-  configFile + "." + process.pid + ".tmp",
+  // Temporary files use unique UUID suffixes and are renamed away.
 ];
 let app;
 
@@ -77,6 +77,10 @@ try {
   );
   assert.equal(statSync(tokenFile).mode & 0o777, 0o600, "subject-token file must be owner-only");
 
+  process.env.GCP_PROJECT_NUMBER = "987654321098";
+  process.env.GCP_WORKLOAD_IDENTITY_POOL_ID = "rotated-pool";
+  process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID = "rotated-provider";
+  process.env.FIREBASE_SERVICE_ACCOUNT_EMAIL = "rotated@imi-indroid.iam.gserviceaccount.com";
   const sameApp = adminApp(request("ci-dummy-oidc-token-second"));
   assert.equal(sameApp, app, "subsequent requests must reuse the named Admin app");
   assert.equal(
@@ -85,7 +89,12 @@ try {
     "the subject-token file must be refreshed on every request",
   );
 
-  process.stdout.write("PASS adminApp: applicationDefault external_account credentials initialize getFirestore without network access; per-request token file refresh and file permissions verified.\n");
+  const refreshedConfig = JSON.parse(readFileSync(configFile, "utf8"));
+  assert.match(refreshedConfig.audience, /projects\\/987654321098\\/locations\\/global\\/workloadIdentityPools\\/rotated-pool\\/providers\\/rotated-provider$/,
+    "external-account config must be refreshed on every request");
+  assert.match(refreshedConfig.service_account_impersonation_url, /rotated@imi-indroid\\.iam\\.gserviceaccount\\.com:generateAccessToken$/);
+  assert.equal(statSync(configFile).mode & 0o777, 0o600, "external-account config must be owner-only");
+  process.stdout.write("PASS adminApp: applicationDefault external_account credentials initialize getFirestore without network access; per-request atomic token+config refresh and file permissions verified.\\n");
 } finally {
   if (app) await deleteApp(app);
   for (const file of temporaryFiles) {

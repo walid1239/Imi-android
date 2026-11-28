@@ -1,10 +1,13 @@
-import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
+import { applicationDefault, getApps, initializeApp, type App } from "firebase-admin/app";
+import { renameSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import { reserveRateLimitWindows } from "./rate-limit-core.mjs";
 import { applyTeacherClaimsOutboxOperation } from "../../../../functions/src/teacherClaimsOutbox";
+import { createTeacherAgreementAcceptances } from "../../../../functions/src/teacherAgreements";
 import { cleanupAccountData } from "../../../../functions/src/shared/accountDeletion";
 import { directConversationId } from "../../../../functions/src/conversationLogic";
 import { NextResponse } from "next/server";
@@ -16,10 +19,11 @@ import {
 } from "../../../../functions/src/shared/serverCore";
 import { authenticateBearer, publicErrorMessage } from "../../../../functions/src/shared/serverAuth";
 
-type Operation = "submitTeacherApplication" | "reviewTeacherApplication" | "publishCurriculum" | "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend" | "blockUser" | "unblockUser" | "createGroupConversation" | "addGroupParticipants" | "prepareReel" | "submitReel" | "reviewReel" | "deleteMyAccount";
+type Operation = "submitTeacherApplication" | "reviewTeacherApplication" | "saveTeacherProfile" | "publishCurriculum" | "createStatus" | "sendFriendRequest" | "createOrGetDirectConversation" | "acceptFriendRequest" | "rejectFriendRequest" | "removeFriend" | "blockUser" | "unblockUser" | "createGroupConversation" | "addGroupParticipants" | "prepareReel" | "submitReel" | "reviewReel" | "deleteMyAccount";
 const limits: Record<Operation, { count: number; windowMs: number }> = {
   submitTeacherApplication: { count: 3, windowMs: 24 * 60 * 60_000 },
   reviewTeacherApplication: { count: 60, windowMs: 60_000 },
+  saveTeacherProfile: { count: 5, windowMs: 60_000 },
   createStatus: { count: 2, windowMs: 60_000 },
   sendFriendRequest: { count: 10, windowMs: 60 * 60_000 },
   createOrGetDirectConversation: { count: 20, windowMs: 60_000 },
@@ -37,9 +41,7 @@ const limits: Record<Operation, { count: number; windowMs: number }> = {
   publishCurriculum: { count: 5, windowMs: 60_000 },
 };
 
-export function adminApp(): App {
-  const existing = getApps().find(app => app.name === "imi-server-api");
-  if (existing) return existing;
+export function adminApp(request: Request): App {
   const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   const usingEmulators = process.env.IMI_USE_FIREBASE_EMULATORS === "true"
     && Boolean(process.env.FIREBASE_AUTH_EMULATOR_HOST && process.env.FIRESTORE_EMULATOR_HOST)
@@ -47,16 +49,42 @@ export function adminApp(): App {
   if (!projectId || (!usingEmulators && projectId !== "imi-indroid")) {
     throw new Error("Firebase project configuration is unavailable.");
   }
-  if (process.env.FIREBASE_AUTH_EMULATOR_HOST && process.env.FIRESTORE_EMULATOR_HOST) {
-    return initializeApp({ projectId }, "imi-server-api");
+  const existing = getApps().find(app => app.name === "imi-server-api");
+  if (usingEmulators) return existing ?? initializeApp({ projectId }, "imi-server-api");
+
+  const oidcToken = request.headers.get("x-vercel-oidc-token") || process.env.VERCEL_OIDC_TOKEN;
+  if (!oidcToken) throw new Error("Vercel OIDC identity token is unavailable.");
+
+  const projectNumber = process.env.GCP_PROJECT_NUMBER;
+  const poolId = process.env.GCP_WORKLOAD_IDENTITY_POOL_ID;
+  const providerId = process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID;
+  const serviceAccountEmail = process.env.FIREBASE_SERVICE_ACCOUNT_EMAIL;
+  if (!projectNumber || !poolId || !providerId || !serviceAccountEmail) {
+    throw new Error("Google Workload Identity Federation is not configured.");
   }
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!raw) throw new Error("Server credentials are not configured.");
-  const serviceAccount = JSON.parse(raw) as { project_id?: string; client_email?: string; private_key?: string };
-  if (serviceAccount.project_id !== projectId || !serviceAccount.client_email || !serviceAccount.private_key) {
-    throw new Error("Server credentials are invalid.");
-  }
-  return initializeApp({ credential: cert(serviceAccount as Parameters<typeof cert>[0]), projectId }, "imi-server-api");
+
+  const tokenFile = "/tmp/imi-vercel-oidc-token";
+  const configFile = "/tmp/imi-wif-config.json";
+  // Unique same-directory temporary files plus renameSync prevent partial reads and
+  // collisions when concurrent requests refresh the shared credential files.
+  const tokenTmp = `${tokenFile}.${process.pid}.${randomUUID()}.tmp`;
+  writeFileSync(tokenTmp, oidcToken, { mode: 0o600 });
+  renameSync(tokenTmp, tokenFile);
+
+  const configTmp = `${configFile}.${process.pid}.${randomUUID()}.tmp`;
+  writeFileSync(configTmp, JSON.stringify({
+    type: "external_account",
+    audience: `//iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`,
+    subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
+    token_url: "https://sts.googleapis.com/v1/token",
+    service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccountEmail}:generateAccessToken`,
+    credential_source: { file: { path: tokenFile } },
+  }), { mode: 0o600 });
+  renameSync(configTmp, configFile);
+
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = configFile;
+  if (existing) return existing;
+  return initializeApp({ credential: applicationDefault(), projectId }, "imi-server-api");
 }
 
 function assertOrigin(request: Request): void {
@@ -166,7 +194,7 @@ export async function handleDeleteAccount(request: Request): Promise<Response> {
       return NextResponse.json({ error: "اكتب DELETE لتأكيد حذف الحساب وبياناته." }, { status: 400 });
     }
 
-    const app = adminApp();
+    const app = adminApp(request);
     const authorization = request.headers.get("authorization") ?? "";
     const match = /^Bearer\s+(.+)$/i.exec(authorization);
     if (!match) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -231,7 +259,7 @@ export async function handleImiPost(request: Request, operation: Operation): Pro
       return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
     }
 
-    const app = adminApp();
+    const app = adminApp(request);
     const uid = await authenticateBearer(request.headers.get("authorization"), {
       verifyIdToken: token => getAuth(app).verifyIdToken(token, true),
     });
@@ -447,6 +475,43 @@ export async function handleImiPost(request: Request, operation: Operation): Pro
           });
         });
         return { status: "pending" };
+      },
+      saveTeacherProfile: async () => {
+        const account = await getAuth(app).getUser(uid);
+        if (account.customClaims?.teacherVerified !== true) {
+          throw new CoreError("permission-denied", "يجب توثيق حساب الأستاذ أولاً.");
+        }
+        const bio = typeof body.bio === "string" ? body.bio.trim() : "";
+        if (bio.length < 30 || bio.length > 1200) {
+          throw new CoreError("invalid-argument", "النبذة مطلوبة ويجب أن تتراوح بين 30 و1200 حرف.");
+        }
+        const photoPath = typeof body.photoPath === "string" ? body.photoPath.trim() : "";
+        if (photoPath !== "") {
+          throw new CoreError("failed-precondition", "رفع صورة الأستاذ غير متاح حالياً؛ أرسل photoPath فارغاً.");
+        }
+        if (body.contentAgreement !== true || body.childSafetyAgreement !== true) {
+          throw new CoreError("failed-precondition", "يجب قبول اتفاقية المحتوى والحقوق وقواعد حماية القاصرين.");
+        }
+        const [subjectIds, levelIds] = await Promise.all([
+          publishedNodeIds(app, body.subjectIds, "subject"),
+          publishedNodeIds(app, body.levelIds, "level"),
+        ]);
+        const db = getFirestore(app);
+        const application = await db.collection("teacherApplications").doc(uid).get();
+        if (!application.exists || application.get("status") !== "approved") {
+          throw new CoreError("failed-precondition", "يجب اعتماد طلب توثيق الأستاذ قبل إنشاء الملف المهني.");
+        }
+        const displayName = typeof application.get("fullName") === "string"
+          ? application.get("fullName") as string : "أستاذ IMI";
+        const timestamp = FieldValue.serverTimestamp();
+        await db.collection("teacherProfiles").doc(uid).set({
+          uid, displayName, bio, photoPath: "", subjectIds, levelIds,
+          verified: true, badge: "أستاذ موثّق",
+          contentAgreement: true, childSafetyAgreement: true,
+          agreementAcceptances: createTeacherAgreementAcceptances(uid, timestamp),
+          profileComplete: true, published: true, updatedAt: timestamp,
+        }, { merge: true });
+        return { profileComplete: true, photoPath: "" };
       },
       reviewTeacherApplication: async () => {
         const actor = await getAuth(app).getUser(uid);

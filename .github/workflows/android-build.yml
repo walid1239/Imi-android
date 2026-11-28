@@ -23,6 +23,7 @@ on:
       - 'scripts/test-teacher-emulator.cjs'
       - 'web/src/components/phone-otp-form.tsx'
       - 'web/src/app/login/page.tsx'
+      - 'docs/HANDOFF.md'
       - 'web/src/components/profile-panel.tsx'
   pull_request:
     branches: [ main, master, 'feature/**' ]
@@ -50,6 +51,11 @@ concurrency:
 jobs:
   build:
     name: Build and test Android app
+    permissions:
+      contents: read
+    outputs:
+      firebase_configured: ${{ steps.firebase_config.outputs.configured }}
+      apk_artifact_name: ${{ steps.firebase_config.outputs.artifact_name }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -114,26 +120,28 @@ jobs:
             fi
             echo "Firebase Android config validated: project_id='$actual_project_id', package='com.walid.chat'."
             echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=IMI-debug-apk-firebase-configured" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=IMI-debug-apk-no-firebase-config" >> "$GITHUB_OUTPUT"
             echo "::warning::Neither GOOGLE_SERVICES_JSON nor GOOGLE_SERVICES_JSON_BASE64 is configured. The APK will be test-only and will not connect to Firebase."
           fi
 
       - name: Run unit tests and assemble debug APK
         id: android_build
-        run: gradle --no-daemon testDebugUnitTest assembleDebug assembleDebugAndroidTest assembleRelease
+        run: gradle --no-daemon -PIMI_API_BASE_URL=https://imi-api-preview.vercel.app testDebugUnitTest assembleDebug assembleDebugAndroidTest assembleRelease
 
       - name: Upload debug APK for device verification
         if: always() && steps.android_build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.firebase_config.outputs.configured == 'true' && 'IMI-debug-apk-firebase-configured' || 'IMI-debug-apk-no-firebase-config' }}
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
 
-      # MainActivity creates an anonymous Firebase Auth user on launch.
-      # Never launch a Firebase-configured APK against the production project in CI.
+      # Live Firebase Android smoke tests are intentionally skipped in CI.
+      # Never create test accounts or write test data to the real Firebase project.
       - name: Skip live-Firebase Android smoke test
         if: steps.firebase_config.outputs.configured == 'true'
         run: echo "Skipped device launch to prevent anonymous Auth writes to the real Firebase project."
@@ -152,6 +160,37 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 900
           script: gradle --no-daemon connectedDebugAndroidTest
+
+  publish-preview:
+    name: Publish preview APK
+    needs: build
+    if: ${{ needs.build.result == 'success' && needs.build.outputs.firebase_configured == 'true' && github.event_name == 'workflow_dispatch' && vars.IMI_ALLOW_PREVIEW_APK_PUBLISH == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download the APK built by the read-only job
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.apk_artifact_name }}
+          path: dist/apk
+
+      - name: Verify downloaded APK
+        run: test -s dist/apk/app-debug.apk
+
+      - name: Publish APK to the IMI preview release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: imi-preview
+          name: IMI Preview APK
+          prerelease: true
+          make_latest: false
+          files: dist/apk/app-debug.apk
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          body: |
+            Automated preview build from commit ${{ github.sha }}.
+            This is a preview APK, not a production release.
 
   # Firebase CLI 15.37.0 Emulator Suite requires JDK 21+.
   security-rules:

@@ -1,0 +1,88 @@
+name: Preview build check
+on:
+  push:
+    branches: [feature/imi-teacher-admin-preview, feature/imi-web-foundation]
+    paths: ['web/**', 'functions/src/**', 'functions/scripts/**', 'docs/HANDOFF.md', '.github/workflows/web-ci.yml', '.github/workflows/android-build.yml', '.github/workflows/preview-build-check.yml']
+  pull_request:
+    branches: [ main, master ]
+    paths: ['web/**', 'functions/src/**', 'functions/scripts/**', 'docs/HANDOFF.md', '.github/workflows/web-ci.yml', '.github/workflows/android-build.yml', '.github/workflows/preview-build-check.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: preview-build-check-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    env:
+      VERCEL: "1"
+      NEXT_PUBLIC_FIREBASE_API_KEY: ci-placeholder
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: imi-indroid.firebaseapp.com
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: imi-indroid
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: imi-indroid.appspot.com
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "1"
+      NEXT_PUBLIC_FIREBASE_APP_ID: ci-placeholder
+      FIREBASE_PROJECT_ID: imi-indroid
+      GCP_PROJECT_NUMBER: "135769436246"
+      GCP_WORKLOAD_IDENTITY_POOL_ID: imi-vercel-preview
+      GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID: vercel-preview
+      FIREBASE_SERVICE_ACCOUNT_EMAIL: firebase-adminsdk-fbsvc@imi-indroid.iam.gserviceaccount.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Verify Vercel branch and Preview-only guard
+        run: |
+          set +e
+          VERCEL_GIT_COMMIT_REF=feature/imi-teacher-admin-preview VERCEL_ENV=preview bash scripts/vercel-ignore.sh
+          feature_code=$?
+          VERCEL_GIT_COMMIT_REF=main VERCEL_ENV=preview bash scripts/vercel-ignore.sh
+          main_code=$?
+          VERCEL_GIT_COMMIT_REF=untrusted-branch VERCEL_ENV=preview bash scripts/vercel-ignore.sh
+          other_code=$?
+          VERCEL_GIT_COMMIT_REF=main VERCEL_ENV=production bash scripts/vercel-ignore.sh
+          production_code=$?
+          set -e
+          echo "feature preview exit: $feature_code"
+          echo "main preview exit: $main_code"
+          echo "other branch exit: $other_code"
+          echo "production exit: $production_code"
+          test "$feature_code" -eq 1
+          test "$main_code" -eq 1
+          test "$other_code" -eq 0
+          test "$production_code" -eq 0
+      - name: Hosted env guard must fail when variables are missing
+        run: |
+          set +e
+          env -i PATH="$PATH" VERCEL=1 node scripts/check-env.mjs
+          code=$?
+          echo "exit code: $code"
+          test "$code" -eq 1
+      - name: Build like Vercel (no functions install)
+        run: npm run build
+      - name: Smoke test production server
+        run: |
+          npx next start -p 3100 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          for i in $(seq 1 40); do curl -fs -o /dev/null http://127.0.0.1:3100/api/health && break; sleep 1; done
+          check() { code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3100$1"); echo "$1 -> $code"; test "$code" = "$2"; }
+          fail=0
+          check /api/health 200 || fail=1
+          check /login 200 || fail=1
+          check /academy 200 || fail=1
+          test -z "${IMI_ADMIN_HEALTH:-}" && echo "IMI_ADMIN_HEALTH unset" || { echo "IMI_ADMIN_HEALTH unexpectedly set"; fail=1; }
+          body=$(curl -s http://127.0.0.1:3100/api/v1/health/admin)
+          echo "$body"
+          echo "$body" | grep -q '"error":"Not found."' || fail=1
+          check /api/v1/health/admin 404 || fail=1
+          exit "$fail"

@@ -17,7 +17,7 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
-    const app = adminApp();
+    const app = adminApp(request);
     const decoded = await getAuth(app).verifyIdToken(match[1], true);
     if (decoded.admin !== true) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });

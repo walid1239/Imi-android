@@ -340,11 +340,51 @@ test('teacher applications use HTTPS proof links, published curriculum and admin
   expect(claims.teacher).toBe(true);
   expect(claims.teacherVerified).toBe(true);
 
+  const profileResponse = await post('/api/v1/teachers/profile', {
+    bio: 'أستاذة متخصصة في الرياضيات والعلوم مع خبرة تعليمية واستخدام موارد تعليمية موثوقة.',
+    photoPath: '',
+    subjectIds: payload.subjectIds,
+    levelIds: payload.levelIds,
+    contentAgreement: true,
+    childSafetyAgreement: true,
+  }, refreshedToken);
+  expect(profileResponse.status).toBe(200);
+  expect((await profileResponse.json()).data).toMatchObject({ profileComplete: true, photoPath: '' });
+  const profile = await emulatorDocument('teacherProfiles/' + applicantUid);
+  const profileFields = profile?.fields as Record<string, { stringValue?: string; booleanValue?: boolean }>;
+  expect(profileFields.photoPath.stringValue).toBe('');
+  expect(profileFields.verified.booleanValue).toBe(true);
+  expect(profileFields.contentAgreement.booleanValue).toBe(true);
+  expect(profileFields.childSafetyAgreement.booleanValue).toBe(true);
+
+  const missingConsent = await post('/api/v1/teachers/profile', {
+    bio: 'نبذة تعليمية طويلة بما يكفي لاجتياز التحقق من الحد الأدنى.',
+    photoPath: '',
+    subjectIds: payload.subjectIds,
+    levelIds: payload.levelIds,
+    contentAgreement: true,
+    childSafetyAgreement: false,
+  }, refreshedToken);
+  expect(missingConsent.status).toBe(409);
+
   const stored = await emulatorDocument('teacherApplications/' + applicantUid);
   const fields = stored?.fields as Record<string, { stringValue?: string }>;
   expect(fields.status.stringValue).toBe('approved');
   expect(fields.proofUrl.stringValue).toBe(payload.proofUrl);
   expect(fields.evidencePath).toBeUndefined();
+
+  const rejectedUid = 'imi-e2e-d-' + suffix;
+  const rejectedToken = await idToken('e2e-d-' + suffix + '@imi.test');
+  const rejectionSubmission = await post('/api/v1/teachers/applications', payload, rejectedToken);
+  expect(rejectionSubmission.status).toBe(200);
+  const rejected = await post('/api/v1/admin/teachers/review', {
+    uid: rejectedUid, approved: false, note: 'اختبار رفض الطلب',
+  }, adminToken);
+  expect(rejected.status).toBe(200);
+  expect((await rejected.json()).data.status).toBe('rejected');
+  const rejectedUser = await adminAuth.getUser(rejectedUid);
+  expect(rejectedUser.customClaims?.teacherVerified).toBeUndefined();
+  expect(rejectedUser.customClaims?.teacher).toBeUndefined();
 });
 
 

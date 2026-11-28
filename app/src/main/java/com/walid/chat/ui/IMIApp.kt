@@ -825,8 +825,7 @@ private fun ProfileScreen() {
                 return@LaunchedEffect
             }
             val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
-            val user = auth.currentUser ?: auth.signInAnonymously().await().user
-                ?: error("تعذر فتح جلسة الحساب")
+            val user = auth.currentUser ?: error("انتهت جلسة الحساب. سجّل الدخول مجدداً.")
             val snapshot = com.google.firebase.firestore.FirebaseFirestore.getInstance()
                 .collection("users").document(user.uid).get().await()
             if (snapshot.exists()) {

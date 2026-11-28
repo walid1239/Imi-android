@@ -1,12 +1,204 @@
-# IMI handoff — 2026-11-22
+# Latest handoff update — 2026-11-25 14:50 UTC
+
+## AdminApp Workload Identity Federation fix
+
+- Branch: `feature/imi-teacher-admin-preview`.
+- Verified implementation SHA: `406747c609ba7974ac2a8761f59602d232c40b80` ([commit](https://github.com/walid1239/Imi-android/commit/406747c609ba7974ac2a8761f59602d232c40b80)).
+- PR [#4](https://github.com/walid1239/Imi-android/pull/4) remains open and unmerged.
+- `web/src/lib/server/imi-api.ts` now initializes Firebase Admin using `applicationDefault()` and a generated `external_account` ADC configuration at `/tmp/imi-wif-config.json`. The request OIDC token is atomically written on each request to `/tmp/imi-vercel-oidc-token` with mode `0600`; the config file is atomically created with mode `0600`. The module-global OIDC token and custom credential object were removed. No token or credential-file contents are logged.
+- The four required WIF environment variables remain validated before credential setup. The named Admin app is reused only after the per-request token file has been refreshed.
+
+## Regression test — observed before and after
+
+- Added `web/scripts/admin-app.test.mjs`, `npm run test:admin-app`, and the test step in `.github/workflows/web-ci.yml`.
+- Before the fix, on test-enabled SHA `58af9bb715c390418757d562241595ef2da8dfe9`, Web CI [Run 45637373994](https://github.com/walid1239/Imi-android/actions/runs/45637373994) completed **failure** at `npm run test:admin-app`. The observed error was `firestore/invalid-credential`: “Failed to initialize Google Cloud Firestore client with the available credentials. Must initialize the SDK with a certificate credential or application default credentials to use Cloud Firestore API.”
+- After the fix, on implementation SHA `406747c609ba7974ac2a8761f59602d232c40b80`, the same test completed **success** in Web CI [Run 45637624813](https://github.com/walid1239/Imi-android/actions/runs/45637624813). Exact log line: `PASS adminApp: applicationDefault external_account credentials initialize getFirestore without network access; per-request token file refresh and file permissions verified.`
+- This is a local/offline SDK initialization regression test with dummy WIF values and dummy OIDC strings. It does **not** contact STS, call IAM Credentials, verify the real Vercel OIDC issuer/audience, or prove that the real service account can access Firestore.
+
+## CI and preview artifact evidence for implementation SHA
+
+All three workflow runs below are tied to exact SHA `406747c609ba7974ac2a8761f59602d232c40b80`:
+
+- Web CI [Run 45637624813](https://github.com/walid1239/Imi-android/actions/runs/45637624813): **completed / success**. Web job, Functions tests/integration, Firestore rules, and Playwright all succeeded. Playwright reported `50 passed (1.0m)`; Web tests included `test:env`, `test:admin-app`, dependency audit, TypeScript, rate-limit, build and health checks.
+- Android CI [Run 45637624918](https://github.com/walid1239/Imi-android/actions/runs/45637624918): **completed / success**. Android unit tests and Debug APK build/upload succeeded; Firebase security rules tests succeeded; separate `publish-preview` job downloaded and verified the APK and updated the preview release. Android emulator runtime step was **skipped** by the workflow; no physical-device test is implied.
+- Preview build check [Run 45637611654](https://github.com/walid1239/Imi-android/actions/runs/45637611654): **completed / success**. Preview branch guard, hosted-environment guard, Vercel-like build and local production-server smoke checks passed. This is CI validation, not a new Vercel deployment.
+
+Preview release [`imi-preview`](https://github.com/walid1239/Imi-android/releases/tag/imi-preview):
+- Asset: `app-debug.apk`, 24,531,851 bytes.
+- SHA-256: `6858bd60c94dad5b776ef847f5df4715d5c75dea3c7606b7ee22421328fb354f`.
+- Build artifact: `IMI-debug-apk-firebase-configured`, artifact ID `15035085498`, 23,582,534 bytes; SHA-256 `216663ee5beab24bda87218bf21e3a296df1e22e759511f2cac3fb57d68cb973`; expires 2026-12-09 14:50 UTC.
+
+## Live verification still outstanding
+
+1. **STS exchange and IAM service-account impersonation on Vercel Preview are not live-tested.** The offline test only proves that Firebase Admin accepts the ADC external-account credential configuration and can construct a Firestore client without making a network call. A real request must confirm STS token exchange, `generateAccessToken` permission, and the Firebase service account's Firestore access.
+2. **Real Firebase Auth/Firestore acceptance remains outstanding.** No real user login, status creation, or conversation write was performed by these CI runs.
+3. **Vercel deployment freshness remains outstanding.** No Vercel Preview deployment was initiated as part of this fix; do not treat the CI build as a live deployment or live WIF proof.
+4. The Android emulator runtime step was skipped; no physical-device acceptance was performed.
+
+## Safety and scope
+
+- No files under `app/` were changed.
+- No Production deployment, PR merge, Firebase/Vercel secret mutation, Firebase rules deployment, Blaze upgrade, payment, Cloud Functions deployment or invocation occurred.
+- The existing `docs/API_CONTRACT.md` and separate `publish-preview` workflow implementation were left unchanged in this adminApp fix.
+
+---
+
+# IMI handoff — latest verified evidence, 2026-11-23
+
+## حالة المعاينة — تحديث 2026-11-23 15:40 UTC
+
+- رأس التطبيق الذي فُحص: `45e04d464f9aff15d404e2a2f88506b86c51fddf`. بعده أُنشئت تحديثات توثيق فقط: `47d6d93b0b21aef3eb2a586286b151077eb11f21` لتصحيح حالة المعاينة، ثم `424399055cd098bbe0747b537a1cdbefd8f56327` لتصحيح تعليمات Git في دليل المالك. لا تتضمن هاتان الدفعتان تغييراً في كود التطبيق؛ آخر SHA بعد تحديث HANDOFF الحالي سيظهر في سجل GitHub.
+- Web CI: [Run 45205980954](https://github.com/walid1239/Imi-android/actions/runs/45205980954) — `completed / success` على SHA التطبيق `45e04d4`.
+- Android CI: [Run 45205980943](https://github.com/walid1239/Imi-android/actions/runs/45205980943) — `completed / success` على SHA التطبيق `45e04d4`؛ تشغيل التطبيق على Android Emulator كان `skipped`.
+- Preview build check: آخر Run متاح [45204952842](https://github.com/walid1239/Imi-android/actions/runs/45204952842) على SHA أقدم `34a35b1f19b6ce0c4b5ee03d22631316871c1daf`، وليس على رأس الفرع الحالي. حالته `completed / success`.
+- Firebase safety: آخر Run متاح [45056409885](https://github.com/walid1239/Imi-android/actions/runs/45056409885) أقدم من SHA الحالي؛ الحارس `success` والتحقق/النشر `skipped`. لم يظهر Run مطابق للرأس الحالي.
+- مخرجات Preview build check القديم حرفياً: `feature preview exit: 1`, `main preview exit: 1`, `other branch exit: 0`, `production exit: 0`; البناء `✓ Compiled successfully in 10.8s`; `/api/health -> 200`; `/login -> 200`; `/academy -> 200`; `IMI_ADMIN_HEALTH unset`; جسم `/api/v1/health/admin`: `{"error":"Not found."}`; وحالته `/api/v1/health/admin -> 404`.
+- Vercel project `imi-preview` ضمن `walid2` لديه Deployment سابق فاشل للفرع نفسه، SHA `21cfddbe887a46c4658c2f13d17c87e3924edfb1`: [Deployment](https://vercel.com/walid2/imi-preview/HUNAdSugYnEetHNVTPhuWgtPi7sj) — `ERROR`. سجل البناء يؤكد أن Vercel استنسخ المستودع والفرع، لذلك اتصال GitHub استُخدم لهذا النشر؛ لا يوجد Deployment مثبت على SHA الحالي.
+- أول خطأ بناء Vercel: `متغير مفقود: FIREBASE_SERVICE_ACCOUNT_JSON`. ثم `Error: [BUILD_UTILS_SPAWN_1] Command "npm run build" exited with 1`.
+- بيانات Preview التي أمكن قراءتها أظهرت سبعة أسماء متغيرات: ستة `NEXT_PUBLIC_FIREBASE_*` و`FIREBASE_PROJECT_ID`. `FIREBASE_SERVICE_ACCOUNT_JSON` غير موجود. لم تُقرأ أو تُطبع أي قيمة سرية.
+- إعداد Root Directory وخيار تضمين الملفات خارج الجذر لم يظهر في قراءة إعدادات المشروع المتاحة؛ يظلان غير مؤكدين. لم يُنفّذ اختبار دخان على Vercel لأن النشر الحالي فاشل ولا يوجد رابط Preview صالح.
+- لم يتغير Firebase الحقيقي، ولم يحدث نشر Production أو Cloud Functions أو دمج PR.
+
+---
+
+
+This section supersedes older status statements below where they conflict.
+
+## Latest verified source SHA
+
+`34a35b1f19b6ce0c4b5ee03d22631316871c1daf`
+
+This is the latest fully checked source/documentation SHA on `feature/imi-teacher-admin-preview`. It includes the handoff update; its application code is unchanged from the preceding verified source. All three required workflows below ran against this exact SHA.
+
+- Preview build check: [Run 45204952842](https://github.com/walid1239/Imi-android/actions/runs/45204952842) — `completed / success`.
+- IMI Web CI: [Run 45204965584](https://github.com/walid1239/Imi-android/actions/runs/45204965584) — `completed / success`.
+- IMI Android CI: [Run 45204965638](https://github.com/walid1239/Imi-android/actions/runs/45204965638) — `completed / success`.
+
+### Preview build-check output (exact)
+
+```text
+feature preview exit: 1
+main preview exit: 1
+other branch exit: 0
+production exit: 0
+/api/health -> 200
+/login -> 200
+/academy -> 200
+IMI_ADMIN_HEALTH unset
+/api/v1/health/admin -> 404
+```
+
+Build output: `✓ Compiled successfully in 10.8s`. The 404 on the admin health route is expected because `IMI_ADMIN_HEALTH` is unset. The workflow used a CI-only placeholder service-account JSON to validate build configuration; it did not authenticate against the real Firebase project.
+
+### Web CI
+
+All five jobs completed successfully: `web`, `rules`, `functions`, `Playwright browser tests against Firebase Emulator`, and `Validate Coturn Compose configuration (no server start)`.
+
+- Web build: `✓ Compiled successfully in 11.1s`.
+- Browser E2E build: `✓ Compiled successfully in 7.6s`.
+- Playwright: `50 passed (1.0m)`.
+- Emulator logs included warnings `Error: Developer claims payload should not exceed 1000 characters.` twice and `FirebaseError: Unable to refresh auth: not yet authenticated.`; all jobs still exited successfully.
+
+### Android CI
+
+Both jobs completed successfully: Firebase security-rules tests and Android build/test.
+
+- Build: `BUILD SUCCESSFUL in 3m 31s`.
+- Debug APK artifact uploaded: [artifact 14832674253](https://github.com/walid1239/Imi-android/actions/runs/45204965638/artifacts/14832674253).
+- `Run IMI on Android emulator` was `skipped`.
+- Live-Firebase Android smoke was skipped because the Firebase Android config secret was not configured in CI. The uploaded APK is test-only and not proven connected to Firebase.
+
+### Login errors and curriculum import/publish
+
+- Login maps `auth/unauthorized-domain` and `CONFIGURATION_NOT_FOUND` to Arabic guidance; Playwright tests cover both and are included in the 50 passing tests. The tests use mocked/emulated endpoints, not a live hosted domain.
+- `data/curriculum.json` is compatible with the admin import component's `{nodes:[...]}` format and contains the three roots `primary`, `lower-secondary`, and `upper-secondary`.
+- The admin UI imports JSON nodes, previews publication, and publishes a selected root recursively. The API checks the admin claim, root type and parent state; publication changes hidden/review nodes to published and writes an audit log. Real Firebase import/publish was not performed.
+- The curriculum is an initial structure, not ministry-approved content, and contains no lessons.
+
+### PR #4
+
+[PR #4](https://github.com/walid1239/Imi-android/pull/4) is `open`, `draft=false` (Ready for review), `merged=false`. It remains unmerged.
+
+## Vercel status — deployment still blocked before Preview
+
+- Existing Vercel project: `imi-preview`, team `walid2`, framework `nextjs`, Node `22.x`.
+- A project settings update request was accepted for Root Directory `web`, source files outside Root Directory enabled, default install/build commands, and ignore command `bash scripts/vercel-ignore.sh`; the API readback does not expose all these fields, so they are not independently confirmed.
+- سجل Build للـDeployment الفاشل يثبت حرفياً `Cloning github.com/walid1239/Imi-android (Branch: feature/imi-teacher-admin-preview, Commit: 21cfddb)`؛ لذلك استُخدم اتصال GitHub لهذا النشر. لا يوجد Deployment جديد مثبت على SHA الحالي.
+- Project SSO protection is currently enabled for `all_except_custom_domains`; default Vercel deployment URLs may require team authentication. This has not been changed.
+- Preview environment metadata contains six `NEXT_PUBLIC_FIREBASE_*` values and `FIREBASE_PROJECT_ID`; `FIREBASE_SERVICE_ACCOUNT_JSON` is absent. No secret was decrypted or printed.
+- Current code requires `FIREBASE_SERVICE_ACCOUNT_JSON` in `web/scripts/check-env.mjs` and uses it with Firebase Admin `cert(...)` in `web/src/lib/server/imi-api.ts`. WIF is not implemented in this runtime; Vercel OIDC alone does not replace this requirement.
+- Last Vercel deployment remains the old failed deployment `dpl_HUNAdSugYnEetHNVTPhuWgtPi7sj`, SHA `21cfddbe887a46c4658c2f13d17c87e3924edfb1`, state `ERROR`, URL `https://imi-preview-goovq2nyt-walid2.vercel.app`. First error: `متغير مفقود: FIREBASE_SERVICE_ACCOUNT_JSON`.
+- لا يوجد Deployment صالح/ناجح مثبت على SHA `45e04d464f9aff15d404e2a2f88506b86c51fddf`؛ النشر السابق للفرع انتهى `ERROR` على SHA `21cfddbe887a46c4658c2f13d17c87e3924edfb1`. لم يُنفّذ فحص دخان مستضاف. **لم تُنشر معاينة صالحة لهذا الرأس.**
+- Owner actions are documented in `docs/OWNER_DEPLOY_MESSAGE.md`: add the service-account JSON as Sensitive Preview-only env, connect the existing Vercel project to GitHub, confirm Root Directory and Include source files outside of Root Directory, set a non-used Production Branch, and decide how Preview SSO protection should be handled for intended testers.
+
+## Not tested / not performed
+
+- No live Firebase Authentication sign-in, real Authorized Domains flow, real admin claim, Firestore write, Storage upload, or real user flow was tested.
+- No Firebase rules or indexes were deployed to the real Firebase project.
+- No Cloud Functions deployment, Blaze upgrade, paid service, Production deployment, or PR merge occurred.
+- CI uses Firebase Emulators/mocks; green CI does not prove real Firebase configuration, IAM, hosting permissions, or production behavior.
+- Project remains Preview-only and is not approved for Production.
+
+---
+
+
+# IMI handoff — 2026-11-23
+
+## Latest verification — 2026-11-23
+
+This section supersedes older run/status references below where they conflict. Latest verified branch head before this documentation-only refresh: `4afe56f5626097d473609f42952611cd31f29a30`.
+
+- Preview build check: [Run 45134977543](https://github.com/walid1239/Imi-android/actions/runs/45134977543) — **success**.
+- Web CI: [Run 45134982085](https://github.com/walid1239/Imi-android/actions/runs/45134982085) — **success**; Playwright: `50 passed (1.3m)`. A Functions-emulator request logged `socket hang up`, but all 50 tests passed and the job exited successfully.
+- Android CI: [Run 45134982098](https://github.com/walid1239/Imi-android/actions/runs/45134982098) — **success**; Firebase security-rules emulator tests, Android unit tests, debug APK assembly and artifact upload succeeded. `Run IMI on Android emulator` was **skipped**; the live-Firebase Android smoke test was skipped by design.
+
+### Exact Preview smoke output
+
+```text
+/api/health -> 200
+/login -> 200
+/academy -> 200
+IMI_ADMIN_HEALTH unset
+{"error":"Not found."}
+/api/v1/health/admin -> 404
+```
+
+The Vercel branch allowlist test passed with these exact exit codes:
+
+```text
+feature preview exit: 1
+main preview exit: 1
+other branch exit: 0
+production exit: 0
+```
+
+The build compiled successfully (`Compiled successfully in 8.2s`). The 404 on `/api/v1/health/admin` is expected because `IMI_ADMIN_HEALTH` is unset.
+
+### Vercel / owner setup status
+
+- Vercel project `imi-preview` has the six public `NEXT_PUBLIC_FIREBASE_*` values and `FIREBASE_PROJECT_ID` in Preview, but no `FIREBASE_SERVICE_ACCOUNT_JSON`. No secret value was decrypted or printed.
+- The last recorded Vercel deployment `dpl_HUNAdSugYnEetHNVTPhuWgtPi7sj` ended with `ERROR`. First build error: `متغير مفقود: FIREBASE_SERVICE_ACCOUNT_JSON`; then `Error: [BUILD_UTILS_SPAWN_1] Command "npm run build" exited with 1`.
+- No Vercel deployment for the latest branch SHA appeared after pushes. GitHub auto-deploy integration, Root Directory `web`, Node `22.x`, and **Include source files outside of the Root Directory** are not verified as configured. Follow `docs/OWNER_DEPLOY_MESSAGE.md` once, then monitor the resulting Preview.
+- The owner must connect the GitHub repository and add `FIREBASE_SERVICE_ACCOUNT_JSON` as a Sensitive Preview-only variable. No key or token was requested, copied, or committed.
+
+### PR state
+
+PR #4 is **Ready for review**, open, and unmerged: https://github.com/walid1239/Imi-android/pull/4. No merge is authorized.
+
+### Not tested / not performed
+
+- No live Firebase Authentication, Firestore, Storage, real user accounts, or real admin claim was changed or verified.
+- No Firestore rules/indexes were deployed to the real Firebase project.
+- No Cloud Functions deployment, Blaze upgrade, payment, Production deployment, or PR merge occurred.
+- The Preview URL and its hosted smoke tests remain unavailable until the owner completes the one-time Vercel connection and Preview environment setup.
 
 ## Repository and owner constraints
 
 - Repository: `walid1239/Imi-android`
-- Working branch: `feature/imi-web-foundation`
-- Application-code baseline validated here: `97b654e96665d1d947a8a6e2e97c9202765769bc`
-- PR #2 is open, not merged; base: `feature/server-authoritative-status`.
-- This handoff refresh is documentation-only; it does not change application source or runtime configuration.
+- Baseline branch: `feature/imi-web-foundation`; isolated implementation branch: `feature/imi-teacher-admin-preview`.
+- Base SHA: `106d656c044769828065b5bf5d76998820d27880`; latest verified application/workflow SHA: `4afe56f5626097d473609f42952611cd31f29a30` (CI-green; see latest verification below).
+- PR #2 is open, not merged; base: `feature/server-authoritative-status`. PR #4 is Draft and targets `feature/imi-web-foundation`.
+- This handoff records source changes on isolated Draft PR #4; it does not change Firebase/hosting runtime or perform deployment.
 - No Production deployment, PR merge, Firebase Console mutation, Firebase rules/index deployment, Blaze upgrade, payment card, paid service, or secret publication was performed.
 
 Binding constraints: Firebase Spark only; do not invoke Cloud Functions; Next.js `/api/v1` is the trusted server layer; keep Storage-dependent uploads disabled until Spark eligibility is confirmed; do not switch Storage to Supabase without explicit owner approval; no WhatsApp OTP until the inbound flow is implemented and explicitly enabled; keep account deletion disabled until full verification.
@@ -26,8 +218,8 @@ Binding constraints: Firebase Spark only; do not invoke Cloud Functions; Next.js
 | 9. Account deletion | API route exists but is disabled unless `IMI_ACCOUNT_DELETION_ENABLED=true`; default response is 503. | `functions/src/shared/accountDeletion.ts`, `web/src/lib/server/imi-api.ts`, `web/src/app/api/v1/account/delete/route.ts`, `scripts/test-account-deletion-emulator.cjs`. Keep the flag unset until full cleanup/failure verification and owner approval. |
 | 10. Android metadata/release | Android profile writes include `updatedAt`; the Emulator rules test now covers the exact `users/{uid}/avatars/...` path used by Android and rejects a foreign user's path. Debug and Release builds pass. | `app/build.gradle.kts`, `app/src/main/java/**`, `tests/firestore.rules.test.mjs`. APK artifact is Firebase-configured and uploaded. The device smoke test is deliberately skipped for Firebase-configured APKs because `MainActivity` creates an anonymous Auth user on launch; do not run it against the real project in CI. No signed Release acceptance or physical-device test has been performed. |
 | 11. Firebase setup | Login and Academy UI detect missing Firebase configuration and display setup guidance; build-only fallback is inert. | `web/src/lib/firebase/client.ts`, `web/src/app/login/page.tsx`, `web/src/components/firebase-config-required.tsx`. Real-project authentication has not been tested. |
-| 12. Academy and teacher workflow | Learner Web/Android-Web hierarchy remains level → track → subject → unit. Admins have a protected batch-publish endpoint with dry-run, explicit confirmation, parent validation, 400-write batches and an audit log. Teacher application submission and admin review now have authenticated `/api/v1` routes with validation, duplicate protection, claims-outbox synchronization and E2E coverage. | `web/src/app/api/v1/admin/curriculum/publish/route.ts`, `web/src/app/api/v1/teachers/applications/route.ts`, `web/src/app/api/v1/admin/teachers/review/route.ts`, `web/src/lib/server/imi-api.ts`, `web/e2e/server-api.spec.ts`. Public teacher application UI remains deliberately closed (`التقديم متوقف مؤقتاً`) pending verified-teacher operations and child-safety readiness; no application data is collected from the public UI. Teacher content submission/moderation remains a separate blocker. |
-| 13. Hosting proof | Cloudflare Firebase Admin compatibility with `verifyIdToken` plus Firestore write remains unproven; no Cloudflare deployment/test was performed. | `docs/FIRST_DEPLOY.md` documents Vercel Hobby only as a personal/non-commercial preview option under Vercel terms. No Vercel preview or Production deployment was created. Hobby is not an approved commercial hosting path. |
+| 12. Academy and teacher workflow | Learner Web/Android-Web hierarchy remains level → track → subject → unit. Admins have a protected batch-publish endpoint with dry-run, explicit confirmation, parent validation, 400-write batches and an audit log. Teacher application submission and admin review now have authenticated `/api/v1` routes with validation, duplicate protection, claims-outbox synchronization and E2E coverage. | `web/src/app/api/v1/admin/curriculum/publish/route.ts`, `web/src/app/api/v1/teachers/applications/route.ts`, `web/src/app/api/v1/admin/teachers/review/route.ts`, `web/src/lib/server/imi-api.ts`, `web/e2e/server-api.spec.ts`. Public teacher application UI is reopened on the isolated Draft branch with published level/subject selectors and HTTPS proof URL; file upload is not offered. Admin teacher review uses the Node API and keeps content submission/moderation disabled until those operations are migrated and tested. |
+| 13. Hosting proof | Cloudflare Firebase Admin compatibility with `verifyIdToken` plus Firestore write remains unproven; no Cloudflare deployment/test was performed. | `docs/DEPLOY_PREVIEW.md` documents Vercel Hobby only as a personal/non-commercial preview option under Vercel terms. No Vercel preview or Production deployment was created. Hobby is not an approved commercial hosting path. |
 | 14. WhatsApp login | No WhatsApp OTP flow is exposed; no inbound Meta webhook/challenge implementation has been completed. | Keep phone login disabled. Signature validation, sender matching, single-use challenge, attempt limits and Custom Token flow remain outstanding. |
 | 15. CI and deployment gates | Web CI and Firebase rules/deployment validation are green on the same code baseline. Android build/unit tests are green; Firebase-configured emulator launch is skipped to prevent real Auth writes. | `.github/workflows/web-ci.yml`, `.github/workflows/android-build.yml`, `.github/workflows/firebase-deploy.yml`. Google OIDC deployment credentials are optional; local Firebase CLI rules/index command is documented. All real deploy steps were skipped. |
 
@@ -44,9 +236,9 @@ Binding constraints: Firebase Spark only; do not invoke Cloud Functions; Next.js
 
 1. No Production deployment or real Firebase mutation has been performed. Do not deploy rules/indexes until the owner separately approves.
 2. Real-project Google OAuth/Email Auth and admin claims have not been verified on the actual domain.
-3. Teacher application submission and admin review routes are implemented and E2E-tested, but the public application UI remains closed. Complete teacher profile, content submission and moderation endpoints under `/api/v1`; keep those unimplemented actions disabled and do not restore Firebase Functions client calls.
+3. Teacher application submission and admin review routes are implemented and E2E-tested. The public form and admin review UI are reopened on the isolated work branch; profile save is migrated to `/api/v1/teachers/profile` without photo upload. Teacher content submission/moderation remains a blocker; keep those unimplemented actions disabled and do not restore Firebase Functions client calls.
 4. Confirm Firebase Spark Storage eligibility before enabling Storage-dependent uploads.
-5. Complete account-deletion failure/retry tests and keep `IMI_ACCOUNT_DELETION_ENABLED` unset.
+5. Account-deletion failure/retry tests pass on the Emulator; live-project account deletion remains disabled and `IMI_ACCOUNT_DELETION_ENABLED` must remain unset.
 6. Prove Cloudflare Firebase Admin compatibility, or use Vercel Hobby only for personal/non-commercial preview. No host deployment has been performed.
 7. Implement WhatsApp inbound login only after owner approval; keep phone login disabled.
 8. Perform two-device/two-network call acceptance only after the call server API and media flow are implemented.
@@ -85,3 +277,105 @@ Binding constraints: Firebase Spark only; do not invoke Cloud Functions; Next.js
 - Teacher workflow updates are present at this head: authenticated server routes for teacher application submission and admin review, with the existing claims outbox path covered by E2E tests. The public teacher application UI is deliberately closed and displays `التقديم متوقف مؤقتاً`; it does not collect personal data while child-safety/verification operations remain unready.
 - PR #2 remains open and unmerged. No production deployment, Firebase Console mutation, paid-plan upgrade, secret change, or Cloud Functions invocation occurred.
 - This CI baseline is not production acceptance. Physical-device installation/runtime testing, signed Release APK acceptance, live Firebase Auth/domain verification, approved hosting/runtime proof, and the remaining security/legal gates are outstanding.
+
+## تحديث مراجعة 2026-11-22 — نتائج PR #4
+
+- الفرع: `feature/imi-teacher-admin-preview`؛ SHA المختبر النهائي: `ecc6b5452258697784058e8bb15544b80aa91dd6`؛ PR [#4](https://github.com/walid1239/Imi-android/pull/4) Draft فقط، غير مدمج.
+- لم نعدّل `feature/imi-web-foundation` أو PR #2. PR #3 بقي Draft وعلى قاعدته السابقة. لا دمج أو نشر.
+- Web CI [Run 45059083847](https://github.com/walid1239/Imi-android/actions/runs/45059083847): `completed/success`. Web job: `npm run test:env` = `3 passed, 0 failed`; `npm run typecheck` success; `npm run test:rate-limit` success; `npm run build` success; `npm run test:health` success (`PASS /api/health: HTTP 200`, `PASS /api/v1/health: HTTP 200`).
+- Functions job في Run `45059083847`: `npm test` = `50 passed, 0 failed, 1 skipped` من 51؛ teacher application/review/claims/agreements emulator integration = success؛ account-deletion cleanup/retry emulator test = success.
+- Firestore rules job في Run `45059083847`: success. Playwright job: `46 passed`، بلا failed أو flaky. شمل اختبار واجهة طلب الأستاذ، عدم ظهور لوحة المشرف لغير المشرف، رابط الإثبات `target=_blank` و`rel=noopener noreferrer`، اعتماد طلب المشرف، وتدفق API للتقديم والرفض والclaims وحفظ الملف المهني بلا صورة.
+- `saveTeacherProfile` API E2E تحقق من `photoPath: ""` ومن اتفاقيتي المحتوى وحماية القاصرين؛ رفض غياب الموافقة أعاد HTTP `409` كما هو معرف في `publicErrorMessage`. لا يوجد رفع صورة في هذا المسار.
+- Environment tests log: `# tests 3`, `# pass 3`, `# fail 0`. الاختبارات الثلاثة غطت تخطي الفحص محلياً بصمت، فشل المتغيرات المطلوبة في الاستضافة، ورفض Emulator/feature flags المحظورة دون طباعة قيم الأسرار.
+- Android CI [Run 45059083996](https://github.com/walid1239/Imi-android/actions/runs/45059083996) على SHA نفسه: `completed/success`؛ Unit tests و`assembleDebug` ورفع APK نجحت. Artifact `IMI-debug-apk-firebase-configured`، ID `14768567269`، SHA-256 `388249223563607932ad92a9e509e6e6a96d272b4eb37734c8801ea50ac7a81e`. خطوة live-Firebase smoke تخطّت، وAndroid Emulator runtime test `skipped` في هذا التشغيل.
+- Android [Run 45056409860](https://github.com/walid1239/Imi-android/actions/runs/45056409860) على SHA أقدم `9dc895c4b710de7d22cfa4d7d951829f6b0e7beb`: `completed/success`؛ Emulator instrumentation `1/1 completed (0 skipped) (0 failed)` و`BUILD SUCCESSFUL`. هذا دليل على ذلك الـSHA فقط، وليس تشغيل جهاز فعلي.
+- أول Playwright run على SHA `17463e506864c1c7bbabba0a1309c5ed9ff53aff` سجّل `45 passed` و`1 flaky` في مراجعة المشرف. أضفنا انتظار HTTP response والتحقق من status/body، ثم أعاد Run `45059083847` النتيجة النظيفة `46 passed` بلا flaky.
+- Cloudflare ما زال غير مثبت: Run [45056409945](https://github.com/walid1239/Imi-android/actions/runs/45056409945) على SHA `9dc895c4...` فشل في Worker runtime smoke بالخطأ الحرفي `EvalError: Code generation from strings disallowed for this context` أثناء dynamic code generation في `protobufjs` عند تحميل `firebase-admin/firestore`. لا تدّع نجاح Cloudflare.
+- Firebase safety gate [Run 45056409885](https://github.com/walid1239/Imi-android/actions/runs/45056409885): success للفحص غير الناشر؛ Validate/Test/Deploy Firebase backend كانت skipped. لم يحدث أي تعديل على Firebase الحقيقي أو نشر Cloud Functions أو قواعد/فهارس.
+
+### مصفوفة البنود 1–7
+
+| البند | SHA | الأمر / Run ID | النتيجة الفعلية | ما لم يُختبر |
+|---|---|---|---|---|
+| 1. لوحة مراجعة الأستاذ | `ecc6b5452258697784058e8bb15544b80aa91dd6` | Playwright ضمن Run `45059083847` | `46 passed`؛ اعتماد المشرف ورسالة النجاح ورابط الإثبات مع `rel=noopener noreferrer` | Firebase Auth/Firestore الحقيقي والنطاق الفعلي |
+| 2. نموذج تقديم الأستاذ | `ecc6b5452258697784058e8bb15544b80aa91dd6` | Playwright ضمن Run `45059083847` | `46 passed`؛ الحقول والاختيارات المنشورة ورابط HTTPS؛ لا `input[type=file]` | تقديم فعلي على Firebase الحقيقي ورفع أي ملف |
+| 3. تتبّع الملفات خارج `web` | `ecc6b5452258697784058e8bb15544b80aa91dd6` | `npm run build` ضمن Run `45059083847` | `success` بعد إضافة `outputFileTracingRoot` | إعداد Root Directory وخيار include خارج الجذر في مشروع Vercel فعلي |
+| 4. فحص البيئة | `ecc6b5452258697784058e8bb15544b80aa91dd6` | `npm run test:env` ضمن Run `45059083847` | `3 passed, 0 failed`؛ و`npm run build` success | اختبار متغيرات Vercel الحقيقية/سر Admin في بيئة Preview |
+| 5. دليل المعاينة | `ecc6b5452258697784058e8bb15544b80aa91dd6` | `docs/DEPLOY_PREVIEW.md` | 11 خطوة موثقة؛ لم ينفّذ أي نشر | تنفيذ المالك للخطوات، النطاق، OAuth وFirestore الحقيقي |
+| 6. نقل `saveTeacherProfile` | `ecc6b5452258697784058e8bb15544b80aa91dd6` | Playwright ضمن Run `45059083847` | `46 passed`؛ `POST /api/v1/teachers/profile`، `photoPath=""`، الموافقات والتحقق من claim | حفظ الملف على Firebase الحقيقي؛ لا رفع صورة |
+| 7. توثيق الحالة | `ecc6b5452258697784058e8bb15544b80aa91dd6` | `docs/HANDOFF.md` | SHA وRuns والنتائج والحدود موثقة هنا | لا يحل محل تحقق المالك من Firebase/Vercel الحقيقيين |
+
+### عناصر Functions القديمة التي لم تُنقل بعد
+
+تبقى هذه العمليات معطلة برسالة عربية في الواجهة، ولا تستدعِ Cloud Functions من العميل. نُقل `saveTeacherProfile` وحده في هذه الدفعة؛ ينقل كل عنصر تالٍ في دفعة منفصلة مع اختبار Emulator قبل تفعيل زرّه:
+
+| Callable قديم | الحالة |
+|---|---|
+| `saveTeacherProfile` | نُقل إلى `POST /api/v1/teachers/profile`؛ بلا رفع صورة و`photoPath: ""`؛ E2E ناجح |
+| `createTeacherContent` | معطّل؛ لم يُنقل |
+| `reviewTeacherContent` | معطّل؛ لم يُنقل |
+| `scheduleTeacherLiveSession` | معطّل؛ لم يُنقل |
+| `reviewContentReport` | معطّل؛ لم يُنقل |
+| `publishCourse` | معطّل؛ لم يُنقل |
+| بقية استدعاءات `call()` في `academy-admin-panel.tsx` مثل إنشاء الدورات والدروس ونشرها | معطّلة؛ لم تُنقل |
+
+### الحدود الثابتة
+
+- لا اختبار على Firebase الحقيقي: Google OAuth/Email Auth، Authorized Domains، admin service account في الاستضافة، أو عمليات Firestore الفعلية.
+- لا Vercel Preview أو Production deployment. `docs/DEPLOY_PREVIEW.md` دليل للمالك فقط.
+- لا Blaze، لا بطاقة، لا خدمة مدفوعة، لا Cloud Functions deploy، لا تعديل قواعد Firebase، لا أسرار في المستودع أو السجلات.
+- لا تُعتبر `46 passed` دليلاً على تشغيل Cloudflare أو جاهزية إنتاجية؛ `RELEASE_GATE.md` ما زال يحظر اعتماد Production حتى إغلاق البوابات المتبقية.
+
+
+## Owner handoff update — 2026-11-25
+
+### Latest implementation/documentation SHA before this HANDOFF-only commit
+
+- Branch: `feature/imi-teacher-admin-preview`.
+- Latest implementation/API-contract SHA: `00f7dc6f5df253dd7927ebfb324989449c55f4ff`.
+- This section is committed separately as a documentation-only follow-up; it does not change application code.
+- PR [#4](https://github.com/walid1239/Imi-android/pull/4) remains open and unmerged. No Production deployment, PR merge, Firebase secret/configuration change, Blaze upgrade, or Cloud Functions deployment/invocation was performed.
+
+### Completed work in this handoff
+
+1. **Android preview release permissions** — commit [a4f7fef](https://github.com/walid1239/Imi-android/commit/a4f7fef220e9f476679410b1299a7ab5d5f6fbd8). The workflow's default and build/security jobs use `contents: read`; the separate `publish-preview` job alone has `contents: write`. The build uploads the APK as an artifact; the publish job downloads and verifies it before updating the preview release. The API base URL remains `https://imi-api-preview.vercel.app`.
+2. **API contract** — commit [f3b01a2](https://github.com/walid1239/Imi-android/commit/f3b01a29532abfb3dabfeb52927444cef18c33bb), with a follow-up accuracy correction [00f7dc6](https://github.com/walid1239/Imi-android/commit/00f7dc6f5df253dd7927ebfb324989449c55f4ff). See [docs/API_CONTRACT.md](API_CONTRACT.md). It documents the implemented /api/v1 methods, bodies, responses, auth header, errors and rate limits.
+
+### CI evidence
+
+All listed runs are on exact SHA `f3b01a29532abfb3dabfeb52927444cef18c33bb` (the API-contract accuracy-only follow-up `00f7dc6` came afterwards):
+
+- Android CI [Run 45579973363](https://github.com/walid1239/Imi-android/actions/runs/45579973363): **completed / success**.
+  - Build job: success; Gradle reported `BUILD SUCCESSFUL in 3m 52s`.
+  - Firebase Android config validation: success for project `imi-indroid` and package `com.walid.chat`; secret values were not printed.
+  - Debug APK artifact: `IMI-debug-apk-firebase-configured`, artifact ID `15005883332`, size `23,582,541` bytes.
+  - Firebase security rules tests: success.
+  - Separate `Publish preview APK` job: success; artifact download, file verification and GitHub preview release update all succeeded.
+  - Emulator runtime step: **skipped**. Live-Firebase Android smoke test: **skipped** intentionally to avoid creating test users/writing to the real Auth project.
+- Web CI [Run 45579973370](https://github.com/walid1239/Imi-android/actions/runs/45579973370): **completed / success**.
+  - Web, Functions, Firebase Emulator rules, Coturn configuration and Playwright jobs all succeeded.
+  - Playwright result from the job log: `50 passed (59.1s)`.
+- Updated preview release: [imi-preview](https://github.com/walid1239/Imi-android/releases/tag/imi-preview), asset `app-debug.apk`, size `24,531,851` bytes, updated `2026-11-25T08:56:30Z`.
+- No physical-device acceptance test is implied by these CI results.
+
+### Vercel deployment and live smoke-check evidence — 2026-11-25
+
+- Project: `imi-preview`; latest Vercel deployment remains READY at [dpl_DZXzAzo8fgvkjLcuG7LxYLGhkKKZ](https://vercel.com/walid2/imi-preview/DZXzAzo8fgvkjLcuG7LxYLGhkKKZ), created `2026-11-23T17:29:45Z`, built from commit `7033fcec33535871a44cc42231d6015161f0d59e`. This is behind the current GitHub branch head; no new Vercel deployment was performed by this handoff.
+- Project SSO protection is enabled for `all_except_custom_domains`. The verified custom domain `imi-api-preview.vercel.app` is mapped to `feature/imi-teacher-admin-preview`; the Android build's API base URL is this custom domain. Thus the available evidence does **not** show that SSO redirects every request to the Android API domain. Default deployment preview hostnames remain protected; if an owner needs unauthenticated access to those hostnames, adjust Preview protection only, not Production. No Vercel protection setting was changed.
+- Live checks against `https://imi-api-preview.vercel.app`:
+  - `GET /api/health`: **200**; reports Firebase public configuration present and project `imi-indroid`, but explicitly says this is not a verified Firebase connectivity test.
+  - `GET /api/v1/health`: **200**.
+  - `GET /login`: **200**, page exists.
+  - `GET /academy`: **200**, page exists.
+  - `GET /api/v1/health/admin`: **404**, body `{"error":"Not found."}`, consistent with the endpoint being disabled unless `IMI_ADMIN_HEALTH=true`.
+- Therefore the requested expectation that `/api/health`, `/login`, and `/academy` should return 404 does not match the current code or observed deployment. Do not record those three checks as 404.
+
+### Blocked / owner action required
+
+1. **adminApp / Workload Identity Federation:** the requested owner/AI-Studio patch was not present in the conversation. Current code still uses `ExternalAccountClient` and a module-global OIDC token variable. `web/scripts/admin-app.test.mjs` does not exist, and `web/package.json` / `.github/workflows/web-ci.yml` do not yet run that test. Do not claim the applicationDefault()/atomic /tmp external_account-file fix is done. Waiting for the exact patch or written implementation details from the owner.
+2. **Live acceptance by owner:** a person signed into the owner's Preview account must click through email login, create a text status, and open a conversation. This was not performed by CI or by this handoff. Record exact visible errors and HTTP responses; if STS/IAM fails, capture the exact non-secret error from the Vercel function log. Do not share tokens or secret values.
+3. **Vercel deployment freshness:** latest deployment is still on `7033fcec...`, not the current branch head. A new Preview deployment and its post-deploy smoke checks remain outstanding.
+
+### Safety boundary
+
+No changes were made to `app/`, Firebase/Vercel secret values, Firebase rules/configuration, billing plan, Production, or PR merge state. No live Firebase writes were performed as part of these checks.

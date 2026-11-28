@@ -98,6 +98,7 @@ test('two learners can befriend each other, exchange a message and publish a sta
 
 test('signed-in learner sees the same empty curriculum without legacy course lessons', async ({ page }) => {
   await login(page, email('a', test.info().project.name));
+  await expect(page.getByRole('button', { name: /إدارة الأكاديمية/ })).toHaveCount(0);
   await page.getByRole('button', { name: /الأكاديمية/ }).first().click();
   await expect(page.getByRole('heading', { name: 'ابدأ من مستواك، وتقدّم خطوة بخطوة' })).toBeVisible();
   await page.getByLabel('المستوى').selectOption('e2e-primary');
@@ -121,8 +122,22 @@ test('admin claim exposes the protected Academy administration panel', async ({ 
   const draftCard = page.locator('article').filter({ has: page.getByText(contentTitle, { exact: true }) });
   await expect(draftCard.getByRole('button', { name: 'اعتماد ونشر' })).toBeDisabled();
   const applicationCard = page.locator('article').filter({ has: page.getByText('UID: ' + teacherUid, { exact: true }) });
-  await expect(applicationCard.getByRole('button', { name: 'اعتماد التوثيق' })).toBeDisabled();
-  await expect(page.getByText(/مراجعة محتوى الأساتذة وتوثيقهم وإدارة الدورات متوقفة مؤقتاً/)).toBeVisible();
+  await expect(applicationCard.getByRole('button', { name: 'اعتماد التوثيق' })).toBeEnabled();
+  const proofLink = applicationCard.getByRole('link', { name: 'فتح رابط الإثبات' });
+  await expect(proofLink).toHaveAttribute('href', /^https:\/\//);
+  await expect(proofLink).toHaveAttribute('target', '_blank');
+  await expect(proofLink).toHaveAttribute('rel', 'noopener noreferrer');
+  const reviewResponsePromise = page.waitForResponse(response =>
+    response.url().endsWith('/api/v1/admin/teachers/review') && response.request().method() === 'POST',
+  );
+  await applicationCard.getByRole('button', { name: 'اعتماد التوثيق' }).click();
+  const reviewResponse = await reviewResponsePromise;
+  const reviewBody = await reviewResponse.json().catch(() => ({})) as { ok?: boolean; error?: string };
+  expect(reviewResponse.status(), JSON.stringify(reviewBody)).toBe(200);
+  expect(reviewBody.ok, JSON.stringify(reviewBody)).toBe(true);
+  await expect(page.getByRole('status')).toContainText('تم اعتماد الطلب ومنح صلاحية الأستاذ الموثق.');
+  await expect(page.getByText('UID: ' + teacherUid, { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/إدارة محتوى الأساتذة والدورات والبلاغات ما زالت معطلة/)).toBeVisible();
 });
 
 
@@ -152,12 +167,22 @@ test('unreviewed teacher drafts remain hidden from the learner curriculum', asyn
   await expect(page.getByText(contentTitle, { exact: true })).toHaveCount(0);
 });
 
-test('teacher application and studio routes explain verification gate', async ({ page }) => {
+test('teacher application form uses published curriculum and HTTPS proof URL without file uploads', async ({ page }) => {
   await login(page, email('b', test.info().project.name));
   await page.goto('/teacher/apply');
   await expect(page.getByRole('heading', { name: 'طلب الانضمام كأستاذ' })).toBeVisible();
-  await expect(page.getByRole('status')).toContainText('التقديم متوقف مؤقتاً');
-  await expect(page.getByText(/لا نطلب منك إدخال بيانات شخصية أو رفع شهادة/)).toBeVisible();
+  await expect(page.getByLabel('الاسم الكامل')).toBeVisible();
+  await expect(page.getByLabel('رابط إثبات (HTTPS)')).toBeVisible();
+  await expect(page.getByLabel('المستوى الدراسي')).toBeVisible();
+  await expect(page.getByLabel('المادة')).toBeVisible();
+  await expect(page.locator('input[type="file"]')).toHaveCount(0);
+  await page.getByLabel('الاسم الكامل').fill('أستاذ اختبار واجهة');
+  await page.getByLabel('رابط إثبات (HTTPS)').fill('https://example.com/proof');
+  await page.getByLabel('المستوى الدراسي').selectOption('e2e-primary');
+  await page.getByLabel('المادة').selectOption('e2e-primary-math');
+  await expect(page.getByLabel('المستوى الدراسي')).toHaveValue('e2e-primary');
+  await expect(page.getByLabel('المادة')).toHaveValue('e2e-primary-math');
+  await expect(page.getByRole('button', { name: 'إرسال طلب التوثيق' })).toBeEnabled();
   await page.goto('/teacher/studio');
   await expect(page.getByText('حسابك غير موثّق كأستاذ')).toBeVisible();
   await expect(page.getByRole('link', { name: 'طلب توثيق' })).toBeVisible();

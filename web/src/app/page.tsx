@@ -21,8 +21,10 @@ export default function HomePage() {
           <p className="mt-6 max-w-xl text-lg leading-9 text-slate-300">مساحة عربية تجمع المحادثات والحالات ومقاطع الفيديو القصيرة والتعليم، مع تجربة مصممة للهاتف أولاً.</p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/login" className="rounded-xl bg-blue-600 px-7 py-3 font-bold shadow-lg shadow-blue-950/40 hover:bg-blue-500">ابدأ الآن</Link>
+            <a href="/api/app/download-apk" className="rounded-xl border border-blue-400/50 px-7 py-3 font-semibold text-blue-200 hover:bg-blue-500/10">تنزيل تطبيق Android</a>
             <a href="#features" className="rounded-xl border border-white/15 px-7 py-3 font-semibold hover:bg-white/5">اكتشف IMI</a>
           </div>
+          <p className="mt-3 text-xs text-slate-500">يتم تحديث ملف معاينة Android تلقائياً بعد نجاح بناء النسخة المعتمدة.</p>
         </div>
         <div className="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-2xl shadow-blue-950/30">
           <div className="mb-5 flex items-center gap-3"><div className="grid size-12 place-items-center rounded-2xl bg-blue-600 text-xl font-black">I</div><div><p className="font-bold">مساحتك في IMI</p><p className="text-sm text-slate-400">كل ما تحتاجه في مكان واحد</p></div></div>

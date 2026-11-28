@@ -164,7 +164,7 @@ jobs:
   publish-preview:
     name: Publish preview APK
     needs: build
-    if: ${{ needs.build.result == 'success' && needs.build.outputs.firebase_configured == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feature/imi-teacher-admin-preview' && github.event.pull_request.head.repo.full_name == github.repository)) }}
+    if: ${{ needs.build.result == 'success' && needs.build.outputs.firebase_configured == 'true' && github.event_name == 'workflow_dispatch' && vars.IMI_ALLOW_PREVIEW_APK_PUBLISH == 'true' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write

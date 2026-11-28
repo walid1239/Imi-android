@@ -90,11 +90,13 @@ try {
   );
 
   const refreshedConfig = JSON.parse(readFileSync(configFile, "utf8"));
-  assert.match(refreshedConfig.audience, /projects\\/987654321098\\/locations\\/global\\/workloadIdentityPools\\/rotated-pool\\/providers\\/rotated-provider$/,
-    "external-account config must be refreshed on every request");
-  assert.match(refreshedConfig.service_account_impersonation_url, /rotated@imi-indroid\\.iam\\.gserviceaccount\\.com:generateAccessToken$/);
+  assert.equal(refreshedConfig.audience,
+    "//iam.googleapis.com/projects/987654321098/locations/global/workloadIdentityPools/rotated-pool/providers/rotated-provider",
+    "external-account audience must be refreshed on every request");
+  assert.equal(refreshedConfig.service_account_impersonation_url,
+    "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/rotated@imi-indroid.iam.gserviceaccount.com:generateAccessToken");
   assert.equal(statSync(configFile).mode & 0o777, 0o600, "external-account config must be owner-only");
-  process.stdout.write("PASS adminApp: applicationDefault external_account credentials initialize getFirestore without network access; per-request atomic token+config refresh and file permissions verified.\\n");
+  process.stdout.write("PASS adminApp: applicationDefault external_account credentials initialize getFirestore without network access; per-request atomic token+config refresh and file permissions verified.\n");
 } finally {
   if (app) await deleteApp(app);
   for (const file of temporaryFiles) {
